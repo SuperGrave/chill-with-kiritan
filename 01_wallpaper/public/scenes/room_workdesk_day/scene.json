@@ -1,0 +1,64 @@
+{
+  "sceneId": "room_workdesk_day",
+  "label": "自室・昼・作業机",
+  "background": {
+    "roomImage": "/scenes/room_workdesk_day/room_back.png",
+    "outsideImage": "/scenes/room_workdesk_day/outside.png",
+    "lightOverlay": "/scenes/room_workdesk_day/light_overlay.png",
+    "windowVideo": null
+  },
+  "props": [
+    {
+      "id": "desk",
+      "label": "Desk",
+      "type": "glb",
+      "url": "/models/props/desk.glb",
+      "fallback": "box",
+      "position": [0.0, 0.0, 0.5],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": 1.9,
+      "visible": true,
+      "placeholderColor": "#6b4a32"
+    },
+    {
+      "id": "chair",
+      "label": "Chair",
+      "type": "glb",
+      "url": "/models/props/chair.glb",
+      "fallback": "box",
+      "position": [0.0, 0.0, -0.4],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": 1.9,
+      "visible": true,
+      "placeholderColor": "#333333"
+    },
+    {
+      "id": "laptop",
+      "label": "Laptop",
+      "type": "glb",
+      "url": "/models/props/laptop.glb",
+      "fallback": "box",
+      "position": [0.0, 0.73, 0.5],
+      "rotation": [0.0, 3.14, 0.0],
+      "scale": 1.5,
+      "visible": true,
+      "placeholderColor": "#202020"
+    }
+  ],
+  "character": {
+    "position": [0.0, 0.0, 0.0],
+    "rotation": [0.0, 0.0, 0.0],
+    "scale": [1.0, 1.0, 1.0]
+  },
+  "camera": {
+    "preset": "monitor_side",
+    "position": [0.4, 0.9, 0.8],
+    "target": [0.0, 1.0, 0.0],
+    "fov": 40
+  },
+  "lighting": {
+    "ambientStrength": 0.8,
+    "mainLightColor": "#ffffff",
+    "mainLightStrength": 1.0
+  }
+}

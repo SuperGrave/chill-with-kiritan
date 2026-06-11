@@ -1,0 +1,167 @@
+/* Weather Tone Bar */
+.weather-tone-bar {
+  position: relative;
+  width: 100%;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  overflow: visible; /* Allow triangle to float above */
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.weather-tone-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 1px; /* Add subtle radius here since bar is now overflow: visible */
+  /* Optional slight shadow/glow inside the bar */
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
+}
+
+/* Patterns */
+.weather-tone-fill {
+  --tone-color: rgba(255, 255, 255, 0.72);
+}
+
+.weather-tone-fill--min {
+  --tone-color: rgba(77, 166, 255, 0.6);
+}
+
+.weather-tone-fill--max {
+  --tone-color: rgba(255, 77, 77, 0.6);
+}
+
+.weather-tone-fill--diagonal {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--tone-color) 0px,
+    var(--tone-color) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+}
+
+.weather-tone-fill--vertical {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--tone-color) 0px,
+    var(--tone-color) 1px,
+    transparent 1px,
+    transparent 6px
+  );
+}
+
+.weather-tone-fill--dot {
+  background-image: radial-gradient(
+    var(--tone-color) 1px, 
+    transparent 1px
+  );
+  background-size: 6px 6px;
+}
+
+/* Markers */
+.weather-tone-marker {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0,0,0,0.8);
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.weather-tone-marker--min {
+  background: #4da6ff;
+  box-shadow: 0 0 4px rgba(77, 166, 255, 0.8);
+}
+
+.weather-tone-marker--max {
+  background: #ff4d4d;
+  box-shadow: 0 0 4px rgba(255, 77, 77, 0.8);
+}
+
+.weather-tone-marker--current {
+  background: #ffffff;
+  width: 1px;
+  box-shadow: 0 0 6px rgba(255,255,255,0.8);
+  /* Ensure triangle can overflow relative to marker */
+  overflow: visible;
+}
+
+.weather-tone-triangle {
+  position: absolute;
+  top: -10px; /* Float above the bar */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #ffffff;
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.8)); /* White glow */
+}
+
+/* Base styles for compact weather */
+.weather-compact {
+  font-family: var(--font-main);
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Debug Mode Styles */
+.weather-compact.debug-mode {
+  outline: 1px dashed rgba(0, 255, 255, 0.8);
+  background: rgba(0, 255, 255, 0.05);
+}
+
+.weather-compact.debug-mode .weather-compact-row {
+  outline: 1px solid rgba(255, 0, 255, 0.5);
+  background: rgba(255, 0, 255, 0.05);
+}
+
+.weather-compact.debug-mode .weather-tone-bar {
+  outline: 1px solid rgba(255, 255, 0, 0.5);
+}
+
+.weather-compact.debug-mode .weather-compact-value {
+  outline: 1px solid rgba(0, 255, 0, 0.5);
+  background: rgba(0, 255, 0, 0.1);
+}
+
+.weather-compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.weather-compact-value {
+  margin-left: 24px;
+  min-width: 60px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Detail Panel Scrollbar */
+.weather-detail-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.weather-detail-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+}
+
+.weather-detail-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.weather-detail-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}

@@ -1,0 +1,23 @@
+.overlay-container {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  background-color: transparent;
+}
+
+/* Debug Mode Styles */
+.overlay-container.debug-mode {
+  border: 1px solid rgba(255, 0, 0, 0.5);
+}
+
+.debug-safe-area {
+  position: absolute;
+  border: 1px dashed rgba(0, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.debug-guide-line {
+  position: absolute;
+  background-color: rgba(0, 255, 255, 0.3);
+  pointer-events: none;
+}

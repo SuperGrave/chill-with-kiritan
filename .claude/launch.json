@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "probe",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "01_wallpaper", "run", "dev", "--", "--port", "5187", "--strictPort"],
+      "port": 5187
+    },
+    {
+      "name": "ui-overlay",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "02_ui-overlay", "run", "dev", "--", "--port", "5188", "--strictPort"],
+      "port": 5188
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "schema": "motion/1",
+  "id": "test_stretch",
+  "label": "ゆったり伸び",
+  "notes": "Motion Lab 0.7 の模擬著作ループ実証用。両腕を頭上に伸ばして気持ちよさそうに伸びをして、ふっと笑って戻る12秒ループ。",
+  "category": "idle_break",
+  "tags": ["calm", "cute"],
+  "posture": "stand_relaxed",
+  "duration": 12,
+  "loop": true,
+  "fadeIn": 1.0,
+  "fadeOut": 1.0,
+  "hands": { "left": "relax", "right": "relax" },
+  "tracks": {
+    "leftUpperArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 3.3, "e": [0, -0.55, -1.0], "ease": "sineInOut" },
+        { "t": 4.5, "e": [0, -0.35, -2.05], "ease": "easeOut" },
+        { "t": 7, "e": [0, -0.3, -2.0], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0, -0.15, 0], "ease": "cubicInOut" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "rightUpperArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 3.3, "e": [0, 0.55, 1.0], "ease": "sineInOut" },
+        { "t": 4.5, "e": [0, 0.35, 2.05], "ease": "easeOut" },
+        { "t": 7, "e": [0, 0.3, 2.0], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0, 0.15, 0], "ease": "cubicInOut" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "leftLowerArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 3.3, "e": [0, -0.9, -0.55], "ease": "sineInOut" },
+        { "t": 4.5, "e": [0, -0.15, -0.1], "ease": "easeOut" },
+        { "t": 7, "e": [0, -0.15, -0.1] },
+        { "t": 9.5, "e": [0, -0.2, 0], "ease": "cubicInOut" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "rightLowerArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 3.3, "e": [0, 0.9, 0.55], "ease": "sineInOut" },
+        { "t": 4.5, "e": [0, 0.15, 0.1], "ease": "easeOut" },
+        { "t": 7, "e": [0, 0.15, 0.1] },
+        { "t": 9.5, "e": [0, 0.2, 0], "ease": "cubicInOut" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "leftShoulder": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [0, 0, -0.12], "ease": "sineInOut" },
+        { "t": 7, "e": [0, 0, -0.12] },
+        { "t": 9.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "rightShoulder": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [0, 0, 0.12], "ease": "sineInOut" },
+        { "t": 7, "e": [0, 0, 0.12] },
+        { "t": 9.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "head": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [-0.22, 0, 0], "ease": "cubicInOut" },
+        { "t": 7, "e": [-0.18, 0, 0.04], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0.06, 0, 0.05], "ease": "cubicInOut" },
+        { "t": 11, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "neck": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [-0.1, 0, 0], "ease": "cubicInOut" },
+        { "t": 7, "e": [-0.08, 0, 0], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0.03, 0, 0], "ease": "cubicInOut" },
+        { "t": 11, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "spine": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [-0.12, 0, 0], "ease": "cubicInOut" },
+        { "t": 7, "e": [-0.1, 0, 0], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0.02, 0, 0], "ease": "cubicInOut" },
+        { "t": 11, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    }
+  },
+  "oscillators": [
+    { "bone": "chest", "axis": "x", "amp": 0.03, "period": 4.0 }
+  ],
+  "expressions": {
+    "keys": [
+      { "t": 0, "set": {} },
+      { "t": 4.5, "set": { "blink": 0.75, "fun": 0.2 }, "fade": 1.2 },
+      { "t": 7, "set": { "blink": 0.75, "fun": 0.2 }, "fade": 0.5 },
+      { "t": 9.8, "set": { "fun": 0.5 }, "fade": 1.0 },
+      { "t": 11.8, "set": {}, "fade": 1.5 }
+    ]
+  },
+  "lookAt": { "mode": "camera", "strength": 0.8 }
+}

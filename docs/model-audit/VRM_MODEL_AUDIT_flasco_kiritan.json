@@ -1,0 +1,74 @@
+{
+  "basic_info": {
+    "file_name": "ふらすこ式風きりたん_VRM_1_0_1.vrm",
+    "file_size_bytes": 33162536,
+    "vrm_version": "VRM 0.x",
+    "generator": "UniGLTF-1.10",
+    "exporter": "UniVRM-0.40",
+    "meta": {
+      "version": "1.0.1",
+      "author": "modeling:金子卵黄 designmotif:ふらすこ convert:BeamManP",
+      "contact": "http://kanekoranou.com",
+      "reference": ""
+    }
+  },
+  "license": {
+    "allowedUserName": "Everyone",
+    "violentUsageName": "Disallow",
+    "sexualUsageName": "Disallow",
+    "commercialUsageName": "Disallow",
+    "licenseName": "Redistribution_Prohibited",
+    "otherPermissionUrl": "https://zunko.jp/"
+  },
+  "load_stats": {
+    "meshCount": 2,
+    "primitiveCount": 29,
+    "materialCount": 29,
+    "textureCount": 11,
+    "imageCount": 11,
+    "nodeCount": 231,
+    "skinCount": 2,
+    "jointCount": 451,
+    "morphTargetCount": 68,
+    "skinnedMeshCount": 2
+  },
+  "humanoid_bones": {
+    "present": [
+      "hips", "spine", "chest", "neck", "head", 
+      "leftShoulder", "rightShoulder", "leftUpperArm", "rightUpperArm", 
+      "leftLowerArm", "rightLowerArm", "leftHand", "rightHand",
+      "leftUpperLeg", "rightUpperLeg", "leftLowerLeg", "rightLowerLeg", 
+      "leftFoot", "rightFoot", "leftEye", "rightEye", "jaw",
+      "leftThumbProximal", "leftThumbIntermediate", "leftThumbDistal",
+      "leftIndexProximal", "leftIndexIntermediate", "leftIndexDistal",
+      "leftMiddleProximal", "leftMiddleIntermediate", "leftMiddleDistal",
+      "leftRingProximal", "leftRingIntermediate", "leftRingDistal",
+      "leftLittleProximal", "leftLittleIntermediate", "leftLittleDistal",
+      "rightThumbProximal", "rightThumbIntermediate", "rightThumbDistal",
+      "rightIndexProximal", "rightIndexIntermediate", "rightIndexDistal",
+      "rightMiddleProximal", "rightMiddleIntermediate", "rightMiddleDistal",
+      "rightRingProximal", "rightRingIntermediate", "rightRingDistal",
+      "rightLittleProximal", "rightLittleIntermediate", "rightLittleDistal"
+    ],
+    "missing": ["upperChest", "leftToes", "rightToes"]
+  },
+  "expressions": {
+    "type": "BlendShape",
+    "list": [
+      "Neutral", "A", "I", "U", "E", "O", "Blink", "Joy", "Angry", "Sorrow", 
+      "Fun", "LookUp", "LookDown", "LookLeft", "LookRight", "Blink_L", "Blink_R"
+    ]
+  },
+  "lookat": {
+    "has_lookat": true,
+    "type": "Bone",
+    "curve_settings": ["lookAtHorizontalInner", "lookAtHorizontalOuter", "lookAtVerticalDown", "lookAtVerticalUp"]
+  },
+  "springbone": {
+    "has_springbone": true,
+    "spring_groups": 4,
+    "joint_count": 44,
+    "collider_groups": 4,
+    "bone_groups": ["Hair", "Skirt", "Sleeve", "Fuku"]
+  }
+}

@@ -1,0 +1,143 @@
+// Per-panel defaults are exported individually so panels can fall back to
+// them when a saved settings object predates the key (same idiom as
+// WeatherDetailPanel's inline fallback, but with a single source of truth).
+
+// `show` + chrome fields (showHeader/showBackground/backgroundOpacity) drive
+// the FloatingPanel wrapper; the rest drive the panel content. Visibility uses
+// the `!== false` idiom elsewhere, so an older saved object without `show`
+// still reads as visible.
+export const newsPanelDefaults = {
+  show: true,
+  showHeader: true,
+  showBackground: true,
+  backgroundOpacity: 0.4,
+  itemGap: 18,
+  indexSize: 26,
+  timeSize: 15,
+  titleSize: 17,
+  summarySize: 14,
+  footerSize: 15,
+  showIndex: true,
+  showTime: true,
+  showSource: true,
+  showSummary: true,
+  showDivider: true,
+  showFooter: true,
+  highlightLatest: true,
+  maxItems: 5,
+  maxTitleLines: 2,
+  maxSummaryLines: 2,
+};
+
+export const musicPanelDefaults = {
+  show: true,
+  showHeader: true,
+  showBackground: true,
+  backgroundOpacity: 0.4,
+  gap: 20,
+  showArtwork: true,
+  artworkScale: 1,
+  titleSize: 26,
+  artistSize: 16,
+  timeSize: 15,
+  barHeight: 16,
+  showMarker: true,
+  pattern: 'diagonal' as 'diagonal' | 'vertical' | 'dot',
+  showAlbum: true,
+  showTimeCodes: true,
+  showControls: true,
+  controlSize: 24,
+  showFooter: true,
+};
+
+export const aiPanelDefaults = {
+  show: true,
+  showHeader: true,
+  showBackground: true,
+  backgroundOpacity: 0.4,
+  textSize: 15,
+  labelSize: 12,
+  timeSize: 12,
+  msgGap: 16,
+  bubbleOpacity: 0.14,
+  showLabels: true,
+  showTimestamps: true,
+  showStatus: true,
+  showInput: true,
+};
+
+export const memoPanelDefaults = {
+  show: true,
+  showHeader: true,
+  showBackground: true,
+  backgroundOpacity: 0.4,
+  textSize: 15,
+  dateSize: 12,
+  cardGap: 14,
+  cardPadding: 14,
+  showDates: true,
+  showPinnedSection: true,
+  showFooter: true,
+  maxLines: 0,
+  maxItems: 0,
+};
+
+export const uiSettings = {
+  debugMode: true,
+  baseResolution: '1920x1080',
+  clock: {
+    showDate: true,
+    showSeconds: true,
+    showWeather: true,
+    showHumidity: true,
+    showLocation: true,
+    customLocation: "SAPPORO",
+    customWeatherTemp: "18°C",
+    customWeatherDesc: "CLOUDY",
+    customHumidity: "HUMID 62%",
+  },
+  weatherCompact: {
+    showCompactWeather: true,
+    displayMode: 'compact' as 'compact' | 'detailed',
+    showLocation: true,
+    showWeather: true,
+    showTemperature: true,
+    showHumidity: true,
+    showPressure: false,
+    showMinMaxLabels: false,
+    showCurrentMarker: true,
+    showCurrentTriangle: true,
+    infoRowPosition: 'top' as 'top' | 'bottom',
+    temperaturePadding: 5,
+    pattern: "diagonal" as const,
+  },
+  weatherDetail: {
+    gap: 10,
+    fontSize: 1,
+    paddingTop: 16,
+    paddingBottom: 7,
+    paddingX: 11,
+    mainTempSize: 88,
+    minMaxTempSize: 35,
+    feelsLikeSize: 23,
+    metricLabelSize: 19,
+    metricValueSize: 19,
+    windSunSize: 34,
+    noteSize: 21,
+    maxNoteLines: 0,
+    footerSize: 20,
+    mainIconSize: 92,
+    compassSize: 91,
+    sunIconSize: 37,
+    showBackground: false,
+    backgroundOpacity: 0.4,
+    pattern: "dot" as const,
+  },
+  newsPanel: newsPanelDefaults,
+  musicPanel: musicPanelDefaults,
+  aiPanel: aiPanelDefaults,
+  memoPanel: memoPanelDefaults,
+  overlay: {
+    opacity: 1.0,
+  }
+};

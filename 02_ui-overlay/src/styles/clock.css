@@ -1,0 +1,64 @@
+.clock-widget {
+  position: absolute;
+  color: #ffffff;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
+  font-family: var(--font-main);
+  letter-spacing: 0.1em;
+}
+
+.clock-widget.debug-mode {
+  border: 1px solid rgba(0, 255, 0, 0.5);
+  background: rgba(0, 255, 0, 0.1);
+}
+
+.clock-date {
+  font-size: 24px;
+  font-weight: 300;
+  margin-bottom: 0px;
+  padding-bottom: 0px;
+  display: inline-block;
+}
+
+.clock-time {
+  font-size: 72px;
+  font-weight: 400;
+  line-height: 1;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.time-digit {
+  display: inline-block;
+  width: 1.1ch;
+  text-align: center;
+}
+
+.time-colon {
+  display: inline-block;
+  width: 0.6em;
+  text-align: center;
+  opacity: 0.8;
+  position: relative;
+  top: -2px;
+}
+
+.time-space {
+  display: inline-block;
+  width: 0.2em;
+}
+
+.clock-details {
+  font-size: 16px;
+  font-weight: 300;
+  opacity: 0.9;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.clock-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

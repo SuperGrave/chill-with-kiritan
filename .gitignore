@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────────────────────
+#  Chill with Kiritan — root .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Dependencies & build output
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/build/
+
+# Rust / Tauri build artifacts
+**/target/
+
+# Vite / tooling caches
+**/.vite/
+*.local
+
+# Logs & debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+
+# Probe / headless-test scratch (regenerated on demand)
+**/.probe_tmp/
+
+# ── License-restricted assets — NEVER commit or push ──────────
+# Redistribution-PROHIBITED model: ふらすこ式風東北きりたん (kiritan.vrm).
+# VRMA motion pack: the pack's terms forbid redistributing the .vrma files.
+# (Global patterns = belt-and-suspenders across every location.)
+*.vrm
+*.vrma
+
+# Raw glTF JSON extracted FROM kiritan.vrm (derived model data)
+tools/output/
+
+# Local-only retention bin — holds the VRMA pack .zip, model renders, installers
+_archive/
+
+# Font with unconfirmed redistribution license.
+# If verified OFL (WDXL Lubrifont), re-add with:  git add -f path/to/the.otf
+WD-XLLubrifontJPN-Regular.otf
+
+# Secrets / credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore

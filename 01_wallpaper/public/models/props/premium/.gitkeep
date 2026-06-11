@@ -1,0 +1,3 @@
+# Keeps the premium/ props folder under version control while it is empty.
+# Drop user-supplied premium GLBs here (see README_PREMIUM_PROPS.md). Do NOT add
+# redistribution-prohibited / unknown-license assets (they must not enter public/).

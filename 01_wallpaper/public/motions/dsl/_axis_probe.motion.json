@@ -1,0 +1,38 @@
+{
+  "schema": "motion/1",
+  "id": "_axis_probe",
+  "label": "軸符号検証プローブ",
+  "notes": "ガイド用の軸/符号の実証検証。step easing でキー時刻ちょうどに単一軸回転が立つ。キー時刻でキャプチャして向きを目視確認する。",
+  "category": "diagnostic",
+  "posture": "stand_relaxed",
+  "duration": 12,
+  "loop": false,
+  "hands": { "left": "relax", "right": "relax" },
+  "tracks": {
+    "head": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 1.5, "e": [0.4, 0, 0], "ease": "step" },
+        { "t": 3, "e": [0, 0.5, 0], "ease": "step" },
+        { "t": 4.5, "e": [0, 0, 0.4], "ease": "step" },
+        { "t": 6, "e": [0, 0, 0], "ease": "step" }
+      ]
+    },
+    "leftUpperArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 6, "e": [0, 0, -0.9], "ease": "step" },
+        { "t": 7.5, "e": [0.8, 0, 0], "ease": "step" },
+        { "t": 9, "e": [0, 0, 0], "ease": "step" }
+      ]
+    },
+    "spine": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 9, "e": [0, 0.4, 0], "ease": "step" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "step" }
+      ]
+    }
+  },
+  "lookAt": { "mode": "off" }
+}

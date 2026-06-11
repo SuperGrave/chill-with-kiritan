@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "activeSet": "basic",
+  "_about": "Prop asset set registry (Premium Props Preparation Pack 0.7). 'basic' = the bundled CC0 Kenney GLBs (currently at public/models/props/*.glb, NOT moved into a basic/ subfolder so scene.json paths keep working). 'premium' = upgraded models the user supplies later (null = slot declared but no asset provided yet; the loader falls back to a placeholder box at runtime). Reading this manifest AT RUNTIME is intentionally NOT implemented in 0.7 (this phase is preparation only) — scene.json still drives prop loading. Validate this file with: npm run check:props. Record every asset's license in ASSET_CREDITS.md.",
+  "slots": {
+    "priorityA": ["desk", "chair", "laptop", "monitor", "keyboard", "mouse"],
+    "priorityB": ["mug", "book", "notebook", "desk_lamp", "speaker", "smartphone", "pen_stand", "plant"]
+  },
+  "sets": {
+    "basic": {
+      "desk": "/models/props/desk.glb",
+      "chair": "/models/props/chair.glb",
+      "laptop": "/models/props/laptop.glb"
+    },
+    "premium": {
+      "desk": null,
+      "chair": null,
+      "laptop": null,
+      "monitor": null,
+      "keyboard": null,
+      "mouse": null,
+      "mug": null,
+      "book": null,
+      "notebook": null,
+      "desk_lamp": null,
+      "speaker": null,
+      "smartphone": null,
+      "pen_stand": null,
+      "plant": null
+    }
+  }
+}

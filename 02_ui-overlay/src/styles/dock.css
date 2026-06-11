@@ -1,0 +1,69 @@
+.right-dock {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 12px 0;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.right-dock.debug-mode {
+  border: 1px solid rgba(255, 165, 0, 0.5);
+}
+
+.dock-button {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px;
+  font-family: var(--font-main);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  transition: all 0.3s ease;
+  position: relative;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+
+.dock-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dock-button svg {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+}
+
+.dock-button.active {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(255,255,255,0.8);
+}
+
+.dock-button.active svg {
+  filter: drop-shadow(0 0 8px rgba(255,255,255,0.8));
+}
+
+.dock-button.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 50%;
+  background: #fff;
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px rgba(255,255,255,0.8);
+}

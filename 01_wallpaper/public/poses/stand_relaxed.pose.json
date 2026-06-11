@@ -1,0 +1,15 @@
+{
+  "schema": "pose/1",
+  "id": "stand_relaxed",
+  "label": "立ち・自然体",
+  "notes": "腕を自然に下ろした立ちポーズ。腕の z=±1.15 はT-poseからの下ろし込み（ビューアの初期ドロップ ±1.2 よりわずかに開く）。ほぼ全モーションのベースとして安全。",
+  "hipsOffset": [0, 0, 0],
+  "bones": {
+    "leftUpperArm": [0, 0, 1.15],
+    "rightUpperArm": [0, 0, -1.15],
+    "leftLowerArm": [0, 0, 0.12],
+    "rightLowerArm": [0, 0, -0.12],
+    "leftShoulder": [0, 0, 0.02],
+    "rightShoulder": [0, 0, -0.02]
+  }
+}

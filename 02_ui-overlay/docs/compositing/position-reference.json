@@ -1,0 +1,25 @@
+{
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "clock": {
+    "x": 48,
+    "y": 40,
+    "width": 520,
+    "notes": "Top left anchor."
+  },
+  "rightDock": {
+    "x": 1770,
+    "y": 180,
+    "width": 110,
+    "notes": "Right vertical dock. Gap between buttons is 16px."
+  },
+  "detailPanel": {
+    "x": 1320,
+    "y": 70,
+    "width": 420,
+    "height": 900,
+    "notes": "Glassmorphism panel that appears when a dock button is clicked."
+  }
+}

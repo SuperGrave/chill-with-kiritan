@@ -1,0 +1,24 @@
+{
+  "schema": "hand/1",
+  "id": "relax",
+  "label": "リラックス",
+  "notes": "指を軽く曲げた自然な手。side=both: 左手に値をそのまま、右手は [x,-y,-z] ミラーで適用される。左手はz+がカール（内曲げ）方向（実測検証済み）。",
+  "side": "both",
+  "bones": {
+    "thumbMetacarpal": [0, 0.1, 0],
+    "thumbProximal": [0, 0.15, 0],
+    "thumbDistal": [0, 0.1, 0],
+    "indexProximal": [0, 0, 0.2],
+    "indexIntermediate": [0, 0, 0.25],
+    "indexDistal": [0, 0, 0.15],
+    "middleProximal": [0, 0, 0.25],
+    "middleIntermediate": [0, 0, 0.3],
+    "middleDistal": [0, 0, 0.18],
+    "ringProximal": [0, 0, 0.28],
+    "ringIntermediate": [0, 0, 0.32],
+    "ringDistal": [0, 0, 0.2],
+    "littleProximal": [0, 0, 0.3],
+    "littleIntermediate": [0, 0, 0.35],
+    "littleDistal": [0, 0, 0.22]
+  }
+}

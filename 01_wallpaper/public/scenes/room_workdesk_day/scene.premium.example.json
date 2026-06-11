@@ -1,0 +1,125 @@
+{
+  "_note": "EXAMPLE / TEMPLATE ONLY — Premium Props Preparation Pack 0.7. This file is NOT loaded by the app (the loader only fetches scene.json). It shows how a premium desk setup would look in scene.json once you supply premium GLBs under /models/props/premium/. The referenced premium/*.glb do NOT exist yet, so loading this scene would render placeholder boxes (fallback:box) — that is intentional and demonstrates the missing-asset fallback. IMPORTANT: the 'scale' values here are placeholder-BOX dimensions (so the preview boxes look sensible). When you drop in real GLBs, re-tune 'scale' as a uniform MULTIPLIER using the 0.6 Layout Calibration UI (real-GLB scale != box dimensions). Record every premium asset's license in ../../models/props/ASSET_CREDITS.md before use.",
+  "sceneId": "room_workdesk_day",
+  "label": "自室・昼・作業机 (premium example)",
+  "background": {
+    "roomImage": "/scenes/room_workdesk_day/room_back.png",
+    "outsideImage": "/scenes/room_workdesk_day/outside.png",
+    "lightOverlay": "/scenes/room_workdesk_day/light_overlay.png",
+    "windowVideo": null
+  },
+  "props": [
+    {
+      "id": "desk",
+      "label": "Desk (premium)",
+      "type": "glb",
+      "url": "/models/props/premium/desk.glb",
+      "fallback": "box",
+      "position": [0.0, 0.365, 0.5],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [1.4, 0.73, 0.6],
+      "visible": true,
+      "placeholderColor": "#6b4a32"
+    },
+    {
+      "id": "chair",
+      "label": "Chair (premium)",
+      "type": "glb",
+      "url": "/models/props/premium/chair.glb",
+      "fallback": "box",
+      "position": [0.0, 0.5, -0.4],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [0.62, 1.0, 0.6],
+      "visible": true,
+      "placeholderColor": "#333333"
+    },
+    {
+      "id": "monitor",
+      "label": "Monitor",
+      "type": "glb",
+      "url": "/models/props/premium/monitor.glb",
+      "fallback": "box",
+      "position": [0.0, 0.96, 0.58],
+      "rotation": [0.0, 3.14, 0.0],
+      "scale": [0.62, 0.42, 0.06],
+      "visible": true,
+      "placeholderColor": "#1b1b1b"
+    },
+    {
+      "id": "keyboard",
+      "label": "Keyboard",
+      "type": "glb",
+      "url": "/models/props/premium/keyboard.glb",
+      "fallback": "box",
+      "position": [0.0, 0.745, 0.86],
+      "rotation": [0.0, 3.14, 0.0],
+      "scale": [0.45, 0.03, 0.15],
+      "visible": true,
+      "placeholderColor": "#2a2a2a"
+    },
+    {
+      "id": "mouse",
+      "label": "Mouse",
+      "type": "glb",
+      "url": "/models/props/premium/mouse.glb",
+      "fallback": "box",
+      "position": [0.3, 0.745, 0.86],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [0.07, 0.03, 0.11],
+      "visible": true,
+      "placeholderColor": "#2a2a2a"
+    },
+    {
+      "id": "mug",
+      "label": "Mug",
+      "type": "glb",
+      "url": "/models/props/premium/mug.glb",
+      "fallback": "box",
+      "position": [-0.34, 0.78, 0.8],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [0.09, 0.1, 0.09],
+      "visible": true,
+      "placeholderColor": "#7a9bb0"
+    },
+    {
+      "id": "book",
+      "label": "Book",
+      "type": "glb",
+      "url": "/models/props/premium/book.glb",
+      "fallback": "box",
+      "position": [0.38, 0.76, 0.62],
+      "rotation": [0.0, 0.3, 0.0],
+      "scale": [0.16, 0.06, 0.22],
+      "visible": true,
+      "placeholderColor": "#8a5a3a"
+    },
+    {
+      "id": "desk_lamp",
+      "label": "Desk Lamp",
+      "type": "glb",
+      "url": "/models/props/premium/desk_lamp.glb",
+      "fallback": "box",
+      "position": [-0.4, 0.95, 0.56],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [0.12, 0.44, 0.12],
+      "visible": true,
+      "placeholderColor": "#555555"
+    }
+  ],
+  "character": {
+    "position": [0.0, 0.0, 0.0],
+    "rotation": [0.0, 0.0, 0.0],
+    "scale": [1.0, 1.0, 1.0]
+  },
+  "camera": {
+    "preset": "workdesk_front",
+    "position": [0.0, 1.05, 1.6],
+    "target": [0.0, 1.0, -0.1],
+    "fov": 40
+  },
+  "lighting": {
+    "ambientStrength": 0.8,
+    "mainLightColor": "#ffffff",
+    "mainLightStrength": 1.0
+  }
+}

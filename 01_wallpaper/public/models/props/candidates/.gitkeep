@@ -1,0 +1,4 @@
+# Keeps the candidates/ asset inbox under version control while it is empty.
+# Place newly-received assets here for license recording + verification BEFORE
+# promoting them to premium/ (see README_ASSET_INBOX.md). Never place
+# redistribution-prohibited / unknown-license assets anywhere under public/.

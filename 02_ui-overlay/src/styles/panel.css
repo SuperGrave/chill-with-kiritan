@@ -1,0 +1,119 @@
+.detail-panel-container {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px;
+  padding: 32px;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(20px);
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.detail-panel-container.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.detail-panel-container.debug-mode {
+  border: 1px solid rgba(255, 0, 255, 0.5);
+  background: rgba(255, 0, 255, 0.1);
+}
+
+.panel-header {
+  font-family: var(--font-main);
+  font-size: 28px;
+  letter-spacing: 0.15em;
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 12px;
+}
+
+.panel-content {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  font-weight: 300;
+  height: calc(100% - 70px);
+  overflow-y: auto;
+  padding-right: 16px;
+}
+
+.panel-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.panel-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Per-panel styling now lives inline in components/panels/*
+   (settings-driven sizes), matching WeatherDetailPanel. */
+
+/* Standalone, freely-positioned element panels (FloatingPanel) */
+.floating-panel {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.floating-panel.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.floating-panel.debug-mode {
+  outline: 1px dashed rgba(0, 255, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.floating-panel-header {
+  font-family: var(--font-main);
+  font-size: 22px;
+  letter-spacing: 0.15em;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.floating-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.floating-panel-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.floating-panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.floating-panel-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}

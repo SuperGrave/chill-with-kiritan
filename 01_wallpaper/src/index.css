@@ -1,0 +1,429 @@
+/* Motion Probe UI (0.7) — dark glass panel + genre sections + chip controls.
+   Layering: scene-bg (z0) < canvas (z1) < ui-layer (z10). */
+
+:root {
+  --panel-bg: rgba(13, 17, 23, 0.82);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --section-border: rgba(255, 255, 255, 0.06);
+  --chip-bg: #21262d;
+  --chip-border: #30363d;
+  --chip-hover: #2d333b;
+  --accent: #2ea88c;
+  --accent-border: #43c9a7;
+  --text: #e6edf3;
+  --text-muted: #9aa4af;
+  --warn: #e8a06a;
+  --radius: 14px;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #1a1a1a;
+  color: var(--text);
+  font-family: 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.canvas-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+.ui-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* --- Control panel ------------------------------------------------------------ */
+
+.panel {
+  pointer-events: auto;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 330px;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  background: var(--panel-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  scrollbar-width: thin;
+  scrollbar-color: #3a414b transparent;
+}
+
+.panel::-webkit-scrollbar {
+  width: 8px;
+}
+.panel::-webkit-scrollbar-thumb {
+  background: #3a414b;
+  border-radius: 4px;
+}
+.panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--panel-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--section-border);
+}
+
+.panel-title {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.panel-fps {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.icon-btn:hover {
+  background: var(--chip-hover);
+  color: var(--text);
+}
+
+/* Floating reveal button shown while the panel is hidden (H). */
+.panel-reveal {
+  pointer-events: auto;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--panel-bg);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+.panel-reveal:hover {
+  background: var(--chip-hover);
+}
+
+.panel-footer {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--section-border);
+  margin: 0;
+}
+
+/* --- Sections ------------------------------------------------------------------ */
+
+.panel-section {
+  border-top: 1px solid var(--section-border);
+}
+.panel-section:first-of-type {
+  border-top: none;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.section-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.section-icon {
+  font-size: 13px;
+}
+
+.section-summary {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-chevron {
+  color: var(--text-muted);
+  font-size: 11px;
+  transition: transform 0.18s ease;
+  transform: rotate(-90deg);
+}
+.panel-section.is-open .section-chevron {
+  transform: rotate(0deg);
+}
+
+.section-body {
+  padding: 4px 12px 12px;
+  animation: section-in 0.16s ease;
+}
+
+@keyframes section-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Controls -------------------------------------------------------------------- */
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 6px 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.chip:hover {
+  background: var(--chip-hover);
+}
+.chip.active {
+  background: var(--accent);
+  border-color: var(--accent-border);
+  color: #04130e;
+  font-weight: 600;
+}
+.chip.active kbd {
+  background: rgba(0, 0, 0, 0.22);
+  border-color: rgba(0, 0, 0, 0.3);
+  color: #04130e;
+}
+
+kbd {
+  font-family: inherit;
+  font-size: 9.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+}
+
+.field-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin: 6px 0;
+}
+
+.select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+}
+.select:focus {
+  outline: 1px solid var(--accent-border);
+}
+.select optgroup,
+.select option {
+  background: #1c2128;
+  color: var(--text);
+}
+
+.slider-label {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin: 8px 0 2px;
+}
+.slider-label .mono {
+  color: var(--text);
+}
+
+input[type='range'] {
+  width: 100%;
+  margin: 6px 0 2px;
+  accent-color: var(--accent);
+}
+
+.group-label {
+  margin: 8px 0 2px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+.small {
+  font-size: 11px;
+  margin: 4px 0;
+  line-height: 1.55;
+}
+.mono {
+  font-family: Consolas, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.warn {
+  color: var(--warn);
+}
+
+/* Layout-calibration nudge grids */
+.nudge-block {
+  margin: 6px 0;
+}
+.nudge-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  flex-wrap: wrap;
+}
+.nudge-row .chip {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.nudge-label {
+  width: 34px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.export-area {
+  width: 100%;
+  height: 160px;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 8px;
+  font-size: 10.5px;
+  font-family: Consolas, 'Courier New', monospace;
+  background: #0d1117;
+  color: #9fe8c8;
+  border: 1px solid var(--chip-border);
+  border-radius: 8px;
+  resize: vertical;
+}
+
+/* --- Status bar -------------------------------------------------------------------- */
+
+.statusbar {
+  pointer-events: none;
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--panel-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  font-size: 11.5px;
+}
+
+.statusbar-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar-meta {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --- Scene Background Layer (Background Probe 0.5) ---------------------------
+   DOM background composited BEHIND the transparent three.js canvas. The canvas
+   is z-index 1, the UI z-index 10, so this sits at z-index 0. Sub-layers are
+   stacked by DOM order (outside -> room -> light). 1920x1080-authored images
+   are shown with `cover` (aspect preserved, cropped) so a small preview window
+   never distorts them. */
+.scene-bg-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.scene-bg-layer > div {
+  position: absolute;
+  inset: 0;
+}
+
+/* Fallbacks are applied ONLY via the --fallback modifier, so a loaded image set
+   inline (background-image) is never fighting a class `background` shorthand. */
+.scene-bg-outside--fallback {
+  /* window-view fallback: cool daylight sky -> deeper blue */
+  background: linear-gradient(180deg, #2a4a6e 0%, #3d6189 40%, #20324a 100%);
+}
+
+.scene-bg-room--fallback {
+  /* dim cozy-room fallback: warm-dark vignette */
+  background: radial-gradient(125% 95% at 50% 16%, #2c2723 0%, #1d1a16 55%, #100e0c 100%);
+}

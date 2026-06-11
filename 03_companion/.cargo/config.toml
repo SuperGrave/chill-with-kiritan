@@ -1,0 +1,4 @@
+[build]
+# dlltool (MinGW) cannot handle Japanese characters in path.
+# Redirect build artifacts to an ASCII-only location.
+target-dir = "C:/cargo-build/tohoku-companion"

@@ -24,8 +24,9 @@ const DebugGuide: React.FC<DebugGuideProps> = ({ layout }) => {
       <div className="debug-guide-line" style={{ left: '33.33%', top: 0, width: 1, height: '100%' }} />
       <div className="debug-guide-line" style={{ left: '66.66%', top: 0, width: 1, height: '100%' }} />
       
-      {/* Labels */}
-      <div style={{ position: 'absolute', top: 10, left: 10, color: '#0ff', fontSize: 12, fontFamily: 'monospace' }}>
+      {/* Labels — offset right so the fixed emergency Reset button (top-left)
+          stays readable underneath */}
+      <div style={{ position: 'absolute', top: 10, left: 110, color: '#0ff', fontSize: 12, fontFamily: 'monospace' }}>
         DEBUG MODE ON - {layout.canvas.width}x{layout.canvas.height}
       </div>
     </>

@@ -1,85 +1,186 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { CheckIcon, CloudIcon, MusicIcon, ServerIcon, SparkIcon } from "../icons";
+import { api, type AppSettings, type SecretsStatus } from "../api";
 
 export default function TabSettings() {
-  const [openaiKey,   setOpenaiKey]   = useState("");
-  const [googleKey,   setGoogleKey]   = useState("");
-  const [spotifyId,   setSpotifyId]   = useState("");
-  const [port,        setPort]        = useState("40313");
-  const [jmaOffice,   setJmaOffice]   = useState("016000");
-  const [saved,       setSaved]       = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [secStatus, setSecStatus] = useState<SecretsStatus | null>(null);
 
-  const save = () => {
-    // TODO: Phase B-4 — store via Tauri plugin-store / OS keyring
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  // Secret inputs are write-only: blank means "leave unchanged".
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [googleKey, setGoogleKey] = useState("");
+  const [spotifySecret, setSpotifySecret] = useState("");
+  const [spotifyRefresh, setSpotifyRefresh] = useState("");
+
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getSettings().then(setSettings).catch(() => setError("APIに接続できませんでした"));
+    api.secretsStatus().then(setSecStatus).catch(() => {});
+  }, []);
+
+  const upd = (path: string, value: any) => {
+    setSettings((prev) => {
+      if (!prev) return prev;
+      const next: any = structuredClone(prev);
+      const keys = path.split(".");
+      let o = next;
+      for (let i = 0; i < keys.length - 1; i++) o = o[keys[i]];
+      o[keys[keys.length - 1]] = value;
+      return next;
+    });
   };
+
+  const save = async () => {
+    if (!settings) return;
+    setError(null);
+    try {
+      await api.putSettings(settings);
+      const secrets: Record<string, string> = {};
+      if (openaiKey) secrets.openaiKey = openaiKey;
+      if (googleKey) secrets.googleKey = googleKey;
+      if (spotifySecret) secrets.spotifyClientSecret = spotifySecret;
+      if (spotifyRefresh) secrets.spotifyRefreshToken = spotifyRefresh;
+      if (Object.keys(secrets).length) await api.putSecrets(secrets);
+      setOpenaiKey(""); setGoogleKey(""); setSpotifySecret(""); setSpotifyRefresh("");
+      setSecStatus(await api.secretsStatus());
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setError("保存に失敗しました");
+    }
+  };
+
+  if (!settings) {
+    return (
+      <section className="tab-panel">
+        <header className="panel-head"><h2>設定</h2></header>
+        {error ? <p className="error-banner">⚠ {error}</p> : <p className="note">読み込み中…</p>}
+      </section>
+    );
+  }
+
+  const dot = (on?: boolean) => (
+    <span className={`pill ${on ? "ok" : "warn"}`}>{on ? "設定済み" : "未設定"}</span>
+  );
 
   return (
     <section className="tab-panel">
-      <h2 className="panel-title">SETTINGS</h2>
+      <header className="panel-head"><h2>設定</h2></header>
 
-      <fieldset className="settings-group">
-        <legend>AI</legend>
-        <label>OpenAI API Key
-          <input
-            type="password"
-            value={openaiKey}
-            onChange={(e) => setOpenaiKey(e.target.value)}
-            placeholder="sk-..."
-          />
+      <div className="settings-group">
+        <div className="group-head">
+          <span className="group-icon"><SparkIcon /></span>
+          <h3>AI</h3>
+        </div>
+        <label className="field">
+          <span>プロバイダー</span>
+          <select value={settings.ai.provider} onChange={(e) => upd("ai.provider", e.target.value)}>
+            <option value="none">使わない</option>
+            <option value="openai">OpenAI</option>
+            <option value="google">Google Gemini</option>
+          </select>
         </label>
-        <label>Google API Key
-          <input
-            type="password"
-            value={googleKey}
-            onChange={(e) => setGoogleKey(e.target.value)}
-            placeholder="AIza..."
-          />
+        <label className="field">
+          <span>モデル</span>
+          <input className="mono" value={settings.ai.model}
+            onChange={(e) => upd("ai.model", e.target.value)}
+            placeholder="gpt-4o-mini / gemini-1.5-flash" />
         </label>
-      </fieldset>
+        <label className="field">
+          <span>システムプロンプト</span>
+          <input value={settings.ai.systemPrompt}
+            onChange={(e) => upd("ai.systemPrompt", e.target.value)} />
+        </label>
+        <label className="field">
+          <span>OpenAI API Key {dot(secStatus?.openai)}</span>
+          <input type="password" className="mono" value={openaiKey}
+            onChange={(e) => setOpenaiKey(e.target.value)} placeholder="sk-... (変更時のみ入力)" />
+        </label>
+        <label className="field">
+          <span>Google API Key {dot(secStatus?.google)}</span>
+          <input type="password" className="mono" value={googleKey}
+            onChange={(e) => setGoogleKey(e.target.value)} placeholder="AIza... (変更時のみ入力)" />
+        </label>
+      </div>
 
-      <fieldset className="settings-group">
-        <legend>Spotify</legend>
-        <label>Client ID
-          <input
-            type="text"
-            value={spotifyId}
-            onChange={(e) => setSpotifyId(e.target.value)}
-            placeholder="Spotify Client ID"
-          />
+      <div className="settings-group">
+        <div className="group-head">
+          <span className="group-icon"><MusicIcon /></span>
+          <h3>Spotify</h3>
+        </div>
+        <label className="field">
+          <span>Client ID</span>
+          <input className="mono" value={settings.spotify.clientId}
+            onChange={(e) => upd("spotify.clientId", e.target.value)} placeholder="Spotify Client ID" />
         </label>
-        <button className="secondary-btn">Spotify 接続 (Phase B-5)</button>
-      </fieldset>
+        <label className="field">
+          <span>Client Secret {dot(secStatus?.spotifyClientSecret)}</span>
+          <input type="password" className="mono" value={spotifySecret}
+            onChange={(e) => setSpotifySecret(e.target.value)} placeholder="(変更時のみ入力)" />
+        </label>
+        <label className="field">
+          <span>Refresh Token {dot(secStatus?.spotifyRefreshToken)}</span>
+          <input type="password" className="mono" value={spotifyRefresh}
+            onChange={(e) => setSpotifyRefresh(e.target.value)} placeholder="(変更時のみ入力)" />
+        </label>
+        <p className="hint">user-read-currently-playing スコープの refresh_token を取得して貼り付け</p>
+      </div>
 
-      <fieldset className="settings-group">
-        <legend>Weather / 地域</legend>
-        <label>JMA Office Code
-          <input
-            type="text"
-            value={jmaOffice}
-            onChange={(e) => setJmaOffice(e.target.value)}
-          />
+      <div className="settings-group">
+        <div className="group-head">
+          <span className="group-icon"><CloudIcon /></span>
+          <h3>天気・地域</h3>
+        </div>
+        <label className="field">
+          <span>表示名</span>
+          <input value={settings.weather.locationLabel}
+            onChange={(e) => upd("weather.locationLabel", e.target.value)} />
         </label>
-        <p className="hint">初期値: 016000 (札幌)</p>
-      </fieldset>
+        <label className="field">
+          <span>緯度</span>
+          <input type="number" className="mono" value={settings.weather.latitude}
+            onChange={(e) => upd("weather.latitude", Number(e.target.value))} />
+        </label>
+        <label className="field">
+          <span>経度</span>
+          <input type="number" className="mono" value={settings.weather.longitude}
+            onChange={(e) => upd("weather.longitude", Number(e.target.value))} />
+        </label>
+        <label className="field">
+          <span>JMA Office</span>
+          <input className="mono" value={settings.weather.jmaOffice}
+            onChange={(e) => upd("weather.jmaOffice", e.target.value)} />
+        </label>
+      </div>
 
-      <fieldset className="settings-group">
-        <legend>Server</legend>
-        <label>API Port
-          <input
-            type="number"
-            value={port}
-            onChange={(e) => setPort(e.target.value)}
-          />
+      <div className="settings-group">
+        <div className="group-head">
+          <span className="group-icon"><ServerIcon /></span>
+          <h3>ニュース (RSS)</h3>
+        </div>
+        <label className="field">
+          <span>フィードURL (改行区切り)</span>
+          <textarea className="mono" rows={3} value={settings.news.feeds.join("\n")}
+            onChange={(e) => upd("news.feeds", e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))} />
         </label>
-      </fieldset>
+        <label className="field">
+          <span>最大件数</span>
+          <input type="number" className="mono" value={settings.news.maxItems}
+            onChange={(e) => upd("news.maxItems", Number(e.target.value))} />
+        </label>
+      </div>
+
+      {error && <p className="error-banner">⚠ {error}</p>}
 
       <div className="settings-actions">
-        <button onClick={save} className="primary-btn">
-          {saved ? "✔ 保存しました" : "設定を保存"}
+        <button onClick={save} className={`primary-btn save-btn ${saved ? "saved" : ""}`}>
+          {saved && <CheckIcon />}
+          {saved ? "保存しました" : "設定を保存"}
         </button>
       </div>
-      <p className="note">※ APIキー保存は Phase B-4 で実装 (OS keyring)</p>
+      <p className="note">※ APIキーは Companion 内のローカルファイルにのみ保存され、壁紙側へは送信されません</p>
     </section>
   );
 }

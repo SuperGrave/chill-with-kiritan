@@ -1,0 +1,48 @@
+{
+  "schema": "motion/1",
+  "id": "amb_work_posture_reset",
+  "label": "Ambient: 座り直し（背筋を伸ばす）",
+  "notes": "work_normal Ambient（12原則準拠改修済 2026-06-13）。①予備動作: 伸ばす前に一度ほんの少し前へ丸める(t0.5 +x)＝タメ。主動作: 腰を引いて反らす(−x)。②フォロースルー: 戻りで中心を僅かに越えて(t3.2)→t4.2 settle、肩は脊椎より一拍遅れて上下(重なり)。③弧: 反りに僅かな z を混ぜる。④副次: 頭が連動、肩がすくんで落ちる。oneshot、開始=終了ニュートラル。posture=sit_pc_neutral。",
+  "category": "ambient",
+  "tags": ["mode:work_normal", "family:A"],
+  "posture": "sit_pc_neutral",
+  "duration": 4.2,
+  "loop": false,
+  "fadeIn": 0.4,
+  "fadeOut": 0.5,
+  "tracks": {
+    "spine": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.5, "e": [0.04, 0, 0.01], "ease": "easeIn" },
+      { "t": 1.7, "e": [-0.11, 0, -0.02], "ease": "easeOut" },
+      { "t": 3.2, "e": [0.015, 0, 0], "ease": "sineInOut" },
+      { "t": 4.2, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.5, "e": [0.03, 0, 0] },
+      { "t": 1.7, "e": [-0.07, 0, 0], "ease": "easeOut" },
+      { "t": 3.2, "e": [0.01, 0, 0] },
+      { "t": 4.2, "e": [0, 0, 0] }
+    ] },
+    "head": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.5, "e": [0.04, 0, 0] },
+      { "t": 1.7, "e": [-0.08, 0, 0], "ease": "easeOut" },
+      { "t": 3.0, "e": [0.02, 0, 0] },
+      { "t": 4.2, "e": [0, 0, 0] }
+    ] },
+    "leftShoulder": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.2, "e": [0, 0, -0.14], "ease": "easeOut" },
+      { "t": 2.6, "e": [0, 0, 0.02] },
+      { "t": 4.2, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "rightShoulder": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.2, "e": [0, 0, 0.14], "ease": "easeOut" },
+      { "t": 2.6, "e": [0, 0, -0.02] },
+      { "t": 4.2, "e": [0, 0, 0], "ease": "easeOut" }
+    ] }
+  }
+}

@@ -63,7 +63,10 @@ export class ExternalMotionController {
 
   private blend = 0; // raw envelope
   private blendTarget = 0; // 0 idle / 1 clip
-  private crossfadeDuration = 0.6; // seconds for a full 0<->1 envelope sweep
+  // Directional sweep durations. A motion can declare its own (DSL fadeIn /
+  // fadeOut); the viewer applies them when the clip is swapped in.
+  private fadeInDuration = 0.6;
+  private fadeOutDuration = 0.6;
 
   private clipLoaded = false;
   private clipName = '';
@@ -74,7 +77,8 @@ export class ExternalMotionController {
   private restartPending = false;
 
   constructor(crossfadeDuration = 0.6) {
-    this.crossfadeDuration = crossfadeDuration;
+    this.fadeInDuration = crossfadeDuration;
+    this.fadeOutDuration = crossfadeDuration;
   }
 
   // --- Clip metadata (set by the viewer once a clip is built/loaded) ---------
@@ -96,7 +100,15 @@ export class ExternalMotionController {
   }
 
   setCrossfadeDuration(seconds: number): void {
-    this.crossfadeDuration = Math.max(0.01, seconds);
+    const s = Math.max(0.01, seconds);
+    this.fadeInDuration = s;
+    this.fadeOutDuration = s;
+  }
+
+  /** Per-motion sweep durations (DSL fadeIn/fadeOut). Undefined keeps 0.6. */
+  setFadeDurations(fadeIn?: number, fadeOut?: number): void {
+    this.fadeInDuration = Math.max(0.01, fadeIn ?? 0.6);
+    this.fadeOutDuration = Math.max(0.01, fadeOut ?? 0.6);
   }
 
   // --- User intents ----------------------------------------------------------
@@ -156,7 +168,23 @@ export class ExternalMotionController {
 
   /** Return to procedural idle (key 0): crossfade the clip out, keep it armed. */
   returnToIdle(): void {
+    this.playing = false;
     this.blendTarget = 0;
+  }
+
+  /**
+   * The AnimationAction reached the end of a oneshot (mixer 'finished' event):
+   * fade back to idle. Without this the controller kept reporting playing=true
+   * and the envelope sat at 1 forever, so the next replay swapped clips at full
+   * weight — the pose teleported and the spring bones (hair/sleeves) flailed.
+   */
+  notifyFinished(): void {
+    this.playing = false;
+    this.blendTarget = 0;
+  }
+
+  isPlaying(): boolean {
+    return this.playing;
   }
 
   /** Dispatch a discrete UI command. */
@@ -188,9 +216,8 @@ export class ExternalMotionController {
     const target = this.enabled && this.clipLoaded ? this.blendTarget : 0;
 
     if (this.blend !== target) {
-      const step = dt / this.crossfadeDuration;
-      if (this.blend < target) this.blend = Math.min(target, this.blend + step);
-      else this.blend = Math.max(target, this.blend - step);
+      if (this.blend < target) this.blend = Math.min(target, this.blend + dt / this.fadeInDuration);
+      else this.blend = Math.max(target, this.blend - dt / this.fadeOutDuration);
     }
 
     return this.getDebug();

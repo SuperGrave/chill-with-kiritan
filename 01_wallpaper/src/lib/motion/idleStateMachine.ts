@@ -18,6 +18,25 @@
 // The machine knows nothing about THREE.js or VRM — it only emits plain
 // numbers. VrmViewer converts the offsets to quaternions and the expression
 // names to morph-target influences via the 0.1 Custom Expression Bridge.
+//
+// Expression overlays are resolved from the Expression Preset table (0.1) at
+// module init, so idle states, the debug UI and future motion cues share ONE
+// source of facial truth. The crossfade machinery below is unchanged — it
+// lerps whatever weight maps the states emit.
+
+import { presetExprOverlay, getExpressionPreset, flutterValue } from '../expression/expressionPresets';
+
+// Resolved once (plain weight maps). The machine never mutates pose.expr and
+// clonePose/lerpPose copy on write, so sharing these objects is safe.
+const EXPR_NEUTRAL_SOFT = presetExprOverlay('neutral_soft');
+const EXPR_FOCUSED_MONITOR = presetExprOverlay('focused_monitor');
+const EXPR_SMILE = presetExprOverlay('smile'); // 旧 glance_smile（0.2で改名）
+const EXPR_SLEEPY = presetExprOverlay('sleepy');
+const EXPR_SMALL_SMILE = presetExprOverlay('small_smile');
+// Sleepy half-lid ceiling + its flutter (sine 0.5..1.0 of the ceiling) come
+// from the preset table, so the idle state and motion cues stay in sync.
+const SLEEPY_PRESET = getExpressionPreset('sleepy');
+const SLEEPY_LID_BASE = SLEEPY_PRESET?.eyelid?.halfLid ?? 0.33;
 
 export type IdleState =
   | 'idle_breath'
@@ -77,9 +96,12 @@ export interface IdlePose {
   // map, e.g. 'fun' / 'sorrow') -> weight 0..1. Max-blended over the user's
   // manual expression by the viewer.
   expr: Partial<Record<string, number>>;
-  // 0..1 multiplier applied to the cursor-driven LookAt target. 1 = full
-  // tracking, lower = eyes pulled back toward center (used by monitor/sleepy).
+  // 0..1 multiplier on the gaze-wander amplitude (0.2: cursor follow is gone;
+  // this damps the random look-around — lower = eyes stay near center).
   lookAtStrength: number;
+  // Fixed gaze of this state (degrees on the gaze panel; k = blend 0..1,
+  // k 0 = pure wander). E.g. glance→front/camera, monitor→screen-down-right.
+  gaze: { yaw: number; pitch: number; k: number };
   // 0..1 extra eye-close, max-blended with auto-blink (half-lid for sleepy).
   extraBlink: number;
 }
@@ -134,6 +156,7 @@ function clonePose(p: IdlePose): IdlePose {
     bones,
     expr: { ...p.expr },
     lookAtStrength: p.lookAtStrength,
+    gaze: { ...p.gaze },
     extraBlink: p.extraBlink,
   };
 }
@@ -151,13 +174,22 @@ function lerpPose(a: IdlePose, b: IdlePose, k: number): IdlePose {
   for (const name of new Set([...Object.keys(a.expr), ...Object.keys(b.expr)])) {
     expr[name] = lerp(a.expr[name] ?? 0, b.expr[name] ?? 0, k);
   }
+  // Gaze angles only matter while k > 0 on either side; lerping the raw
+  // components is fine because a k=0 side carries yaw/pitch 0 (center).
   return {
     bones,
     expr,
     lookAtStrength: lerp(a.lookAtStrength, b.lookAtStrength, k),
+    gaze: {
+      yaw: lerp(a.gaze.yaw, b.gaze.yaw, k),
+      pitch: lerp(a.gaze.pitch, b.gaze.pitch, k),
+      k: lerp(a.gaze.k, b.gaze.k, k),
+    },
     extraBlink: lerp(a.extraBlink, b.extraBlink, k),
   };
 }
+
+const GAZE_WANDER = { yaw: 0, pitch: 0, k: 0 };
 
 // ---------------------------------------------------------------------------
 // State evaluators
@@ -185,7 +217,7 @@ const STATES: Record<IdleState, StateConfig> = {
       bones.head.z = sway;
       bones.leftShoulder.z = -breath * 0.3;
       bones.rightShoulder.z = breath * 0.3;
-      return { bones, expr: {}, lookAtStrength: 1.0, extraBlink: 0 };
+      return { bones, expr: EXPR_NEUTRAL_SOFT, lookAtStrength: 1.0, gaze: GAZE_WANDER, extraBlink: 0 };
     },
   },
 
@@ -210,7 +242,15 @@ const STATES: Record<IdleState, StateConfig> = {
       bones.head.z = drift * 0.4;
       bones.leftShoulder.z = -breath * 0.25;
       bones.rightShoulder.z = breath * 0.25;
-      return { bones, expr: {}, lookAtStrength: 0.35, extraBlink: 0 };
+      // focused_monitor preset: serious brow + slight squint. Eyes hold the
+      // head-turn direction (画面右やや下 = モニタ) instead of wandering.
+      return {
+        bones,
+        expr: EXPR_FOCUSED_MONITOR,
+        lookAtStrength: 0.35,
+        gaze: { yaw: 9, pitch: -7, k: 0.8 },
+        extraBlink: 0,
+      };
     },
   },
 
@@ -233,7 +273,8 @@ const STATES: Record<IdleState, StateConfig> = {
       bones.head.z = 0.05; // cute tilt
       bones.leftShoulder.z = -breath * 0.25;
       bones.rightShoulder.z = breath * 0.25;
-      return { bones, expr: { fun: 0.28 }, lookAtStrength: 1.0, extraBlink: 0 };
+      // Glance: the eyes commit to the viewer (front/camera) for the oneshot.
+      return { bones, expr: EXPR_SMILE, lookAtStrength: 1.0, gaze: { yaw: 0, pitch: 0, k: 1 }, extraBlink: 0 };
     },
   },
 
@@ -245,7 +286,9 @@ const STATES: Record<IdleState, StateConfig> = {
     evaluate: (t) => {
       const breath = Math.sin(t * Math.PI * 0.4) * 0.05; // slower, deeper
       const nod = (Math.sin(t * Math.PI * 0.25) * 0.5 + 0.5) * 0.06; // 0..0.06
-      const lid = 0.45 + (Math.sin(t * Math.PI * 0.2) * 0.5 + 0.5) * 0.2; // 0.45..0.65
+      // Half-lid = preset ceiling × the preset's own flutter (sine 0.5..1.0),
+      // so the idle lid drifts ~0.17..0.33 exactly like a motion-cued sleepy.
+      const lid = SLEEPY_LID_BASE * flutterValue(SLEEPY_PRESET, t);
       const bones = zeroBones();
       bones.chest.x = breath;
       bones.spine.x = breath * 0.5;
@@ -254,7 +297,15 @@ const STATES: Record<IdleState, StateConfig> = {
       bones.head.z = Math.sin(t * Math.PI * 0.1) * 0.02; // gentle sway
       bones.leftShoulder.z = 0.03; // shoulders relax/drop slightly
       bones.rightShoulder.z = -0.03;
-      return { bones, expr: { sorrow: 0.12 }, lookAtStrength: 0.2, extraBlink: lid };
+      // sleepy preset: soft troubled brow (こまり眉) instead of the old sorrow
+      // composite — sorrow's はぅ eyes fought the half-lid. Gaze drifts low.
+      return {
+        bones,
+        expr: EXPR_SLEEPY,
+        lookAtStrength: 0.2,
+        gaze: { yaw: 0, pitch: -8, k: 0.5 },
+        extraBlink: lid,
+      };
     },
   },
 
@@ -276,7 +327,7 @@ const STATES: Record<IdleState, StateConfig> = {
       bones.head.z = 0.025; // slight happy tilt
       bones.leftShoulder.z = -breath * 0.2;
       bones.rightShoulder.z = breath * 0.2;
-      return { bones, expr: { fun: 0.3 }, lookAtStrength: 1.0, extraBlink: 0 };
+      return { bones, expr: EXPR_SMALL_SMILE, lookAtStrength: 1.0, gaze: GAZE_WANDER, extraBlink: 0 };
     },
   },
 };

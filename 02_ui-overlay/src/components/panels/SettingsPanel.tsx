@@ -5,6 +5,7 @@ import {
   aiPanelDefaults,
   memoPanelDefaults,
 } from '../../config/uiSettings';
+import { DOCK_BASE_HEIGHT } from '../../config/layout';
 
 interface SettingsPanelProps {
   layout: any;
@@ -150,6 +151,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
       [section]: { ...prev[section], [key]: value }
     }));
   };
+
+  // The dock and the settings overlay are the only way back into this panel,
+  // so their position sliders must not be able to push them off-canvas.
+  const [canvasW, canvasH] = (settings.baseResolution || '1920x1080').split('x').map(Number);
+  const dockMaxX = canvasW - (layout.rightDock.width ?? 110);
+  const dockMaxY = canvasH - (DOCK_BASE_HEIGHT + 5 * (layout.rightDock.gap ?? 16));
 
   // Merged views: saved values over defaults, so controls always show a value
   // even when the section is missing from an older localStorage snapshot.
@@ -355,14 +362,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
       )}
 
       <Accordion title="Right Dock" defaultOpen={false}>
-        <SliderInput label="X Position" value={layout.rightDock.x} onChange={(v: number) => updateLayout('rightDock', 'x', v)} />
-        <SliderInput label="Y Position" value={layout.rightDock.y} onChange={(v: number) => updateLayout('rightDock', 'y', v)} />
+        <SliderInput label="X Position" value={layout.rightDock.x} onChange={(v: number) => updateLayout('rightDock', 'x', v)} max={dockMaxX} />
+        <SliderInput label="Y Position" value={layout.rightDock.y} onChange={(v: number) => updateLayout('rightDock', 'y', v)} max={dockMaxY} />
         <SliderInput label="Button Gap" value={layout.rightDock.gap} onChange={(v: number) => updateLayout('rightDock', 'gap', v)} max={100} />
       </Accordion>
 
       <Accordion title="Settings Overlay" defaultOpen={false}>
-        <SliderInput label="X Position" value={layout.detailPanel.x} onChange={(v: number) => updateLayout('detailPanel', 'x', v)} />
-        <SliderInput label="Y Position" value={layout.detailPanel.y} onChange={(v: number) => updateLayout('detailPanel', 'y', v)} />
+        <SliderInput label="X Position" value={layout.detailPanel.x} onChange={(v: number) => updateLayout('detailPanel', 'x', v)} max={canvasW - 100} />
+        <SliderInput label="Y Position" value={layout.detailPanel.y} onChange={(v: number) => updateLayout('detailPanel', 'y', v)} max={canvasH - 100} />
         <SliderInput label="Width" value={layout.detailPanel.width} onChange={(v: number) => updateLayout('detailPanel', 'width', v)} />
         <SliderInput label="Height" value={layout.detailPanel.height} onChange={(v: number) => updateLayout('detailPanel', 'height', v)} />
       </Accordion>

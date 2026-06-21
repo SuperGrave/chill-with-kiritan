@@ -1,0 +1,40 @@
+{
+  "schema": "motion/1",
+  "id": "tr_slump_wake",
+  "label": "遷移: 突っ伏し→起きる",
+  "notes": "sleep_desk → work_normal の橋渡し。posture=sit_desk_slump を使い、t0=offset0（純slump・突っ伏し）から、頭を持ち上げ小さく寝ぼけて揺れ、上体を起こして座位（offsetでslumpを打ち消し）へ。終端は『座って正面』≒sit_pc_neutralで、work系ループへクロスフェードで繋がる。瞼は重く開く。loop:false で起き上がりを保持。",
+  "category": "transition",
+  "tags": ["mode:work_normal", "family:special"],
+  "posture": "sit_desk_slump",
+  "duration": 4.2,
+  "loop": false,
+  "fadeIn": 0.4,
+  "fadeOut": 0.6,
+  "tracks": {
+    "spine": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.2, "e": [-0.08, 0, 0], "ease": "sineInOut" },
+      { "t": 4.2, "e": [-0.49, 0, 0], "ease": "easeOut" }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 4.2, "e": [-0.31, 0, 0], "ease": "easeOut" }
+    ] },
+    "neck": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 4.2, "e": [-0.12, 0.15, 0], "ease": "sineInOut" }
+    ] },
+    "head": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.5, "e": [-0.04, -0.55, -0.18], "ease": "easeOut" },
+      { "t": 2.3, "e": [-0.05, -0.4, -0.34], "ease": "sineInOut" },
+      { "t": 4.2, "e": [-0.05, -0.5, -0.32], "ease": "sineInOut" }
+    ] }
+  },
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "blink": 1.0 }, "fade": 0.4 },
+    { "t": 1.5, "set": { "blink": 0.6, "sorrow": 0.12 }, "fade": 0.9 },
+    { "t": 2.6, "set": { "blink": 0.3, "sorrow": 0.1 }, "fade": 0.7 },
+    { "t": 4.2, "set": { "blink": 0.25, "sorrow": 0.08 }, "fade": 0.8 }
+  ] }
+}

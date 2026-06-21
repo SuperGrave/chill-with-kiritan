@@ -1,0 +1,247 @@
+// kiritanState POST 疎通 — Phase 0 Test E verification harness.
+//
+// Usage:  node tools/test_kiritan_post.mjs
+//
+// Proves the design's §5.7 state sync over a REAL HTTP round-trip (Node's http
+// server + the global fetch transport), without the wallpaper/WebGL app:
+//   1. 疎通 + cadence: the director POSTs on every mode transition and on the
+//      30 s heartbeat; every received body validates against the §5.7 schema.
+//   2. Fire-and-forget resilience: a missing receiver (dead port), a rejecting
+//      transport, and a hung (never-resolving) transport none of them throw back
+//      into the host nor block it — the host loop keeps ticking unaffected.
+//
+// Compiles the THREE-agnostic director modules + kiritanPoster to CommonJS under
+// <root>/.probe_tmp/poster_build (same pattern as tools/test_director.mjs).
+
+import { execSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import http from 'node:http';
+import path from 'node:path';
+
+const require = createRequire(import.meta.url);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const pkg = path.join(root, '01_wallpaper');
+const outDir = path.join(root, '.probe_tmp', 'poster_build');
+
+// --- 0. compile -------------------------------------------------------------
+rmSync(outDir, { recursive: true, force: true });
+const files = [
+  'src/lib/motion/director/rng.ts',
+  'src/lib/motion/director/types.ts',
+  'src/lib/motion/director/modeTable.ts',
+  'src/lib/motion/director/modeFsm.ts',
+  'src/lib/motion/director/kiritanState.ts',
+  'src/lib/motion/director/kiritanPoster.ts',
+];
+execSync(
+  `npx tsc ${files.join(' ')} --ignoreConfig --outDir "${outDir}" --module commonjs --target es2022 --moduleResolution node --ignoreDeprecations 6.0 --skipLibCheck`,
+  { cwd: pkg, stdio: 'inherit' },
+);
+
+const D = (m) => require(path.join(outDir, m));
+const { makeRng } = D('rng.js');
+const { ModeFsm } = D('modeFsm.js');
+const { validateKiritanState } = D('kiritanState.js');
+const { KiritanPoster } = D('kiritanPoster.js');
+
+// --- tiny harness -----------------------------------------------------------
+let pass = 0;
+let fail = 0;
+const failures = [];
+function ok(cond, label) {
+  if (cond) pass++;
+  else {
+    fail++;
+    failures.push(label);
+    console.error(`  ✗ FAIL: ${label}`);
+  }
+}
+function section(t) {
+  console.log(`\n=== ${t} ===`);
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A virtual clock the poster reads; the test drives it forward in sim time.
+let clock = Date.parse('2026-06-12T14:00:00+09:00');
+const now = () => clock;
+
+// Mock Companion receiver: records every body it gets.
+function startReceiver() {
+  const received = [];
+  const server = http.createServer((req, res) => {
+    if (req.method !== 'POST' || req.url !== '/api/kiritan/state') {
+      res.writeHead(404).end();
+      return;
+    }
+    let raw = '';
+    req.on('data', (c) => (raw += c));
+    req.on('end', () => {
+      try {
+        received.push(JSON.parse(raw));
+      } catch (e) {
+        received.push({ __parseError: String(e) });
+      }
+      res.writeHead(204).end();
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({ server, port, received });
+    });
+  });
+}
+
+async function main() {
+  // =========================================================================
+  // 1. 疎通 + cadence (transition + 30 s heartbeat), schema valid on the wire
+  // =========================================================================
+  section('1. HTTP 疎通 + cadence (real fetch → mock receiver)');
+  {
+    const { server, port, received } = await startReceiver();
+    const url = `http://127.0.0.1:${port}/api/kiritan/state`;
+
+    const poster = new KiritanPoster({ url, heartbeatMs: 30_000, now });
+    const fsm = new ModeFsm(makeRng(7), 'work_normal');
+
+    // Drive 20 sim-minutes at 1 s ticks. The poster reads `now()`; we advance the
+    // virtual clock and `ctx.nowMs` together so `since`/`endsAt` stay coherent.
+    let transitions = 0;
+    const reasons = { initial: 0, transition: 0, heartbeat: 0 };
+    const STEP_S = 1;
+    for (let s = 0; s < 20 * 60; s += STEP_S) {
+      clock += STEP_S * 1000;
+      const t = fsm.stepMinutes(STEP_S / 60, 14);
+      if (t) transitions++;
+      const r = poster.maybePost(fsm.snapshot(), { nowMs: clock, ambient: null, away: null });
+      if (r) reasons[r]++;
+    }
+    // Let the in-flight fire-and-forget POSTs land.
+    await sleep(150);
+
+    ok(reasons.initial === 1, `exactly one initial sync POST (got ${reasons.initial})`);
+    ok(transitions > 0, `FSM produced transitions to push (${transitions})`);
+    ok(reasons.transition === transitions, `one POST per transition (${reasons.transition}/${transitions})`);
+    // 20 min / 30 s heartbeat ≈ up to 40 ticks, minus any consumed by transition
+    // resets. Just assert the heartbeat actually fired on a sustained dwell.
+    ok(reasons.heartbeat > 0, `heartbeat POSTs fired during dwell (${reasons.heartbeat})`);
+
+    const totalSent = reasons.initial + reasons.transition + reasons.heartbeat;
+    ok(received.length === totalSent, `every POST was received (${received.length}/${totalSent})`);
+
+    const schemaErrs = received.flatMap((b) => validateKiritanState(b));
+    ok(schemaErrs.length === 0, `all received bodies valid §5.7 schema (${schemaErrs.length} errors)`);
+    ok(
+      received.every((b) => typeof b.mode === 'string' && typeof b.since === 'string'),
+      'received bodies carry mode + ISO since',
+    );
+
+    // Heartbeat spacing: consecutive same-mode posts are ≥ ~30 s apart in `since`
+    // is not directly observable, but we can confirm we didn't spam every tick.
+    ok(totalSent < 20 * 60, `did not POST every tick — cadence gated (${totalSent} ≪ 1200)`);
+
+    console.log(`  posted: initial=${reasons.initial} transition=${reasons.transition} heartbeat=${reasons.heartbeat}; received=${received.length}`);
+    console.log('  sample wire body:', JSON.stringify(received[received.length - 1]));
+    server.close();
+  }
+
+  // =========================================================================
+  // 2. Fire-and-forget resilience (receiver absent / rejecting / hung)
+  // =========================================================================
+  section('2. Fire-and-forget resilience (host must never throw or block)');
+  {
+    const fsm = new ModeFsm(makeRng(2), 'work_normal');
+    const ctx = { nowMs: clock, ambient: null, away: null };
+
+    // (a) Dead port via the REAL fetch transport — connection refused.
+    {
+      let errors = 0;
+      const poster = new KiritanPoster({
+        url: 'http://127.0.0.1:9/api/kiritan/state', // discard port, nothing listening
+        now,
+        onError: () => errors++,
+      });
+      let threw = false;
+      const t0 = Date.now();
+      try {
+        for (let i = 0; i < 50; i++) {
+          clock += 31_000; // force a post each iteration
+          poster.maybePost(fsm.snapshot(), ctx);
+        }
+      } catch {
+        threw = true;
+      }
+      const elapsed = Date.now() - t0;
+      ok(!threw, 'dead-receiver: maybePost never throws into the host');
+      ok(elapsed < 500, `dead-receiver: host loop not blocked (${elapsed}ms for 50 posts)`);
+      await sleep(300); // allow async connection-refused rejections to settle
+      ok(errors > 0, `dead-receiver: rejections routed to onError, not thrown (${errors})`);
+    }
+
+    // (b) Transport that throws synchronously.
+    {
+      let errors = 0;
+      const poster = new KiritanPoster({
+        transport: () => {
+          throw new Error('boom');
+        },
+        now,
+        onError: () => errors++,
+      });
+      let threw = false;
+      try {
+        clock += 31_000;
+        poster.maybePost(fsm.snapshot(), ctx);
+      } catch {
+        threw = true;
+      }
+      ok(!threw && errors === 1, 'sync-throwing transport swallowed (onError fired, host unaffected)');
+    }
+
+    // (c) Transport that rejects asynchronously.
+    {
+      let errors = 0;
+      const poster = new KiritanPoster({
+        transport: () => Promise.reject(new Error('async-down')),
+        now,
+        onError: () => errors++,
+      });
+      clock += 31_000;
+      const ret = poster.maybePost(fsm.snapshot(), ctx);
+      ok(ret === 'heartbeat' || ret === 'initial', 'rejecting transport: maybePost returns normally');
+      await sleep(20);
+      ok(errors === 1, 'async-rejecting transport routed to onError');
+    }
+
+    // (d) Hung transport (never resolves) must not block the synchronous call.
+    {
+      let resolved = false;
+      const poster = new KiritanPoster({
+        transport: () => new Promise(() => {}), // never settles
+        now,
+      });
+      const t0 = Date.now();
+      clock += 31_000;
+      poster.maybePost(fsm.snapshot(), ctx);
+      const elapsed = Date.now() - t0;
+      resolved = true;
+      ok(resolved && elapsed < 50, `hung transport: call returns immediately (${elapsed}ms, not awaited)`);
+    }
+  }
+
+  // --- summary --------------------------------------------------------------
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`Phase 0 Test E: ${pass} passed, ${fail} failed`);
+  if (fail) {
+    console.log('FAILURES:\n  - ' + failures.join('\n  - '));
+    process.exit(1);
+  }
+  console.log('ALL PASS — kiritanState POST 疎通 + fire-and-forget resilience verified.');
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

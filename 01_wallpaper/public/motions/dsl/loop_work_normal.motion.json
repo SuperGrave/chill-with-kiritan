@@ -1,0 +1,24 @@
+{
+  "schema": "motion/1",
+  "id": "loop_work_normal",
+  "label": "ループ: 通常作業（座り）",
+  "notes": "work_normal の基本ループ（INF-5 デモ）。posture=sit_pc_neutral の上に呼吸（chest/spine x）と緩い首・頭の揺れをオシレータで重ねた静かな着座作業アイドル。画面を軽く注視（lookAt fixed、カメラ目線ではない）。duration 24 は全オシレータ周期(6/8/12)の整数倍＝シーム安全。タイピングのハンドポーズ(type_natural+腕前出し)は content 拡張で追加予定。",
+  "category": "loop",
+  "tags": ["mode:work_normal", "family:A"],
+  "posture": "sit_pc_neutral",
+  "duration": 24,
+  "loop": true,
+  "fadeIn": 0.8,
+  "fadeOut": 0.8,
+  "oscillators": [
+    { "bone": "chest", "axis": "x", "amp": 0.03, "period": 6 },
+    { "bone": "spine", "axis": "x", "amp": 0.015, "period": 6 },
+    { "bone": "neck", "axis": "x", "amp": 0.018, "period": 6, "phase": 3.14159 },
+    { "bone": "head", "axis": "x", "amp": 0.012, "period": 6, "phase": 3.14159 },
+    { "bone": "head", "axis": "y", "amp": 0.02, "period": 12 },
+    { "bone": "head", "axis": "z", "amp": 0.013, "period": 8 },
+    { "bone": "leftShoulder", "axis": "z", "amp": 0.01, "period": 6, "phase": 3.14159 },
+    { "bone": "rightShoulder", "axis": "z", "amp": 0.01, "period": 6 }
+  ],
+  "lookAt": { "mode": "fixed", "point": [0.0, 0.98, 0.9], "strength": 0.5 }
+}

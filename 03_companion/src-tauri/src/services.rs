@@ -1,0 +1,335 @@
+// Outbound integrations. All functions are free async fns that take owned
+// inputs (never the shared Mutex) so callers can lock → copy config → unlock →
+// await → lock → write result, without holding the lock across `.await`.
+
+use base64::Engine;
+use serde_json::{json, Value};
+
+use crate::models::*;
+
+// ─── Weather (open-meteo, no key) ────────────────────────────────────────────
+
+pub async fn fetch_weather(
+    http: &reqwest::Client,
+    cfg: &WeatherConfig,
+) -> Result<WeatherCurrent, String> {
+    let url = format!(
+        "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}\
+&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m\
+&wind_speed_unit=ms&timezone={}",
+        cfg.latitude, cfg.longitude, cfg.timezone
+    );
+    let resp = http
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("open-meteo {}", resp.status()));
+    }
+    let data: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let c = &data["current"];
+    let num = |k: &str| c[k].as_f64().unwrap_or(0.0);
+    Ok(WeatherCurrent {
+        location: cfg.location_label.clone(),
+        temperature: num("temperature_2m"),
+        apparent_temperature: num("apparent_temperature"),
+        humidity: num("relative_humidity_2m"),
+        pressure: num("pressure_msl"),
+        weather_code: num("weather_code") as i32,
+        wind_speed: num("wind_speed_10m"),
+        wind_direction: num("wind_direction_10m"),
+        is_day: c["is_day"].as_i64().unwrap_or(1) == 1,
+    })
+}
+
+// ─── News (RSS, no key) ──────────────────────────────────────────────────────
+
+pub async fn fetch_news(
+    http: &reqwest::Client,
+    cfg: &NewsConfig,
+) -> Result<Vec<NewsItem>, String> {
+    let mut items: Vec<NewsItem> = Vec::new();
+    let mut last_err: Option<String> = None;
+
+    for feed in &cfg.feeds {
+        match http.get(feed).send().await {
+            Ok(resp) => match resp.text().await {
+                Ok(body) => {
+                    let source = feed_source_label(feed);
+                    items.extend(parse_rss(&body, &source));
+                }
+                Err(e) => last_err = Some(e.to_string()),
+            },
+            Err(e) => last_err = Some(e.to_string()),
+        }
+    }
+
+    if items.is_empty() {
+        if let Some(e) = last_err {
+            return Err(e);
+        }
+    }
+
+    // newest first by published_at string (RFC822/ISO both sort poorly as
+    // strings, so keep feed order which is already newest-first for NHK).
+    items.truncate(cfg.max_items.max(1));
+    Ok(items)
+}
+
+fn feed_source_label(feed: &str) -> String {
+    if feed.contains("nhk.or.jp") {
+        "NHK".to_string()
+    } else if let Some(host) = feed
+        .split("://")
+        .nth(1)
+        .and_then(|s| s.split('/').next())
+    {
+        host.trim_start_matches("www.").to_uppercase()
+    } else {
+        "RSS".to_string()
+    }
+}
+
+/// Minimal RSS 2.0 parser — extracts <item> blocks and their child tags.
+/// Robust enough for NHK / Yahoo / generic RSS without pulling an XML crate.
+fn parse_rss(xml: &str, source: &str) -> Vec<NewsItem> {
+    let mut out = Vec::new();
+    let mut rest = xml;
+    while let Some(start) = rest.find("<item") {
+        let after = &rest[start..];
+        let Some(end) = after.find("</item>") else {
+            break;
+        };
+        let block = &after[..end];
+        let title = extract_tag(block, "title").unwrap_or_default();
+        let link = extract_tag(block, "link").unwrap_or_default();
+        if title.is_empty() && link.is_empty() {
+            rest = &after[end + 7..];
+            continue;
+        }
+        let desc = extract_tag(block, "description");
+        let pub_date = extract_tag(block, "pubDate");
+        out.push(NewsItem {
+            id: uuid::Uuid::new_v4().to_string(),
+            title: clean(&title),
+            source: Some(source.to_string()),
+            url: clean(&link),
+            published_at: pub_date.map(|d| clean(&d)),
+            summary: desc.map(|d| clean(&d)).filter(|s| !s.is_empty()),
+        });
+        rest = &after[end + 7..];
+    }
+    out
+}
+
+fn extract_tag(block: &str, tag: &str) -> Option<String> {
+    let open = format!("<{}", tag);
+    let close = format!("</{}>", tag);
+    let s = block.find(&open)?;
+    // skip to end of opening tag '>'
+    let gt = block[s..].find('>')? + s + 1;
+    let e = block[gt..].find(&close)? + gt;
+    Some(block[gt..e].to_string())
+}
+
+fn clean(s: &str) -> String {
+    let s = s
+        .replace("<![CDATA[", "")
+        .replace("]]>", "")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'");
+    s.trim().to_string()
+}
+
+// ─── AI chat ─────────────────────────────────────────────────────────────────
+
+pub async fn chat_openai(
+    http: &reqwest::Client,
+    key: &str,
+    model: &str,
+    system_prompt: &str,
+    history: &[ChatMessage],
+) -> Result<String, String> {
+    let mut messages = vec![json!({"role":"system","content":system_prompt})];
+    for m in history {
+        let role = if m.role == "assistant" { "assistant" } else { "user" };
+        messages.push(json!({"role":role,"content":m.text}));
+    }
+    let body = json!({ "model": model, "messages": messages, "temperature": 0.7 });
+    let resp = http
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = resp.status();
+    let data: Value = resp.json().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(data["error"]["message"]
+            .as_str()
+            .unwrap_or("OpenAI error")
+            .to_string());
+    }
+    data["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "OpenAI: empty response".to_string())
+}
+
+pub async fn chat_gemini(
+    http: &reqwest::Client,
+    key: &str,
+    model: &str,
+    system_prompt: &str,
+    history: &[ChatMessage],
+) -> Result<String, String> {
+    let mut contents: Vec<Value> = Vec::new();
+    for m in history {
+        let role = if m.role == "assistant" { "model" } else { "user" };
+        contents.push(json!({"role":role,"parts":[{"text":m.text}]}));
+    }
+    let body = json!({
+        "system_instruction": {"parts":[{"text":system_prompt}]},
+        "contents": contents,
+    });
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+        model, key
+    );
+    let resp = http.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
+    let status = resp.status();
+    let data: Value = resp.json().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(data["error"]["message"]
+            .as_str()
+            .unwrap_or("Gemini error")
+            .to_string());
+    }
+    data["candidates"][0]["content"]["parts"][0]["text"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Gemini: empty response".to_string())
+}
+
+// ─── Spotify ─────────────────────────────────────────────────────────────────
+
+/// Refresh an access token from a stored refresh token. Returns (token, expires_in_secs).
+pub async fn spotify_refresh_token(
+    http: &reqwest::Client,
+    client_id: &str,
+    client_secret: &str,
+    refresh_token: &str,
+) -> Result<(String, u64), String> {
+    let basic = base64::engine::general_purpose::STANDARD
+        .encode(format!("{}:{}", client_id, client_secret));
+    let resp = http
+        .post("https://accounts.spotify.com/api/token")
+        .header("Authorization", format!("Basic {}", basic))
+        .form(&[("grant_type", "refresh_token"), ("refresh_token", refresh_token)])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = resp.status();
+    let data: Value = resp.json().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(data["error_description"]
+            .as_str()
+            .or_else(|| data["error"].as_str())
+            .unwrap_or("spotify token error")
+            .to_string());
+    }
+    let token = data["access_token"]
+        .as_str()
+        .ok_or("no access_token")?
+        .to_string();
+    let expires = data["expires_in"].as_u64().unwrap_or(3600);
+    Ok((token, expires))
+}
+
+/// Returns Ok(None) when nothing is playing (204).
+pub async fn spotify_now_playing(
+    http: &reqwest::Client,
+    access_token: &str,
+) -> Result<Option<SpotifyTrack>, String> {
+    let resp = http
+        .get("https://api.spotify.com/v1/me/player/currently-playing")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if resp.status().as_u16() == 204 {
+        return Ok(None);
+    }
+    if !resp.status().is_success() {
+        return Err(format!("spotify {}", resp.status()));
+    }
+    let data: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let item = &data["item"];
+    if item.is_null() {
+        return Ok(None);
+    }
+    let artist = item["artists"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x["name"].as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    let art = item["album"]["images"]
+        .as_array()
+        .and_then(|imgs| imgs.first())
+        .and_then(|i| i["url"].as_str())
+        .map(|s| s.to_string());
+    Ok(Some(SpotifyTrack {
+        title: item["name"].as_str().unwrap_or("").to_string(),
+        artist,
+        album: item["album"]["name"].as_str().map(|s| s.to_string()),
+        album_art_url: art,
+        duration_ms: item["duration_ms"].as_u64(),
+        progress_ms: data["progress_ms"].as_u64(),
+        is_playing: data["is_playing"].as_bool().unwrap_or(false),
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_rss_items_with_cdata_and_entities() {
+        let xml = r#"
+        <rss><channel>
+          <title>Channel</title>
+          <item>
+            <title><![CDATA[速報：テスト & 確認]]></title>
+            <link>https://example.com/a</link>
+            <description>本文の概要</description>
+            <pubDate>Wed, 18 Jun 2026 09:00:00 +0900</pubDate>
+          </item>
+          <item>
+            <title>二件目</title>
+            <link>https://example.com/b</link>
+          </item>
+        </channel></rss>"#;
+        let items = parse_rss(xml, "NHK");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].title, "速報：テスト & 確認");
+        assert_eq!(items[0].url, "https://example.com/a");
+        assert_eq!(items[0].summary.as_deref(), Some("本文の概要"));
+        assert_eq!(items[0].source.as_deref(), Some("NHK"));
+        assert_eq!(items[1].title, "二件目");
+        assert!(items[1].summary.is_none());
+    }
+
+    #[test]
+    fn ignores_non_item_content() {
+        assert!(parse_rss("<rss><channel><title>x</title></channel></rss>", "X").is_empty());
+    }
+}

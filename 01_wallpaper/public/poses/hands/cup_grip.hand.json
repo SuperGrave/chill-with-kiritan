@@ -1,0 +1,24 @@
+{
+  "schema": "hand/1",
+  "id": "cup_grip",
+  "label": "カップ把持",
+  "notes": "マグカップを軽く握る手。side=both（relax と同じ左基準・右は [x,-y,-z] 自動ミラー）。amb_work_sip で持つ手に適用。relax より指を深くカールさせ、親指を内側へ回して側面を支える。z+ がカール方向（左基準）。振幅は『軽く包む』程度で、カップ本体に対して指が破綻しないよう中程度。",
+  "side": "both",
+  "bones": {
+    "thumbMetacarpal": [0, 0.28, 0.1],
+    "thumbProximal": [0, 0.22, 0.14],
+    "thumbDistal": [0, 0.12, 0.1],
+    "indexProximal": [0, 0, 0.5],
+    "indexIntermediate": [0, 0, 0.55],
+    "indexDistal": [0, 0, 0.35],
+    "middleProximal": [0, 0, 0.55],
+    "middleIntermediate": [0, 0, 0.6],
+    "middleDistal": [0, 0, 0.38],
+    "ringProximal": [0, 0, 0.55],
+    "ringIntermediate": [0, 0, 0.62],
+    "ringDistal": [0, 0, 0.4],
+    "littleProximal": [0, 0, 0.52],
+    "littleIntermediate": [0, 0, 0.58],
+    "littleDistal": [0, 0, 0.38]
+  }
+}

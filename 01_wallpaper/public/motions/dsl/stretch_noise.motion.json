@@ -1,0 +1,147 @@
+{
+  "schema": "motion/1",
+  "id": "stretch_noise",
+  "label": "伸び・改(ノイズレイヤ)",
+  "notes": "アプローチB: ベースのキーフレームは test_stretch と同一(意図的)。oscillator拡張(kind:noise + window)による後付けレイヤだけで人間味を足すレトロフィット実験。ブリーフ: motion_briefs/stretch_noise.md",
+  "category": "idle_break",
+  "tags": ["calm", "cute", "v2-noise"],
+  "posture": "stand_relaxed",
+  "duration": 12,
+  "loop": true,
+  "fadeIn": 1.0,
+  "fadeOut": 1.0,
+  "hands": { "left": "relax", "right": "relax" },
+  "tracks": {
+    "leftUpperArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 3.3, "e": [0, -0.55, -1.0], "ease": "sineInOut" },
+        { "t": 4.5, "e": [0, -0.35, -2.05], "ease": "easeOut" },
+        { "t": 7, "e": [0, -0.3, -2.0], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0, -0.15, 0], "ease": "cubicInOut" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "rightUpperArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 3.3, "e": [0, 0.55, 1.0], "ease": "sineInOut" },
+        { "t": 4.5, "e": [0, 0.35, 2.05], "ease": "easeOut" },
+        { "t": 7, "e": [0, 0.3, 2.0], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0, 0.15, 0], "ease": "cubicInOut" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "leftLowerArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 3.3, "e": [0, -0.9, -0.55], "ease": "sineInOut" },
+        { "t": 4.5, "e": [0, -0.15, -0.1], "ease": "easeOut" },
+        { "t": 7, "e": [0, -0.15, -0.1] },
+        { "t": 9.5, "e": [0, -0.2, 0], "ease": "cubicInOut" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "rightLowerArm": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 3.3, "e": [0, 0.9, 0.55], "ease": "sineInOut" },
+        { "t": 4.5, "e": [0, 0.15, 0.1], "ease": "easeOut" },
+        { "t": 7, "e": [0, 0.15, 0.1] },
+        { "t": 9.5, "e": [0, 0.2, 0], "ease": "cubicInOut" },
+        { "t": 10.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "leftShoulder": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [0, 0, -0.12], "ease": "sineInOut" },
+        { "t": 7, "e": [0, 0, -0.12] },
+        { "t": 9.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "rightShoulder": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [0, 0, 0.12], "ease": "sineInOut" },
+        { "t": 7, "e": [0, 0, 0.12] },
+        { "t": 9.5, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "head": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [-0.22, 0, 0], "ease": "cubicInOut" },
+        { "t": 7, "e": [-0.18, 0, 0.04], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0.06, 0, 0.05], "ease": "cubicInOut" },
+        { "t": 11, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "neck": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [-0.1, 0, 0], "ease": "cubicInOut" },
+        { "t": 7, "e": [-0.08, 0, 0], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0.03, 0, 0], "ease": "cubicInOut" },
+        { "t": 11, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    },
+    "spine": {
+      "keys": [
+        { "t": 0, "e": [0, 0, 0] },
+        { "t": 2, "e": [0, 0, 0] },
+        { "t": 4.5, "e": [-0.12, 0, 0], "ease": "cubicInOut" },
+        { "t": 7, "e": [-0.1, 0, 0], "ease": "sineInOut" },
+        { "t": 9.5, "e": [0.02, 0, 0], "ease": "cubicInOut" },
+        { "t": 11, "e": [0, 0, 0], "ease": "sineInOut" },
+        { "t": 12, "e": [0, 0, 0] }
+      ]
+    }
+  },
+  "oscillators": [
+    { "bone": "chest", "axis": "x", "amp": 0.03, "period": 4.0 },
+    { "bone": "leftUpperArm", "axis": "z", "amp": 0.014, "period": 0.19, "kind": "noise", "window": [4.5, 7.2], "attack": 0.5, "seed": 1 },
+    { "bone": "rightUpperArm", "axis": "z", "amp": 0.014, "period": 0.21, "kind": "noise", "window": [4.5, 7.2], "attack": 0.5, "seed": 2 },
+    { "bone": "leftLowerArm", "axis": "y", "amp": 0.01, "period": 0.17, "kind": "noise", "window": [4.6, 7.1], "attack": 0.5, "seed": 3 },
+    { "bone": "rightLowerArm", "axis": "y", "amp": 0.01, "period": 0.18, "kind": "noise", "window": [4.6, 7.1], "attack": 0.5, "seed": 4 },
+    { "bone": "chest", "axis": "x", "amp": 0.006, "period": 0.23, "kind": "noise", "window": [4.7, 7.0], "attack": 0.6, "seed": 5 },
+    { "bone": "spine", "axis": "y", "amp": 0.018, "period": 1.7, "kind": "noise", "window": [3.8, 7.6], "attack": 0.9, "seed": 6 },
+    { "bone": "head", "axis": "x", "amp": 0.018, "period": 2.9, "kind": "noise", "seed": 7 },
+    { "bone": "head", "axis": "z", "amp": 0.013, "period": 3.7, "kind": "noise", "seed": 8 },
+    { "bone": "spine", "axis": "z", "amp": 0.011, "period": 4.3, "kind": "noise", "seed": 9 },
+    { "bone": "leftHand", "axis": "z", "amp": 0.03, "period": 1.3, "kind": "noise", "seed": 10 },
+    { "bone": "rightHand", "axis": "z", "amp": 0.03, "period": 1.45, "kind": "noise", "seed": 11 },
+    { "bone": "leftIndexProximal", "axis": "z", "amp": 0.05, "period": 2.0, "kind": "noise", "seed": 12 },
+    { "bone": "leftMiddleProximal", "axis": "z", "amp": 0.05, "period": 2.3, "kind": "noise", "seed": 13 },
+    { "bone": "leftRingProximal", "axis": "z", "amp": 0.05, "period": 2.6, "kind": "noise", "seed": 14 },
+    { "bone": "leftLittleProximal", "axis": "z", "amp": 0.05, "period": 2.9, "kind": "noise", "seed": 15 },
+    { "bone": "rightIndexProximal", "axis": "z", "amp": 0.05, "period": 2.1, "kind": "noise", "seed": 16 },
+    { "bone": "rightMiddleProximal", "axis": "z", "amp": 0.05, "period": 2.4, "kind": "noise", "seed": 17 },
+    { "bone": "rightRingProximal", "axis": "z", "amp": 0.05, "period": 2.7, "kind": "noise", "seed": 18 },
+    { "bone": "rightLittleProximal", "axis": "z", "amp": 0.05, "period": 3.0, "kind": "noise", "seed": 19 }
+  ],
+  "expressions": {
+    "keys": [
+      { "t": 0, "set": {} },
+      { "t": 4.5, "set": { "blink": 0.75, "fun": 0.2 }, "fade": 1.2 },
+      { "t": 7, "set": { "blink": 0.75, "fun": 0.2 }, "fade": 0.5 },
+      { "t": 9.8, "set": { "fun": 0.5 }, "fade": 1.0 },
+      { "t": 11.8, "set": {}, "fade": 1.5 }
+    ]
+  },
+  "lookAt": { "mode": "camera", "strength": 0.8 }
+}

@@ -1,0 +1,22 @@
+{
+  "schema": "motion/1",
+  "id": "loop_sleep_desk",
+  "label": "ループ: 睡眠（机に突っ伏し）",
+  "notes": "sleep_desk の基本ループ。posture=sit_desk_slump（机に突っ伏し・頬を伏せる）の上に、目を閉じ(blink 1.0)、ゆっくり深い寝息（spine/chest x のわずかな上下）を重ねた就寝。duration 12 は呼吸周期6の整数倍。視線off。腕枕は posture 未設定（content 拡張で track 付与予定）。",
+  "category": "loop",
+  "tags": ["mode:sleep_desk", "family:special", "daypart:night"],
+  "posture": "sit_desk_slump",
+  "duration": 12,
+  "loop": true,
+  "fadeIn": 1.2,
+  "fadeOut": 1.2,
+  "oscillators": [
+    { "bone": "spine", "axis": "x", "amp": 0.025, "period": 6 },
+    { "bone": "chest", "axis": "x", "amp": 0.02, "period": 6 }
+  ],
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "blink": 1.0 }, "fade": 1.2 },
+    { "t": 12.0, "set": { "blink": 1.0 }, "fade": 1.0 }
+  ] },
+  "lookAt": { "mode": "off" }
+}

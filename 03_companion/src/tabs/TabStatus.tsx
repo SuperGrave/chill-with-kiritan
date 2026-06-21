@@ -1,23 +1,46 @@
 import { useEffect, useState } from "react";
+import { RefreshIcon } from "../icons";
+import { api } from "../api";
 
-type HealthData = { ok: boolean; app: string; version: string } | null;
+type Pill = { tone: "ok" | "err" | "warn"; text: string };
+
+function StatusRow({ label, pill, value }: { label: string; pill?: Pill; value?: string }) {
+  return (
+    <div className="status-row">
+      <span className="status-label">{label}</span>
+      {pill ? (
+        <span className={`pill ${pill.tone}`}>{pill.text}</span>
+      ) : (
+        <span className="status-value">{value ?? "—"}</span>
+      )}
+    </div>
+  );
+}
 
 export default function TabStatus() {
-  const [health, setHealth] = useState<HealthData>(null);
-  const [error, setError]   = useState<string | null>(null);
-  const [ts,    setTs]      = useState("");
+  const [health, setHealth] = useState<{ ok: boolean; version: string } | null>(null);
+  const [state, setState] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ts, setTs] = useState("");
 
   const check = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:40313/api/health");
-      const data = await res.json();
-      setHealth(data);
+      const [h, s] = await Promise.all([api.health(), api.state()]);
+      setHealth(h);
+      setState(s);
       setError(null);
     } catch (e: any) {
       setHealth(null);
+      setState(null);
       setError(String(e));
     }
     setTs(new Date().toLocaleTimeString("ja-JP"));
+  };
+
+  // Manual refresh of live data sources.
+  const refreshData = async () => {
+    await Promise.allSettled([api.newsRefresh(), api.weatherRefresh(), api.spotifyRefresh()]);
+    check();
   };
 
   useEffect(() => {
@@ -26,46 +49,53 @@ export default function TabStatus() {
     return () => clearInterval(id);
   }, []);
 
+  const spotify = state?.spotify;
+  const ai = state?.ai;
+  const weather = state?.weather;
+  const news = state?.news ?? [];
+
+  const spotifyPill: Pill =
+    spotify?.status === "playing" ? { tone: "ok", text: "再生中" }
+    : spotify?.status === "paused" ? { tone: "warn", text: "一時停止" }
+    : spotify?.status === "error" ? { tone: "err", text: "エラー" }
+    : spotify?.status === "idle" ? { tone: "warn", text: "停止中" }
+    : { tone: "warn", text: "未接続" };
+
+  const aiPill: Pill =
+    !ai || ai.provider === "none" ? { tone: "warn", text: "none" }
+    : ai.status === "error" ? { tone: "err", text: `${ai.provider} (エラー)` }
+    : { tone: "ok", text: ai.provider };
+
+  const weatherPill: Pill =
+    weather?.source === "live" ? { tone: "ok", text: "live" } : { tone: "warn", text: "mock" };
+
   return (
     <section className="tab-panel">
-      <h2 className="panel-title">STATUS</h2>
+      <header className="panel-head">
+        <h2>ステータス</h2>
+        <span className="panel-sub">5秒ごとに自動確認</span>
+      </header>
 
-      <table className="status-table">
-        <tbody>
-          <tr>
-            <td>HTTP API</td>
-            <td className={health?.ok ? "ok" : "err"}>
-              {health?.ok ? "✔ running" : "✘ offline"}
-            </td>
-          </tr>
-          <tr>
-            <td>Version</td>
-            <td>{health?.version ?? "—"}</td>
-          </tr>
-          <tr>
-            <td>Spotify</td>
-            <td className="pending">未接続</td>
-          </tr>
-          <tr>
-            <td>AI Provider</td>
-            <td className="pending">none</td>
-          </tr>
-          <tr>
-            <td>Weather Source</td>
-            <td className="pending">mock</td>
-          </tr>
-          <tr>
-            <td>WebSocket</td>
-            <td className="pending">未実装 (Phase B-6)</td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="status-list">
+        <StatusRow label="HTTP API"
+          pill={health?.ok ? { tone: "ok", text: "稼働中" } : { tone: "err", text: "オフライン" }} />
+        <StatusRow label="Version" value={health?.version} />
+        <StatusRow label="Spotify" pill={spotifyPill} />
+        {spotify?.track && <StatusRow label="再生中" value={`${spotify.track.title} / ${spotify.track.artist}`} />}
+        <StatusRow label="AI Provider" pill={aiPill} />
+        <StatusRow label="Weather Source" pill={weatherPill} />
+        {weather?.current && <StatusRow label="気温" value={`${Math.round(weather.current.temperature)}°C (${weather.current.location})`} />}
+        <StatusRow label="News" value={`${news.length} 件`} />
+      </div>
 
-      {error && <p className="error-msg">⚠ {error}</p>}
+      {error && <p className="error-banner">⚠ {error}</p>}
 
       <div className="status-footer">
         <span className="ts">最終確認: {ts}</span>
-        <button onClick={check} className="secondary-btn">再確認</button>
+        <button onClick={refreshData} className="secondary-btn">
+          <RefreshIcon />
+          データ更新
+        </button>
       </div>
     </section>
   );

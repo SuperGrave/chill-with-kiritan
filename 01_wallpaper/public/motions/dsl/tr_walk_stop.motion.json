@@ -1,0 +1,79 @@
+{
+  "schema": "motion/1",
+  "id": "tr_walk_stop",
+  "label": "遷移: 歩行→停止",
+  "notes": "歩行(loop_walk の t0 stride＝左足前)から立位(両足揃え)へ。後ろ脚(右)が前脚に揃い、歩幅を縮めて静止。12原則: ①最終歩で歩幅を詰める ②脚が先に止まり、上体と腕がワンテンポ遅れてsettle(フォロースルー：腕が前後に小さく余韻スイングしてから止まる) ③slow-out。終端=立位（全offset 0）で、後続の方向転換/着座Transitionや待機へ渡せる。loop:false。",
+  "category": "transition",
+  "tags": ["mode:locomotion", "family:special"],
+  "posture": "stand_relaxed",
+  "duration": 0.8,
+  "loop": false,
+  "fadeIn": 0.25,
+  "fadeOut": 0.3,
+  "hipsTrack": {
+    "keys": [
+      { "t": 0.0, "p": [0, -0.012, 0] },
+      { "t": 0.45, "p": [0, 0.004, 0], "ease": "sineInOut" },
+      { "t": 0.8, "p": [0, 0, 0], "ease": "sineInOut" }
+    ]
+  },
+  "tracks": {
+    "spine": { "keys": [
+      { "t": 0.0, "e": [0.02, -0.03, 0] },
+      { "t": 0.55, "e": [0.02, 0.01, 0], "ease": "sineInOut" },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [0, -0.05, 0] },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] },
+    "head": { "keys": [
+      { "t": 0.0, "e": [0, 0.025, 0.01] },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] },
+    "hips": { "keys": [
+      { "t": 0.0, "e": [0, 0.06, 0] },
+      { "t": 0.5, "e": [0, -0.01, 0], "ease": "sineInOut" },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "leftUpperLeg": { "keys": [
+      { "t": 0.0, "e": [0.24, 0, 0.02] },
+      { "t": 0.45, "e": [0.05, 0, 0.02], "ease": "sineInOut" },
+      { "t": 0.8, "e": [0, 0, 0.02], "ease": "easeOut" }
+    ] },
+    "leftLowerLeg": { "keys": [
+      { "t": 0.0, "e": [-0.06, 0, 0] },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "leftFoot": { "keys": [
+      { "t": 0.0, "e": [0.06, 0, 0] },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] },
+    "rightUpperLeg": { "keys": [
+      { "t": 0.0, "e": [-0.16, 0, -0.02] },
+      { "t": 0.3, "e": [-0.05, 0, -0.02], "ease": "easeOut" },
+      { "t": 0.55, "e": [0.03, 0, -0.02], "ease": "sineInOut" },
+      { "t": 0.8, "e": [0, 0, -0.02], "ease": "easeOut" }
+    ] },
+    "rightLowerLeg": { "keys": [
+      { "t": 0.0, "e": [-0.28, 0, 0] },
+      { "t": 0.3, "e": [-0.4, 0, 0], "ease": "sineInOut" },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "rightFoot": { "keys": [
+      { "t": 0.0, "e": [0.22, 0, 0] },
+      { "t": 0.5, "e": [0.0, 0, 0], "ease": "sineInOut" },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "leftUpperArm": { "keys": [
+      { "t": 0.0, "e": [0, 0.16, 0] },
+      { "t": 0.5, "e": [0, -0.04, 0], "ease": "sineInOut" },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "rightUpperArm": { "keys": [
+      { "t": 0.0, "e": [0, 0.16, 0] },
+      { "t": 0.5, "e": [0, -0.04, 0], "ease": "sineInOut" },
+      { "t": 0.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] }
+  }
+}

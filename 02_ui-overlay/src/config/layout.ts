@@ -1,3 +1,8 @@
+// Rendered height of the dock's six buttons plus container padding at
+// gap 0; the dock's full height is DOCK_BASE_HEIGHT + 5 * gap. Used to keep
+// the dock (the only entry into Settings) fully inside the canvas.
+export const DOCK_BASE_HEIGHT = 380;
+
 export const overlayLayout = {
   canvas: {
     width: 1920,

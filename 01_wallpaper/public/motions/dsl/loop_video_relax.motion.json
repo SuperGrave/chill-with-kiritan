@@ -1,0 +1,25 @@
+{
+  "schema": "motion/1",
+  "id": "loop_video_relax",
+  "label": "ループ: 動画視聴（後傾・だらけ）",
+  "notes": "video_relax の基本ループ。posture=sit_pc_slouch（背もたれに後傾・脚投げ出し）の上に、ゆったりした呼吸と緩い頭の揺れ、口元のゆるみ(fun 薄め)を重ねた『観てだらけている』着座。画面を緩く注視。duration 20 はオシレータ周期(5/10)の整数倍。",
+  "category": "loop",
+  "tags": ["mode:video_relax", "family:A'"],
+  "posture": "sit_pc_slouch",
+  "duration": 20,
+  "loop": true,
+  "fadeIn": 1.0,
+  "fadeOut": 1.0,
+  "oscillators": [
+    { "bone": "chest", "axis": "x", "amp": 0.035, "period": 5 },
+    { "bone": "spine", "axis": "x", "amp": 0.02, "period": 5 },
+    { "bone": "head", "axis": "y", "amp": 0.025, "period": 10 },
+    { "bone": "head", "axis": "z", "amp": 0.015, "period": 10, "phase": 1.5 }
+  ],
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "fun": 0.1 }, "fade": 1.5 },
+    { "t": 10.0, "set": { "fun": 0.16 }, "fade": 4.0 },
+    { "t": 20.0, "set": { "fun": 0.1 }, "fade": 4.0 }
+  ] },
+  "lookAt": { "mode": "fixed", "point": [0.0, 1.0, 0.9], "strength": 0.55 }
+}

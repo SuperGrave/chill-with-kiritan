@@ -18,16 +18,70 @@
 
 import * as THREE from 'three';
 import type { VRM } from '@pixiv/three-vrm';
-import type { MotionDoc, ValidationIssue } from '../motion/dsl/types';
+import type { MotionDoc, ValidationIssue, MicroEvent } from '../motion/dsl/types';
 import { loadMotionDoc } from '../motion/dsl/loadMotionDoc';
-import type { MotionEvaluator, EvalFrame } from '../motion/dsl/evaluate';
+import type { MotionEvaluator, EvalFrame, MotionFaceTimeline, GazeState } from '../motion/dsl/evaluate';
 import { compileDslClip, composeBoneQuaternion } from '../motion/dsl/compileClip';
 import type { ExternalMotionController } from '../motion/externalMotionController';
+// Expression Preset System 0.2: preset preview/capture loop (exprShow/exprCapture).
+import { EXPRESSION_PRESETS, EXPRESSION_PRESET_IDS, getExpressionPreset, flattenPresetWeights } from '../expression/expressionPresets';
+import { gazeDirToPanelPoint, offsetToGazeDir, GAZE_ANCHOR_Y } from '../motion/gazeController';
+import { attachPropToBone, detachPropToHome, findPropContainer, type GripOffset } from '../scene/propAttach';
+import type { DirectorStatus } from '../motion/director/directorRunner';
+import type { ModeId } from '../motion/director/types';
 
 // --- handles the viewer passes in -------------------------------------------------
 
 export interface CameraPresetTable {
   [name: string]: { pos: [number, number, number]; look: [number, number, number] };
+}
+
+/**
+ * A request to make `clip` the active external clip. The viewer defers the
+ * actual swap until the crossfade envelope has reached 0 (fading the current
+ * clip out first), so bones and spring bones never see a pose teleport.
+ */
+export interface ClipSwapRequest {
+  clip: THREE.AnimationClip;
+  boneNames: string[];
+  source: 'builtin' | 'vrma' | 'dsl';
+  hasExpressionTracks: boolean;
+  /** Start playback (crossfade in) once the swap lands. */
+  autoPlay: boolean;
+  /** Controller loop flag (DSL motions declare it; undefined keeps current). */
+  loop?: boolean;
+  /** Clip weight ceiling (undefined keeps current). */
+  clipWeight?: number;
+  /** Crossfade sweep durations (DSL fadeIn/fadeOut; undefined = 0.6s). */
+  fadeIn?: number;
+  fadeOut?: number;
+  /**
+   * Face channel of a DSL motion (exprCues / expressions / gaze), sampled by
+   * the viewer at clip-local time during playback (0.2). null/undefined = none.
+   */
+  faceTimeline?: MotionFaceTimeline | null;
+  /**
+   * Posture hips-position offset (meters, normalized rig) applied to hips.position
+   * each frame scaled by clip weight (Phase 0 試験B). DSL postures only; null = none.
+   */
+  hipsOffset?: [number, number, number] | null;
+  /**
+   * Animated hips trajectory (INF-3 stand/sit/step) sampled at clip-local time.
+   * When present the viewer samples it instead of the constant hipsOffset.
+   */
+  hipsCurve?: { times: number[]; values: [number, number, number][] } | null;
+  /**
+   * Sampled root-motion trajectory [x,y,z, rotY] (INF-7) the viewer applies to
+   * vrm.scene at clip-local time, scaled by clip weight. null = the character
+   * never moves. A looping walk keeps net-zero; the Director drives the advance.
+   */
+  rootCurve?: { times: number[]; values: [number, number, number, number][] } | null;
+  /**
+   * Timed prop attach/detach events (INF-4) the viewer fires at clip-local time
+   * while this clip plays. Any prop still attached when the clip swaps out is
+   * force-returned to its rest. null/undefined = none.
+   */
+  microEvents?: MicroEvent[] | null;
 }
 
 export interface LabHandles {
@@ -43,9 +97,13 @@ export interface LabHandles {
   lookAtTarget: THREE.Object3D;
   /** Root group of the scene props (desk/chair/laptop) — hidable for clean captures. */
   propsRoot: THREE.Object3D;
-  switchClip: (clip: THREE.AnimationClip, boneNames: string[], source: 'builtin' | 'vrma' | 'dsl', hasExpressionTracks: boolean) => void;
+  requestClipSwap: (req: ClipSwapRequest) => void;
   extController: ExternalMotionController;
   onStatus: (status: string) => void;
+  /** Director runner control (INF-5) — viewer-owned; null status when not running. */
+  startDirector: (opts?: { seed?: number; initialMode?: ModeId }) => Promise<{ ok: boolean; loaded: string[]; error?: string }>;
+  stopDirector: () => { ok: boolean };
+  getDirectorStatus: () => DirectorStatus | null;
 }
 
 // --- result shapes ------------------------------------------------------------------
@@ -72,6 +130,8 @@ interface LoadOk {
     bones: string[];
     missingBones: string[];
     expressionsUsed: string[];
+    cuePresetsUsed: string[];
+    gazeKeys: number;
   };
 }
 
@@ -101,7 +161,6 @@ export class MotionLab {
 
   // scratch
   private _q = new THREE.Quaternion();
-  private _v = new THREE.Vector3();
 
   constructor(handles: LabHandles) {
     this.h = handles;
@@ -134,6 +193,7 @@ export class MotionLab {
     this.h.onStatus(`[LAB] loaded "${id}" (${evaluator.duration}s, ${evaluator.boneNames.length} bones)`);
 
     const expressionsUsed = [...new Set((motion.expressions?.keys ?? []).flatMap((k) => Object.keys(k.set)))];
+    const cuePresetsUsed = [...new Set((motion.exprCues ?? []).map((c) => c.preset))];
     return {
       ok: true,
       id,
@@ -147,6 +207,8 @@ export class MotionLab {
         bones: evaluator.boneNames,
         missingBones,
         expressionsUsed,
+        cuePresetsUsed,
+        gazeKeys: (motion.gaze?.keys ?? []).length,
       },
     };
   }
@@ -222,27 +284,56 @@ export class MotionLab {
 
     humanoid.update();
 
-    // LookAt: resolve the directive deterministically ('cursor' previews as 'camera').
-    const lookAt = frame.lookAt;
-    const neutral = this._v.set(0, 1.2, 1.0);
-    let target: THREE.Vector3 | null = null;
-    if (lookAt.mode === 'camera' || lookAt.mode === 'cursor') target = this.h.camera.position;
-    else if (lookAt.mode === 'fixed' && lookAt.point) target = new THREE.Vector3(...lookAt.point);
-    if (target && lookAt.mode !== 'off') {
-      this.h.lookAtTarget.position.lerpVectors(neutral, target, Math.min(Math.max(lookAt.strength, 0), 1));
-    } else {
-      this.h.lookAtTarget.position.copy(neutral);
-    }
-    vrm.lookAt?.update(1 / 60);
+    // Gaze (0.2): resolve the GazeState deterministically. 'camera' resolves
+    // to the real camera direction (true eye contact in captures); null =
+    // wander at runtime, previewed as neutral front.
+    this.applyGaze(frame.gaze, vrm);
 
     // Expressions via the Custom Expression Bridge (same max-blend the viewer uses).
+    this.applyExpressionWeights(frame.expressions);
+  }
+
+  /** Place the lookAt target for a GazeState (null = neutral front) and update VRMLookAt. */
+  private applyGaze(state: GazeState | null, vrm: VRM): void {
+    const resolveCam = () => {
+      const cam = this.h.camera.position;
+      return offsetToGazeDir(cam.x, cam.y - GAZE_ANCHOR_Y, cam.z);
+    };
+    let dir = { yaw: 0, pitch: 0 };
+    if (state) {
+      const to = state.to === 'camera' ? resolveCam() : state.to;
+      if (state.from === null) {
+        // Fade in from neutral by k.
+        dir = { yaw: to.yaw * state.k, pitch: to.pitch * state.k };
+      } else {
+        const from = state.from === 'camera' ? resolveCam() : state.from;
+        dir = { yaw: from.yaw + (to.yaw - from.yaw) * state.k, pitch: from.pitch + (to.pitch - from.pitch) * state.k };
+      }
+    }
+    const p = gazeDirToPanelPoint(dir);
+    this.h.lookAtTarget.position.set(p.x, p.y, p.z);
+    vrm.lookAt?.update(1 / 60);
+  }
+
+  /**
+   * Clear all face-morph influences, then max-blend `weights` through the
+   * bridge map — the exact per-frame contract the viewer uses. Returns which
+   * names resolved and which the bridge doesn't know (honest reporting).
+   */
+  private applyExpressionWeights(weights: Record<string, number>): { applied: string[]; unknown: string[] } {
     const faceMeshes = this.h.getFaceMeshes();
     const map = this.h.getExpressionMap();
+    const applied: string[] = [];
+    const unknown: string[] = [];
+    for (const name of Object.keys(weights)) {
+      if (weights[name] <= 0) continue;
+      (map[name.toLowerCase()] ? applied : unknown).push(name);
+    }
     for (const mesh of faceMeshes) {
       const influences = mesh.morphTargetInfluences;
       if (!influences) continue;
       for (let i = 0; i < influences.length; i++) influences[i] = 0;
-      for (const [name, w] of Object.entries(frame.expressions)) {
+      for (const [name, w] of Object.entries(weights)) {
         if (w <= 0) continue;
         const binds = map[name.toLowerCase()];
         if (!binds) continue;
@@ -251,6 +342,7 @@ export class MotionLab {
         }
       }
     }
+    return { applied, unknown };
   }
 
   /**
@@ -292,7 +384,10 @@ export class MotionLab {
       frozen: true,
       bonesPosed: Object.keys(frame.bones).length,
       expressions: frame.expressions,
-      lookAt: frame.lookAt.mode,
+      activeCuePreset: frame.activeCuePreset,
+      gaze: frame.gaze
+        ? { to: frame.gaze.to, k: Math.round(frame.gaze.k * 100) / 100 }
+        : null,
     };
   }
 
@@ -364,6 +459,142 @@ export class MotionLab {
     return { ok: true, id, files };
   }
 
+  // ---- expression presets (Expression Preset System 0.1) -----------------------------------
+
+  /** List the expression presets (id / label / weights) for the authoring loop. */
+  exprPresets(): Record<string, unknown> {
+    return {
+      ok: true,
+      presets: EXPRESSION_PRESET_IDS.map((id) => {
+        const p = EXPRESSION_PRESETS[id];
+        return {
+          id,
+          label: p.label,
+          description: p.description,
+          weights: p.weights,
+          eyelid: p.eyelid ?? null,
+          gaze: p.gaze ?? null,
+          flutter: p.flutter ?? null,
+          intensityHint: p.intensityHint ?? null,
+          notes: p.notes ?? null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Freeze + apply an expression preset (or a raw name->weight map) at rest
+   * pose and render one frame. The visual half of the preset tuning loop.
+   */
+  exprShow(
+    presetOrWeights: string | Record<string, number>,
+    opts?: { intensity?: number; camera?: CameraOpt },
+  ): Record<string, unknown> {
+    const ctx = this.ensureVrm();
+    if ('ok' in ctx) return ctx;
+
+    let weights: Record<string, number>;
+    let label: string;
+    let gazeDir = { yaw: 0, pitch: 0 };
+    if (typeof presetOrWeights === 'string') {
+      const preset = getExpressionPreset(presetOrWeights);
+      if (!preset) {
+        return fail('preset', `unknown expression preset "${presetOrWeights}". Available: ${EXPRESSION_PRESET_IDS.join(', ')} — or pass a raw { name: weight } map.`);
+      }
+      weights = flattenPresetWeights(preset, opts?.intensity ?? 1);
+      label = preset.id;
+      // Fixed-gaze presets (e.g. thinking) show their eye direction in the
+      // capture; wander damping has no visual in a frozen frame.
+      if (preset.gaze && (preset.gaze.yaw !== undefined || preset.gaze.pitch !== undefined)) {
+        gazeDir = { yaw: preset.gaze.yaw ?? 0, pitch: preset.gaze.pitch ?? 0 };
+      }
+    } else {
+      weights = presetOrWeights;
+      label = 'custom';
+    }
+
+    this.frozen = true;
+    if (opts?.camera) {
+      const cam = this.setCamera(opts.camera);
+      if (!cam.ok) return cam;
+    }
+    // Rest body, preset gaze (or neutral front), then the expression.
+    this.restoreRest();
+    ctx.vrm.humanoid?.update();
+    const gp = gazeDirToPanelPoint(gazeDir);
+    this.h.lookAtTarget.position.set(gp.x, gp.y, gp.z);
+    ctx.vrm.lookAt?.update(1 / 60);
+    const { applied, unknown } = this.applyExpressionWeights(weights);
+    this.settleSpringBones(ctx.vrm, 0.5);
+    this.h.renderer.render(this.h.scene, this.h.camera);
+
+    return { ok: true, preset: label, frozen: true, weights, gaze: gazeDir, applied, unknown };
+  }
+
+  /** exprShow() then save a PNG under .probe_tmp/captures/_expressions/. */
+  async exprCapture(
+    presetOrWeights: string | Record<string, number>,
+    opts?: { intensity?: number; camera?: CameraOpt; width?: number; height?: number; file?: string },
+  ): Promise<Record<string, unknown>> {
+    const width = opts?.width ?? 720;
+    const height = opts?.height ?? 720;
+    const renderer = this.h.renderer;
+    const camera = this.h.camera;
+    const prevSize = new THREE.Vector2();
+    renderer.getSize(prevSize);
+    const prevAspect = camera.aspect;
+
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+
+    let dataUrl = '';
+    let shown: Record<string, unknown>;
+    try {
+      shown = this.exprShow(presetOrWeights, { intensity: opts?.intensity, camera: opts?.camera ?? 'face close' });
+      if (shown.ok === true) dataUrl = renderer.domElement.toDataURL('image/png');
+    } finally {
+      renderer.setSize(prevSize.x, prevSize.y, false);
+      camera.aspect = prevAspect;
+      camera.updateProjectionMatrix();
+      if (this.frozen) this.h.renderer.render(this.h.scene, this.h.camera);
+    }
+    if (shown.ok !== true) return shown;
+
+    const label = typeof presetOrWeights === 'string' ? presetOrWeights : 'custom';
+    const intensityTag = `i${String(opts?.intensity ?? 1).replace('.', '_')}`;
+    const file = opts?.file ?? `_expressions/${label}_${intensityTag}.png`;
+    try {
+      const res = await fetch('/__lab/save', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ file, dataUrl }),
+      });
+      const saved = await res.json();
+      if (!res.ok || !saved.ok) {
+        return fail('save', `saving failed: ${saved.error ?? `HTTP ${res.status}`}`);
+      }
+      return { ok: true, preset: label, file: saved.path, width, height, unknown: shown.unknown };
+    } catch (e) {
+      return fail('save', `POST /__lab/save failed: ${e instanceof Error ? e.message : String(e)} (dev server only — not available in a production build).`);
+    }
+  }
+
+  /** Batch: capture several presets (or all) with one call. */
+  async exprCaptureSet(
+    ids?: string[],
+    opts?: { intensity?: number; camera?: CameraOpt; width?: number; height?: number },
+  ): Promise<Record<string, unknown>> {
+    const list = ids ?? [...EXPRESSION_PRESET_IDS];
+    const files: unknown[] = [];
+    for (const id of list) {
+      const r = await this.exprCapture(id, opts);
+      if (r.ok !== true) return { ...r, completed: files };
+      files.push({ id, file: r.file });
+    }
+    return { ok: true, files };
+  }
+
   // ---- numeric inspection -------------------------------------------------------------------
 
   samplePose(id: string, t: number): Record<string, unknown> {
@@ -385,7 +616,8 @@ export class MotionLab {
       bones,
       hipsOffset: roundE3(frame.hipsOffset),
       expressions: Object.fromEntries(Object.entries(frame.expressions).map(([k, v]) => [k, round4(v)])),
-      lookAt: frame.lookAt,
+      activeCuePreset: frame.activeCuePreset,
+      gaze: frame.gaze ? { from: frame.gaze.from, to: frame.gaze.to, k: round4(frame.gaze.k) } : null,
     };
   }
 
@@ -407,11 +639,22 @@ export class MotionLab {
 
     const compiled = compileDslClip(entry.evaluator, ctx.vrm);
     this.thaw();
-    this.h.switchClip(compiled.clip, compiled.boneNames, 'dsl', false);
-    const ext = this.h.extController;
-    ext.setLoop(entry.evaluator.loop);
-    ext.setClipWeight(opts?.weight ?? 1);
-    ext.play();
+    this.h.requestClipSwap({
+      clip: compiled.clip,
+      boneNames: compiled.boneNames,
+      source: 'dsl',
+      hasExpressionTracks: false,
+      autoPlay: true,
+      loop: entry.evaluator.loop,
+      clipWeight: opts?.weight ?? 1,
+      fadeIn: entry.doc.motion.fadeIn,
+      fadeOut: entry.doc.motion.fadeOut,
+      faceTimeline: entry.evaluator.faceTimeline,
+      hipsOffset: compiled.hipsOffset,
+      hipsCurve: compiled.hipsCurve,
+      rootCurve: compiled.rootCurve,
+      microEvents: entry.doc.motion.microEvents ?? null,
+    });
     this.h.onStatus(`[LAB] playing "${id}" through the mixer path`);
     return {
       ok: true,
@@ -420,7 +663,10 @@ export class MotionLab {
       loop: entry.evaluator.loop,
       bones: compiled.boneNames.length,
       missingBones: compiled.missingBones,
-      note: 'bone rotations only — expressions/lookAt/hips position preview in Lab show(); runtime support lands with the Motion Director (0.9).',
+      face: entry.evaluator.faceTimeline
+        ? { cues: entry.evaluator.faceTimeline.cues.length, exprKeys: entry.evaluator.faceTimeline.exprKeys.length, gazeKeys: entry.evaluator.faceTimeline.gazeKeys.length }
+        : null,
+      note: 'bone rotations via the mixer; expressions/gaze sampled live from the face timeline (0.2); hips position applied at runtime scaled by clip weight (試験B).',
     };
   }
 
@@ -460,6 +706,58 @@ export class MotionLab {
     return { ok: true, propsVisible: visible };
   }
 
+  // ---- prop attach (INF-4) — calibration surface for hand-held props -----------------------
+
+  /**
+   * Parent a loaded prop (e.g. "item:cup") onto a RAW humanoid bone with a
+   * bone-local grip offset, so it follows the visible hand. Re-renders if
+   * frozen. Iterate the offset here, then bake it into props.library.json.
+   * boneName defaults to the right hand.
+   */
+  attachProp(propId: string, offset: GripOffset, boneName = 'rightHand'): Record<string, unknown> {
+    const ctx = this.ensureVrm();
+    if ('ok' in ctx) return ctx;
+    const prop = findPropContainer(this.h.scene, propId);
+    if (!prop) return fail('prop', `no loaded prop "${propId}" in the scene. Enable it (props.library defaultOn / item toggle) and check the id (library items are "item:<id>", e.g. "item:cup").`);
+    const bone = (ctx.vrm.humanoid as unknown as { getRawBoneNode?: (n: string) => THREE.Object3D | null })?.getRawBoneNode?.(boneName);
+    if (!bone) return fail('bone', `no raw bone "${boneName}". Use a humanoid bone name like "rightHand" / "leftHand".`);
+    attachPropToBone(prop, bone, offset);
+    ctx.vrm.humanoid?.update();
+    if (this.frozen) this.h.renderer.render(this.h.scene, this.h.camera);
+    return { ok: true, attached: propId, to: boneName, offset, boneWorldScale: round4(bone.getWorldScale(new THREE.Vector3()).x) };
+  }
+
+  /** Return a held prop to its desk rest. */
+  detachProp(propId: string): Record<string, unknown> {
+    const prop = findPropContainer(this.h.scene, propId);
+    if (!prop) return fail('prop', `no loaded prop "${propId}".`);
+    detachPropToHome(prop);
+    if (this.frozen) this.h.renderer.render(this.h.scene, this.h.camera);
+    return { ok: true, detached: propId };
+  }
+
+  // ---- director (INF-5) — self-running mode loop + scheduled ambients -----------------------
+
+  /**
+   * Start/stop the Motion Director. When on, kiritan plays her mode's base loop
+   * and the scheduler injects ambient one-shots with no user input. thaw()s the
+   * viewer first (the director needs the live rAF loop, not a frozen frame).
+   */
+  async director(on: boolean, opts?: { seed?: number; initialMode?: ModeId }): Promise<Record<string, unknown>> {
+    if (!on) return { ...this.h.stopDirector(), ok: true };
+    const ctx = this.ensureVrm();
+    if ('ok' in ctx) return ctx;
+    this.thaw(); // run live; the director drives the AnimationMixer each frame
+    const r = await this.h.startDirector(opts);
+    return { ...r, note: r.ok ? 'director running — watch __motionLab.directorStatus() for mode/state/ambientCount' : undefined };
+  }
+
+  /** Live director state (mode / loop|ambient / sleepiness / ambient count). */
+  directorStatus(): Record<string, unknown> {
+    const s = this.h.getDirectorStatus();
+    return s ? { ok: true, ...s } : { ok: true, running: false };
+  }
+
   // ---- introspection ----------------------------------------------------------------------------
 
   status(): Record<string, unknown> {
@@ -490,6 +788,13 @@ export class MotionLab {
       '  __motionLab.setPropsVisible(false)                      // hide desk/chair/laptop for clean pose captures',
       '  __motionLab.play("my_motion")                           // live playback through the real mixer path',
       '  __motionLab.stop(); __motionLab.thaw()                  // back to the normal idle loop',
+      'Expression presets (Expression Preset System 0.2):',
+      '  __motionLab.exprPresets()                               // list preset ids/labels/weights/gaze/flutter',
+      '  await __motionLab.exprCapture("small_smile", { intensity: 1 })          // PNG (face close camera)',
+      '  await __motionLab.exprCapture({ jitome: 0.5, akire: 0.3 })              // raw name->weight map',
+      '  await __motionLab.exprCaptureSet()                      // every preset in one call',
+      'Faces in motions (0.2): "exprCues" (preset cues) / "gaze" (eye keys) preview in show()/capture()',
+      'and ALSO run at runtime during play() — sampled at clip-local time, scaled by the clip weight.',
       'Notes: show()/capture() freeze the rAF loop (deterministic, works in a background tab); thaw() resumes.',
       'Edit the JSON on disk, then load() again — no rebuild needed.',
     ].join('\n');

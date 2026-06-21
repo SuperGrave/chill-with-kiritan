@@ -1,0 +1,12 @@
+{
+  "schema": "motion/1",
+  "id": "_pose_probe",
+  "label": "ポーズ単体検証治具 (0.8)",
+  "notes": "ポーズ1体を静止で見るための定番治具（Phase 0 試験A 用）。tracks空・duration0.1・loop false なので posture をそのまま静止表示する。検証したいポーズを posture フィールドに指定して load → captureSet（workdesk_side/front + settle 1.0/2.0）でスカート貫通・跳ね上がりを目視する。既定は stand_relaxed（必ずロードできる安全値）。座りゲート時は posture を 'sit_pc_neutral' 等へ書き替える。",
+  "posture": "stand_relaxed",
+  "duration": 0.1,
+  "loop": false,
+  "fadeIn": 0.0,
+  "fadeOut": 0.0,
+  "tracks": {}
+}

@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "02_ui-overlay", "run", "dev", "--", "--port", "5188", "--strictPort"],
       "port": 5188
+    },
+    {
+      "name": "companion",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "03_companion", "run", "dev"],
+      "port": 1420
     }
   ]
 }

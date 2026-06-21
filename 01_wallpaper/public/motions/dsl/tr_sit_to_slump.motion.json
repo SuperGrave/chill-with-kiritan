@@ -1,0 +1,37 @@
+{
+  "schema": "motion/1",
+  "id": "tr_sit_to_slump",
+  "label": "遷移: 座り→机に突っ伏す",
+  "notes": "work_sleepy → sleep_desk の橋渡し。posture=sit_desk_slump を使い、t0 では offset で slump を打ち消して『座って前傾』に見せ、終端で offset=0＝純slump へ脱力して突っ伏す。終端が loop_sleep_desk の開始姿勢と一致（同posture・offset0）。目は落ちながら閉じる。loop:false で突っ伏しを保持。",
+  "category": "transition",
+  "tags": ["mode:sleep_desk", "family:special"],
+  "posture": "sit_desk_slump",
+  "duration": 3.2,
+  "loop": false,
+  "fadeIn": 0.6,
+  "fadeOut": 0.4,
+  "tracks": {
+    "spine": { "keys": [
+      { "t": 0.0, "e": [-0.49, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0], "ease": "easeIn" }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [-0.31, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0], "ease": "easeIn" }
+    ] },
+    "neck": { "keys": [
+      { "t": 0.0, "e": [-0.12, 0.15, 0] },
+      { "t": 3.2, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] },
+    "head": { "keys": [
+      { "t": 0.0, "e": [-0.05, -0.5, -0.32] },
+      { "t": 2.0, "e": [-0.02, -0.3, -0.12], "ease": "sineInOut" },
+      { "t": 3.2, "e": [0, 0, 0], "ease": "easeIn" }
+    ] }
+  },
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "blink": 0.5, "sorrow": 0.1 }, "fade": 0.5 },
+    { "t": 1.8, "set": { "blink": 1.0 }, "fade": 1.2 },
+    { "t": 3.2, "set": { "blink": 1.0 }, "fade": 0.8 }
+  ] }
+}

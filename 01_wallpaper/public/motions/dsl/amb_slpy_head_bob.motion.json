@@ -1,0 +1,59 @@
+{
+  "schema": "motion/1",
+  "id": "amb_slpy_head_bob",
+  "label": "Ambient: こくっ→はっ（船を漕ぐ）",
+  "notes": "work_sleepy 最頻 Ambient（12原則準拠改修済 2026-06-13）。①予備＝ゆっくり頭が落ちる『こくっ』がそのままタメ。主動作: ハッと跳ね上がる。②フォロースルー: 跳ね上げで上を僅かに行き過ぎ→2段で settle、neck が head に一拍遅れ。④副次: 落ちる時に肩も沈み胸が縮み、ハッで肩が跳ね胸が開く(息を呑む)。表情: 目が一瞬カッと開く(blink 0)＋小さく口開け。oneshot。posture=sit_pc_neutral。",
+  "category": "ambient",
+  "tags": ["mode:work_sleepy", "family:A"],
+  "posture": "sit_pc_neutral",
+  "duration": 4.4,
+  "loop": false,
+  "fadeIn": 0.5,
+  "fadeOut": 0.5,
+  "tracks": {
+    "head": { "keys": [
+      { "t": 0.0, "e": [0.1, 0, 0] },
+      { "t": 1.6, "e": [0.34, 0, 0.03], "ease": "easeIn" },
+      { "t": 1.95, "e": [0.36, 0, 0.04] },
+      { "t": 2.25, "e": [-0.12, 0, 0], "ease": "easeOut" },
+      { "t": 2.7, "e": [0.0, 0, 0], "ease": "sineInOut" },
+      { "t": 3.3, "e": [0.13, 0, 0], "ease": "sineInOut" },
+      { "t": 4.4, "e": [0.1, 0, 0], "ease": "easeOut" }
+    ] },
+    "neck": { "keys": [
+      { "t": 0.0, "e": [0.05, 0, 0] },
+      { "t": 1.6, "e": [0.13, 0, 0] },
+      { "t": 2.35, "e": [-0.05, 0, 0], "ease": "easeOut" },
+      { "t": 2.9, "e": [0.04, 0, 0] },
+      { "t": 4.4, "e": [0.05, 0, 0] }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.6, "e": [0.04, 0, 0], "ease": "easeIn" },
+      { "t": 2.3, "e": [-0.07, 0, 0], "ease": "easeOut" },
+      { "t": 3.2, "e": [-0.02, 0, 0] },
+      { "t": 4.4, "e": [0, 0, 0] }
+    ] },
+    "leftShoulder": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.6, "e": [0, 0, 0.04], "ease": "easeIn" },
+      { "t": 2.3, "e": [0, 0, -0.1], "ease": "easeOut" },
+      { "t": 2.9, "e": [0, 0, 0.01] },
+      { "t": 4.4, "e": [0, 0, 0] }
+    ] },
+    "rightShoulder": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.6, "e": [0, 0, -0.04], "ease": "easeIn" },
+      { "t": 2.3, "e": [0, 0, 0.1], "ease": "easeOut" },
+      { "t": 2.9, "e": [0, 0, -0.01] },
+      { "t": 4.4, "e": [0, 0, 0] }
+    ] }
+  },
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "blink": 0.5, "sorrow": 0.1 }, "fade": 0.4 },
+    { "t": 1.95, "set": { "blink": 0.85, "sorrow": 0.1 }, "fade": 0.4 },
+    { "t": 2.35, "set": { "blink": 0.0, "o": 0.25 }, "fade": 0.12 },
+    { "t": 3.3, "set": { "blink": 0.3, "sorrow": 0.12 }, "fade": 0.7 },
+    { "t": 4.4, "set": { "blink": 0.45, "sorrow": 0.1 }, "fade": 0.6 }
+  ] }
+}

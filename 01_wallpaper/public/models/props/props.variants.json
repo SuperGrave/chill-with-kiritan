@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "_about": "Prop variant registry (Prop Variants 0.8). Per-slot model alternatives selectable from the in-app panel. 'basic' (no url) = scene.json default (Kenney CC0). A variant REPLACES the prop's url/scale/rotation and ADDS offset to its scene.json position (offset = bake of bottom-center normalization measured from accessor min/max; see tools/measure docs in ASSET_CREDITS.md). Each slot's `default` is the variant a FRESH browser opens on (curated set: 事務机/オフィスチェア/ノートPC) — a stored choice always wins. Licenses: every entry must also be recorded in ASSET_CREDITS.md. Selection persists in localStorage (props.variantSelection.v1).",
+  "slots": {
+    "desk": {
+      "label": "机",
+      "default": "desk_office_metal",
+      "variants": [
+        {
+          "id": "basic",
+          "label": "ベーシック（Kenney）"
+        },
+        {
+          "id": "desk_office_metal",
+          "label": "事務机（スチール）",
+          "url": "/models/props/variants/desk_office_metal/metal_office_desk_1k.gltf",
+          "scale": 0.927,
+          "offset": [
+            -0.0,
+            -0.0,
+            0.0042
+          ],
+          "rotation": [
+            0,
+            3.14,
+            0
+          ],
+          "author": "Ulan Cabanilla",
+          "license": "CC0 1.0",
+          "source": "https://polyhaven.com/a/metal_office_desk"
+        },
+        {
+          "id": "desk_school",
+          "label": "学校の机",
+          "url": "/models/props/variants/desk_school/SchoolDesk_01_1k.gltf",
+          "scale": 0.8271,
+          "offset": [
+            -0.0,
+            0.0004,
+            0.0038
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "author": "Ethan Place",
+          "license": "CC0 1.0",
+          "source": "https://polyhaven.com/a/SchoolDesk_01"
+        },
+        {
+          "id": "desk_wood_simple",
+          "label": "木のテーブル",
+          "url": "/models/props/variants/desk_wood_simple/wooden_table_02_1k.gltf",
+          "scale": 0.913,
+          "offset": [
+            -0.0,
+            0.0001,
+            -0.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "author": "Serhii Khromov",
+          "license": "CC0 1.0",
+          "source": "https://polyhaven.com/a/wooden_table_02"
+        }
+      ]
+    },
+    "chair": {
+      "label": "椅子",
+      "default": "chair_office",
+      "variants": [
+        {
+          "id": "basic",
+          "label": "ベーシック（Kenney）"
+        },
+        {
+          "id": "chair_lounge",
+          "label": "ラウンジチェア（革）",
+          "url": "/models/props/variants/chair_lounge/mid_century_lounge_chair_1k.gltf",
+          "scale": 1.0,
+          "offset": [
+            -0.0,
+            0.0,
+            0.0662
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "author": "Kuutti Siitonen",
+          "license": "CC0 1.0",
+          "source": "https://polyhaven.com/a/mid_century_lounge_chair"
+        },
+        {
+          "id": "chair_office",
+          "label": "オフィスチェア",
+          "url": "/models/props/variants/chair_office.glb",
+          "scale": 0.021,
+          "offset": [
+            -7.066,
+            -0.0002,
+            4.4165
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "author": "CMHT Oculus",
+          "license": "CC-BY 3.0",
+          "source": "https://poly.pizza/m/dCEsSsJJ1Md",
+          "attribution": "Office Chair by CMHT Oculus [CC-BY] via Poly Pizza"
+        },
+        {
+          "id": "chair_school",
+          "label": "学校の椅子",
+          "url": "/models/props/variants/chair_school/SchoolChair_01_1k.gltf",
+          "scale": 1.0,
+          "offset": [
+            0.0,
+            0.0017,
+            -0.0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "author": "Ethan Place",
+          "license": "CC0 1.0",
+          "source": "https://polyhaven.com/a/SchoolChair_01"
+        }
+      ]
+    },
+    "laptop": {
+      "label": "パソコン",
+      "default": "pc_laptop_modern",
+      "variants": [
+        {
+          "id": "basic",
+          "label": "ベーシック（Kenney）"
+        },
+        {
+          "id": "pc_laptop_modern",
+          "label": "ノートPC（モダン）",
+          "url": "/models/props/variants/pc_laptop_modern.glb",
+          "scale": 0.3477,
+          "offset": [
+            -0.0708,
+            -0.0015,
+            -0.009
+          ],
+          "rotation": [
+            0,
+            3.14,
+            0
+          ],
+          "author": "J-Toastie",
+          "license": "CC-BY 3.0",
+          "source": "https://poly.pizza/m/UGOWjMUC5U",
+          "attribution": "Laptop by J-Toastie [CC-BY] via Poly Pizza"
+        },
+        {
+          "id": "pc_dual_monitor",
+          "label": "デュアルモニタ",
+          "url": "/models/props/variants/pc_dual_monitor.glb",
+          "scale": 0.2346,
+          "offset": [
+            0.0099,
+            0.3363,
+            -0.0248
+          ],
+          "rotation": [
+            0,
+            3.14,
+            0
+          ],
+          "author": "involuntary tsetse",
+          "license": "CC-BY 3.0",
+          "source": "https://poly.pizza/m/c9fdvmLhrsT",
+          "attribution": "Dual Monitors on sit-stand arm by involuntary tsetse [CC-BY] via Poly Pizza"
+        },
+        {
+          "id": "pc_retro_mac",
+          "label": "レトロPCセット",
+          "url": "/models/props/variants/pc_retro_mac.glb",
+          "scale": 4.8937,
+          "offset": [
+            0.1021,
+            0.0,
+            0.0598
+          ],
+          "rotation": [
+            0,
+            3.14,
+            0
+          ],
+          "author": "Charlie",
+          "license": "CC-BY 3.0",
+          "source": "https://poly.pizza/m/goeJLARWbs",
+          "attribution": "Macintosh Classic by Charlie [CC-BY] via Poly Pizza"
+        }
+      ]
+    }
+  }
+}

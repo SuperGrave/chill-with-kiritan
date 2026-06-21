@@ -98,6 +98,17 @@ export function cycleTarget(current: LayoutTargetId, dir: 1 | -1): LayoutTargetI
   return LAYOUT_TARGETS[(i + dir + n) % n];
 }
 
+// Cycle within an arbitrary ordered list (the live target list now includes the
+// enabled small items, e.g. 'item:controller', so the fixed LAYOUT_TARGETS tuple
+// is no longer the whole story). Falls back to the first entry on a miss.
+export function cycleInList<T>(list: readonly T[], current: T, dir: 1 | -1): T {
+  const n = list.length;
+  if (n === 0) return current;
+  const i = list.indexOf(current);
+  if (i === -1) return list[0];
+  return list[(i + dir + n) % n];
+}
+
 // --- Pure nudge helpers (return NEW vectors; never mutate the input) ---------
 
 export function nudgePosition(p: Vec3, axis: 0 | 1 | 2, delta: number): Vec3 {

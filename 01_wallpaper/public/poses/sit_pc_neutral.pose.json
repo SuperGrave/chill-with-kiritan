@@ -1,0 +1,17 @@
+{
+  "schema": "pose/1",
+  "id": "sit_pc_neutral",
+  "label": "座り・PC正対（Phase0 試験A 検証済み）",
+  "notes": "全座りモード（A族）の土台ポーズ。Phase 0 試験A ゲートで Lab 実測検証済み（2026-06-12）: スカート跳ね上がりゼロ・致命的貫通なし・SpringBone は settle 1.0 で収束し 2.0 と同一。脚の符号確定 = upperLeg X +1.4(股関節を前へ屈曲) / lowerLeg X −1.5(膝を曲げて脛を下ろし接地) で自然な座位。検収カメラ workdesk_side/front + desk wide、propsありでは机が下半身を遮蔽し完全に自然。深い股の奥に襦袢/帯紐の微小な重なりが残るが採用構図で不可視のため許容。腕は触らない（着座時の腕は各モーション側 hand 資産で付与）。hipsOffset の Δ(沈み0.2)/d(後退0.05) は現状の椅子GLB(scale1.9, z-0.4)で座面に整合。",
+  "hipsOffset": [0, -0.2, 0.05],
+  "bones": {
+    "spine": [0.06, 0, 0],
+    "chest": [0.02, 0, 0],
+    "leftUpperLeg": [1.4, 0, 0.04],
+    "rightUpperLeg": [1.4, 0, -0.04],
+    "leftLowerLeg": [-1.5, 0, 0],
+    "rightLowerLeg": [-1.5, 0, 0],
+    "leftFoot": [0.1, 0, 0],
+    "rightFoot": [0.1, 0, 0]
+  }
+}

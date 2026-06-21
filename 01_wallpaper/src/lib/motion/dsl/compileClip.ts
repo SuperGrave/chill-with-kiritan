@@ -7,10 +7,12 @@
 //
 // Layer composition per bone (see evaluate.ts): Q = Qposture * Qhand * Qoffset.
 // The result is the bone's ABSOLUTE normalized-rig local rotation, baked per
-// sample. NOTE: the posture's hipsOffset (position) is deliberately NOT baked
-// into the clip — the runtime mixer path is rotations-only as of 0.7
-// (consistent with vrmaClip stripping position tracks); the Lab preview applies
-// hipsOffset directly, and the Motion Director (0.9) will own posture properly.
+// sample. The mixer path stays rotations-only (no hips POSITION track, like
+// vrmaClip strips position tracks); instead the posture's constant hipsOffset
+// is exposed as clip metadata so the viewer can apply it to hips.position each
+// frame, scaled by the external-clip weight (Phase 0 試験B: a seated pose with
+// no hip-drop sits ~0.2 m too high and the legs poke above the desk). DSL
+// motions never animate hips, so a single offset sampled at t=0 is exact.
 
 import * as THREE from 'three';
 import type { VRM } from '@pixiv/three-vrm';
@@ -23,9 +25,33 @@ export interface CompiledDslClip {
   hasExpressionTracks: boolean; // always false — expressions stay runtime-side
   /** Bones the motion wanted but the model doesn't have (e.g. upperChest). */
   missingBones: string[];
+  /**
+   * Posture hips-position offset (meters, normalized rig), constant for the
+   * motion. The viewer applies it to hips.position scaled by clip weight —
+   * NOT baked into the clip's tracks (rotations only). [0,0,0] when no posture.
+   * For motions whose hips ANIMATE (hipsTrack), this holds the t=0 value and
+   * `hipsCurve` carries the full trajectory.
+   */
+  hipsOffset: [number, number, number];
+  /**
+   * Sampled hips-position trajectory (meters) for motions whose hips animate
+   * over time (INF-3 stand/sit/step). null when the hips are constant — the
+   * viewer then uses `hipsOffset`. Sampled at SAMPLE_FPS, linearly
+   * interpolatable (the source curve is already eased by the evaluator).
+   */
+  hipsCurve: { times: number[]; values: [number, number, number][] } | null;
+  /**
+   * Sampled root-motion trajectory [x,y,z, rotY] (INF-7) for motions that move
+   * the whole character (walk/step/turn). null when the root never moves. The
+   * viewer applies it to vrm.scene at clip-local time, scaled by clip weight.
+   */
+  rootCurve: { times: number[]; values: [number, number, number, number][] } | null;
 }
 
-const SAMPLE_FPS = 20; // slerp between samples smooths; calm motions don't need more
+// slerp between samples smooths; 30 keeps tremor-class noise layers (~5 Hz,
+// see Oscillator.kind 'noise') above ~6 samples/cycle. 20 was fine for calm
+// keyframe-only motions but aliases a 0.2 s-period quiver.
+const SAMPLE_FPS = 30;
 
 const _qPosture = new THREE.Quaternion();
 const _qHand = new THREE.Quaternion();
@@ -82,5 +108,35 @@ export function compileDslClip(evaluator: MotionEvaluator, vrm: VRM): CompiledDs
   }
 
   const clip = new THREE.AnimationClip(`dsl_${evaluator.id}`, evaluator.duration, tracks);
-  return { clip, boneNames, source: 'dsl', hasExpressionTracks: false, missingBones };
+  // Hips position: constant from the posture in most motions; a stand/sit/step
+  // transition (hipsTrack, INF-3) animates it. Detect variation across the
+  // samples — if it moves, emit the full trajectory as hipsCurve; else just the
+  // t=0 constant (keeps loops/static motions lightweight).
+  const hipsOffset = [...frames[0].hipsOffset] as [number, number, number];
+  let hipsVaries = false;
+  for (const f of frames) {
+    if (
+      Math.abs(f.hipsOffset[0] - hipsOffset[0]) > 1e-4 ||
+      Math.abs(f.hipsOffset[1] - hipsOffset[1]) > 1e-4 ||
+      Math.abs(f.hipsOffset[2] - hipsOffset[2]) > 1e-4
+    ) {
+      hipsVaries = true;
+      break;
+    }
+  }
+  const hipsCurve = hipsVaries
+    ? { times: Array.from(times), values: frames.map((f) => [...f.hipsOffset] as [number, number, number]) }
+    : null;
+  // Root motion (INF-7): emit the trajectory only when it actually moves.
+  let rootVaries = false;
+  for (const f of frames) {
+    if (f.root[0] !== 0 || f.root[1] !== 0 || f.root[2] !== 0 || f.root[3] !== 0) {
+      rootVaries = true;
+      break;
+    }
+  }
+  const rootCurve = rootVaries
+    ? { times: Array.from(times), values: frames.map((f) => [...f.root] as [number, number, number, number]) }
+    : null;
+  return { clip, boneNames, source: 'dsl', hasExpressionTracks: false, missingBones, hipsOffset, hipsCurve, rootCurve };
 }

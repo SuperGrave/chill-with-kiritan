@@ -58,11 +58,30 @@ function makePlaceholder(prop: SceneProp, error: string): { object: THREE.Object
   };
 }
 
+// Some prop GLBs ship their own punctual lights / cameras straight from the
+// authoring tool. items/controller.glb carried a POINT LIGHT at intensity 1000
+// (KHR_lights_punctual), which three instantiates verbatim — in physical light
+// units that floods the whole scene to white the moment the controller loads
+// ("コントローラーを出すと画面が白飛び"). Props are passive geometry: the scene
+// owns all lighting and the render camera. Strip both on load so no prop, now or
+// later, can inject them. Light/camera nodes carry no geometry/material to free.
+function stripLightsAndCameras(root: THREE.Object3D): number {
+  const doomed: THREE.Object3D[] = [];
+  root.traverse((o) => {
+    const node = o as THREE.Object3D & { isLight?: boolean; isCamera?: boolean };
+    if (node.isLight || node.isCamera) doomed.push(o);
+  });
+  for (const o of doomed) o.removeFromParent();
+  return doomed.length;
+}
+
 // Load one prop. Never throws — resolves to a placeholder/skip on any problem.
 async function loadOneProp(prop: SceneProp, loader: PropGltfLoader): Promise<{ object: THREE.Object3D | null; result: PropLoadResult }> {
   if (!prop.url) return makePlaceholder(prop, 'no url');
   try {
     const gltf = await loader.loadAsync(prop.url);
+    const stripped = stripLightsAndCameras(gltf.scene);
+    if (stripped > 0) console.info(`[PROP] ${prop.id}: removed ${stripped} embedded light/camera node(s) from the GLB`);
     const container = wrap(gltf.scene, prop, false);
     return { object: container, result: { id: prop.id, ok: true, usedPlaceholder: false, visible: prop.visible, source: 'glb' } };
   } catch (err) {

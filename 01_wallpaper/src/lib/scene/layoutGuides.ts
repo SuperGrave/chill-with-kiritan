@@ -14,24 +14,28 @@
 // guidesEnabled toggle so there is zero cost when guides are off.
 
 import * as THREE from 'three';
-import type { LayoutTargetId, PropTargetId } from './layoutCalibration';
+import type { PropTargetId } from './layoutCalibration';
 
-// Base wire colors per target; the selected target is recolored on top.
+// Base wire colors per target; the selected target is recolored on top. Small
+// items (keys like 'item:controller') aren't in this table — they share ITEM_COLOR.
 const BASE_COLOR: Record<PropTargetId, number> = {
   character: 0x44dd88,
   desk: 0xff8844,
   chair: 0x4488ff,
   laptop: 0xdddddd,
 };
+const ITEM_COLOR = 0xc77dff; // desk small items (Prop Layout 1.0)
 const SELECTED_COLOR = 0xffe24a;
 
 export interface LayoutGuides {
   group: THREE.Group;
   setVisible(on: boolean): void;
-  setSelected(id: LayoutTargetId): void;
+  // Target id: a PropTargetId or an `item:<id>` small-item key.
+  setSelected(id: string): void;
   // (Re)bind the tracked objects (call after each scene (re)load — prop containers
-  // are recreated). A null/absent entry removes that box.
-  setTracked(objs: Partial<Record<PropTargetId, THREE.Object3D | null>>): void;
+  // are recreated). Keys are PropTargetId or `item:<id>`; a null/absent entry
+  // removes that box.
+  setTracked(objs: Record<string, THREE.Object3D | null>): void;
   // Per-frame refresh of boxes + markers. `targetWorld` is the camera look target.
   update(targetWorld: THREE.Vector3): void;
   dispose(): void;
@@ -74,19 +78,20 @@ export function createLayoutGuides(): LayoutGuides {
   deskPlane.visible = false;
   group.add(deskPlane);
 
-  // BoxHelpers for the tracked objects, created on demand in setTracked.
-  const boxes: Partial<Record<PropTargetId, THREE.BoxHelper>> = {};
-  const tracked: Partial<Record<PropTargetId, THREE.Object3D | null>> = {};
-  let selected: LayoutTargetId = 'character';
+  // BoxHelpers for the tracked objects, created on demand in setTracked. Keyed by
+  // PropTargetId or `item:<id>` (small items), so the maps are plain string maps.
+  const boxes: Record<string, THREE.BoxHelper> = {};
+  const tracked: Record<string, THREE.Object3D | null> = {};
+  let selected: string = 'character';
 
   const _box3 = new THREE.Box3();
   const _size = new THREE.Vector3();
   const _center = new THREE.Vector3();
 
-  const colorFor = (id: PropTargetId): number =>
-    selected === id ? SELECTED_COLOR : BASE_COLOR[id];
+  const colorFor = (id: string): number =>
+    selected === id ? SELECTED_COLOR : (BASE_COLOR[id as PropTargetId] ?? ITEM_COLOR);
 
-  function removeBox(id: PropTargetId) {
+  function removeBox(id: string) {
     const h = boxes[id];
     if (h) {
       group.remove(h);
@@ -96,8 +101,8 @@ export function createLayoutGuides(): LayoutGuides {
     }
   }
 
-  function setTracked(objs: Partial<Record<PropTargetId, THREE.Object3D | null>>) {
-    for (const key of Object.keys(objs) as PropTargetId[]) {
+  function setTracked(objs: Record<string, THREE.Object3D | null>) {
+    for (const key of Object.keys(objs)) {
       const obj = objs[key] ?? null;
       tracked[key] = obj;
       removeBox(key);
@@ -110,9 +115,9 @@ export function createLayoutGuides(): LayoutGuides {
     }
   }
 
-  function setSelected(id: LayoutTargetId) {
+  function setSelected(id: string) {
     selected = id;
-    for (const key of Object.keys(boxes) as PropTargetId[]) {
+    for (const key of Object.keys(boxes)) {
       const h = boxes[key];
       if (h) (h.material as THREE.LineBasicMaterial).color.setHex(colorFor(key));
     }
@@ -120,7 +125,7 @@ export function createLayoutGuides(): LayoutGuides {
 
   function update(targetWorld: THREE.Vector3) {
     if (!group.visible) return;
-    for (const key of Object.keys(boxes) as PropTargetId[]) {
+    for (const key of Object.keys(boxes)) {
       const h = boxes[key];
       const obj = tracked[key];
       if (h && obj) h.update();
@@ -149,7 +154,7 @@ export function createLayoutGuides(): LayoutGuides {
   }
 
   function dispose() {
-    for (const key of Object.keys(boxes) as PropTargetId[]) removeBox(key);
+    for (const key of Object.keys(boxes)) removeBox(key);
     grid.geometry.dispose();
     (grid.material as THREE.Material).dispose();
     axes.dispose();

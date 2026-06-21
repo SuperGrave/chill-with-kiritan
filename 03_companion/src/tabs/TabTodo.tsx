@@ -1,60 +1,86 @@
-import { useState } from "react";
-
-type Todo = { id: number; title: string; done: boolean };
+import { useEffect, useState } from "react";
+import { PlusIcon, TodoIcon, XIcon } from "../icons";
+import { api, type Todo } from "../api";
 
 export default function TabTodo() {
-  const [todos, setTodos] = useState<Todo[]>([
-    { id: 1, title: "レポート提出", done: false },
-    { id: 2, title: "買い物", done: true },
-  ]);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const add = () => {
+  const load = () =>
+    api.todos().then(setTodos).catch(() => setError("APIに接続できませんでした"));
+
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
     if (!input.trim()) return;
-    setTodos((prev) => [
-      ...prev,
-      { id: Date.now(), title: input.trim(), done: false },
-    ]);
+    const title = input.trim();
     setInput("");
+    try { await api.addTodo(title); await load(); }
+    catch { setError("追加に失敗しました"); }
   };
 
-  const toggle = (id: number) =>
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
-    );
+  const toggle = async (t: Todo) => {
+    setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
+    try { await api.updateTodo(t.id, { done: !t.done }); } catch { load(); }
+  };
 
-  const remove = (id: number) =>
+  const remove = async (id: string) => {
     setTodos((prev) => prev.filter((t) => t.id !== id));
+    try { await api.deleteTodo(id); } catch { load(); }
+  };
+
+  const remaining = todos.filter((t) => !t.done).length;
 
   return (
     <section className="tab-panel">
-      <h2 className="panel-title">TODO</h2>
-      <form
-        className="add-row"
-        onSubmit={(e) => { e.preventDefault(); add(); }}
-      >
+      <header className="panel-head">
+        <h2>TODO</h2>
+        <span className="count-badge">残り {remaining}</span>
+      </header>
+
+      <form className="add-row" onSubmit={(e) => { e.preventDefault(); add(); }}>
         <input
-          className="add-input"
+          type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="新しいタスクを追加…"
         />
-        <button type="submit">追加</button>
+        <button type="submit" disabled={!input.trim()}>
+          <PlusIcon />
+          追加
+        </button>
       </form>
-      <ul className="todo-list">
-        {todos.map((t) => (
-          <li key={t.id} className={`todo-item ${t.done ? "done" : ""}`}>
-            <input
-              type="checkbox"
-              checked={t.done}
-              onChange={() => toggle(t.id)}
-            />
-            <span className="todo-title">{t.title}</span>
-            <button className="icon-btn" onClick={() => remove(t.id)}>✕</button>
-          </li>
-        ))}
-      </ul>
-      <p className="note">※ API連携は Phase B-3 で実装します</p>
+
+      {error && <p className="error-banner">⚠ {error}</p>}
+
+      {todos.length === 0 ? (
+        <div className="empty-state">
+          <TodoIcon />
+          <p>タスクはありません</p>
+        </div>
+      ) : (
+        <ul className="todo-list">
+          {todos.map((t) => (
+            <li key={t.id} className={`todo-item ${t.done ? "done" : ""}`}>
+              <input
+                type="checkbox"
+                className="todo-check"
+                checked={t.done}
+                onChange={() => toggle(t)}
+              />
+              <span className="todo-title">{t.title}</span>
+              <button
+                className="icon-btn danger"
+                onClick={() => remove(t.id)}
+                aria-label="削除"
+              >
+                <XIcon />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

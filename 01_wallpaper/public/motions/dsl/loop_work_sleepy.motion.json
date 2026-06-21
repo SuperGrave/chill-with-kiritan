@@ -1,0 +1,35 @@
+{
+  "schema": "motion/1",
+  "id": "loop_work_sleepy",
+  "label": "ループ: うとうと作業（座り）",
+  "notes": "work_sleepy の基本ループ。sit_pc_neutral の上に、重い瞼(blink ~0.4 常時)・困り眉(sorrow)・ゆっくり深い呼吸・首がじわっと前へ落ちては戻る緩慢な頷きを重ねた眠そうな着座。視線は焦点が合わずやや下(lookAt fixed 低め・strength弱)。duration 16 は呼吸オシレータ周期8の整数倍＝シーム安全。頭ドループは track（始端=終端で seam ok）。",
+  "category": "loop",
+  "tags": ["mode:work_sleepy", "family:A", "daypart:night"],
+  "posture": "sit_pc_neutral",
+  "duration": 16,
+  "loop": true,
+  "fadeIn": 1.0,
+  "fadeOut": 1.0,
+  "tracks": {
+    "head": { "keys": [
+      { "t": 0.0, "e": [0.1, 0, 0.02] },
+      { "t": 8.0, "e": [0.17, 0, -0.02], "ease": "sineInOut" },
+      { "t": 16.0, "e": [0.1, 0, 0.02], "ease": "sineInOut" }
+    ] },
+    "neck": { "keys": [
+      { "t": 0.0, "e": [0.05, 0, 0] },
+      { "t": 8.0, "e": [0.09, 0, 0] },
+      { "t": 16.0, "e": [0.05, 0, 0] }
+    ] }
+  },
+  "oscillators": [
+    { "bone": "chest", "axis": "x", "amp": 0.04, "period": 8 },
+    { "bone": "spine", "axis": "x", "amp": 0.02, "period": 8 }
+  ],
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "blink": 0.4, "sorrow": 0.1 }, "fade": 1.0 },
+    { "t": 8.0, "set": { "blink": 0.52, "sorrow": 0.12 }, "fade": 3.0 },
+    { "t": 16.0, "set": { "blink": 0.4, "sorrow": 0.1 }, "fade": 3.0 }
+  ] },
+  "lookAt": { "mode": "fixed", "point": [0.0, 0.82, 0.8], "strength": 0.25 }
+}

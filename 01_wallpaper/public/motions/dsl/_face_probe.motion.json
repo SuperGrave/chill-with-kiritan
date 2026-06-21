@@ -1,0 +1,29 @@
+{
+  "schema": "motion/1",
+  "id": "_face_probe",
+  "label": "顔チャンネル検証 (0.2)",
+  "notes": "exprCues + gaze のエンドツーエンド検証用。体は軽く腕を上げるだけで、表情と視線の同期を見る。t2=遠く見て集中, t5=照れ(わはー), t8=正面で微笑み。",
+  "posture": "stand_relaxed",
+  "duration": 12,
+  "loop": false,
+  "fadeIn": 0.6,
+  "fadeOut": 0.8,
+  "tracks": {
+    "leftUpperArm": { "keys": [
+      { "t": 0, "e": [0, 0, 0] },
+      { "t": 3, "e": [0, 0, -1.6], "ease": "cubicInOut" },
+      { "t": 9, "e": [0, 0, -1.6] },
+      { "t": 12, "e": [0, 0, 0], "ease": "easeOut" }
+    ] }
+  },
+  "exprCues": [
+    { "preset": "focused_monitor", "at": 1.5, "intensity": 0.8, "hold": 2.0 },
+    { "preset": "embarrassed", "at": 4.8, "hold": 2.0 },
+    { "preset": "smile", "at": 8.0, "hold": 2.5 }
+  ],
+  "gaze": { "keys": [
+    { "t": 0, "to": "away_left" },
+    { "t": 4.6, "to": "up", "move": 0.4 },
+    { "t": 7.8, "to": "camera", "move": 0.3 }
+  ] }
+}

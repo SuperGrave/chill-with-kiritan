@@ -12,13 +12,18 @@ import {
 import type {
   MotionDef, PoseDef, HandDef, ValidationIssue, ValidationResult, TrackKey,
 } from './types';
+import { DERIVED_EXPRESSION_NAMES, EXPRESSION_PRESET_IDS, EXPRESSION_PRESETS } from '../../expression/expressionPresets';
+import { GAZE_DIRECTION_NAMES } from '../gazeController';
 
 // Expressions known to exist on this model (audit + Custom Expression Bridge).
 // 'neutral' is accepted as "all zero". Unknown names are warnings, not errors,
-// because the bridge map is built from the model at load time.
+// because the bridge map is built from the model at load time. The derived
+// names (じと目/びっくり… raw morphs promoted by the Expression Preset System)
+// come from the same table the runtime registers, so the two can't drift.
 const KNOWN_EXPRESSIONS = new Set([
   'neutral', 'a', 'i', 'u', 'e', 'o', 'blink', 'blinkleft', 'blinkright',
   'joy', 'angry', 'sorrow', 'fun', 'lookup', 'lookdown', 'lookleft', 'lookright',
+  ...DERIVED_EXPRESSION_NAMES,
 ]);
 
 // Amplitude sanity: a single euler component beyond this is almost certainly a
@@ -172,6 +177,87 @@ export function validateMotion(raw: unknown): ValidationResult {
     }
   }
 
+  // hipsTrack (INF-3 — animated hips position, meters; ABSOLUTE, overrides posture hipsOffset)
+  if (m.hipsTrack !== undefined) {
+    const ht = m.hipsTrack as Record<string, unknown>;
+    if (!isObj(ht) || !Array.isArray(ht.keys)) {
+      iss.err('hipsTrack', 'expected { "keys": [ { "t": seconds, "p": [x,y,z] }, ... ] } — hips position offset in meters (e.g. sit p.y ≈ -0.2, stand p.y = 0).');
+    } else if ((ht.keys as unknown[]).length === 0) {
+      iss.err('hipsTrack.keys', 'must contain at least one key (or omit hipsTrack to use the posture hipsOffset).');
+    } else {
+      let prevT = -Infinity;
+      (ht.keys as unknown[]).forEach((k, i) => {
+        const kpath = `hipsTrack.keys[${i}]`;
+        if (!isObj(k)) { iss.err(kpath, `expected { "t": seconds, "p": [x,y,z], "ease"?: name }, got ${JSON.stringify(k)}.`); return; }
+        const key = k as Record<string, unknown>;
+        if (!isNum(key.t)) iss.err(`${kpath}.t`, `required: key time in seconds, got ${JSON.stringify(key.t)}.`);
+        else {
+          if ((key.t as number) < 0 || (key.t as number) > duration) iss.err(`${kpath}.t`, `key time ${key.t} is outside 0..duration (${duration}).`);
+          if ((key.t as number) <= prevT) iss.err(`${kpath}.t`, `key times must be strictly increasing (previous key is at ${prevT}).`);
+          prevT = key.t as number;
+        }
+        checkV3(iss, `${kpath}.p`, key.p, 'position');
+        if (key.ease !== undefined && !(EASING_NAMES as readonly string[]).includes(key.ease as string)) {
+          iss.err(`${kpath}.ease`, `unknown easing ${JSON.stringify(key.ease)}. Available: ${EASING_NAMES.join(', ')}.${suggest(String(key.ease), EASING_NAMES)}`);
+        }
+        const knownHipsKey = new Set(['t', 'p', 'ease']);
+        for (const kk of Object.keys(key)) {
+          if (!knownHipsKey.has(kk)) iss.warn(`${kpath}.${kk}`, `unknown hipsTrack key field "${kk}" — ignored.${suggest(kk, [...knownHipsKey])}`);
+        }
+      });
+      if (loop && (ht.keys as unknown[]).length >= 2) {
+        const first = (ht.keys as unknown[])[0] as Record<string, unknown>;
+        const last = (ht.keys as unknown[])[(ht.keys as unknown[]).length - 1] as Record<string, unknown>;
+        if (Array.isArray(first.p) && Array.isArray(last.p) && (first.p as unknown[]).every(isNum) && (last.p as unknown[]).every(isNum)) {
+          const d = Math.max(...(first.p as number[]).map((v, i) => Math.abs(v - (last.p as number[])[i])));
+          if (d > 1e-3) iss.warn('hipsTrack.keys', `loop=true but first key p=${JSON.stringify(first.p)} and last key p=${JSON.stringify(last.p)} differ (max ${d.toFixed(3)} m) — hips will pop at the seam.`);
+        }
+      }
+    }
+  }
+
+  // rootMotion (INF-7 — whole-character world offset; ABSOLUTE from start)
+  if (m.rootMotion !== undefined) {
+    const rt = m.rootMotion as Record<string, unknown>;
+    if (!isObj(rt) || !Array.isArray(rt.keys)) {
+      iss.err('rootMotion', 'expected { "keys": [ { "t": seconds, "p": [x,y,z], "rotY"?: radians }, ... ] } — world-space character offset in meters.');
+    } else if ((rt.keys as unknown[]).length === 0) {
+      iss.err('rootMotion.keys', 'must contain at least one key (or omit rootMotion).');
+    } else {
+      let prevT = -Infinity;
+      (rt.keys as unknown[]).forEach((k, i) => {
+        const kpath = `rootMotion.keys[${i}]`;
+        if (!isObj(k)) { iss.err(kpath, `expected { "t": seconds, "p": [x,y,z], "rotY"?: radians, "ease"?: name }, got ${JSON.stringify(k)}.`); return; }
+        const key = k as Record<string, unknown>;
+        if (!isNum(key.t)) iss.err(`${kpath}.t`, `required: key time in seconds, got ${JSON.stringify(key.t)}.`);
+        else {
+          if ((key.t as number) < 0 || (key.t as number) > duration) iss.err(`${kpath}.t`, `key time ${key.t} is outside 0..duration (${duration}).`);
+          if ((key.t as number) <= prevT) iss.err(`${kpath}.t`, `key times must be strictly increasing (previous key is at ${prevT}).`);
+          prevT = key.t as number;
+        }
+        checkV3(iss, `${kpath}.p`, key.p, 'position');
+        if (key.rotY !== undefined && !isNum(key.rotY)) iss.err(`${kpath}.rotY`, `must be radians, got ${JSON.stringify(key.rotY)}.`);
+        if (key.ease !== undefined && !(EASING_NAMES as readonly string[]).includes(key.ease as string)) {
+          iss.err(`${kpath}.ease`, `unknown easing ${JSON.stringify(key.ease)}. Available: ${EASING_NAMES.join(', ')}.${suggest(String(key.ease), EASING_NAMES)}`);
+        }
+        const knownRootKey = new Set(['t', 'p', 'rotY', 'ease']);
+        for (const kk of Object.keys(key)) {
+          if (!knownRootKey.has(kk)) iss.warn(`${kpath}.${kk}`, `unknown rootMotion key field "${kk}" — ignored.${suggest(kk, [...knownRootKey])}`);
+        }
+      });
+      // A looping motion should keep net-zero root (walk in place; the across-room
+      // advance is driven separately) so it doesn't teleport at the seam.
+      if (loop && (rt.keys as unknown[]).length >= 2) {
+        const first = (rt.keys as unknown[])[0] as Record<string, unknown>;
+        const last = (rt.keys as unknown[])[(rt.keys as unknown[]).length - 1] as Record<string, unknown>;
+        if (Array.isArray(first.p) && Array.isArray(last.p) && (first.p as unknown[]).every(isNum) && (last.p as unknown[]).every(isNum)) {
+          const d = Math.max(...(first.p as number[]).map((v, i) => Math.abs(v - (last.p as number[])[i])));
+          if (d > 1e-3) iss.warn('rootMotion.keys', `loop=true but first key p=${JSON.stringify(first.p)} and last key p=${JSON.stringify(last.p)} differ (max ${d.toFixed(3)} m) — a looping walk should return to its start (net-zero); drive the across-room advance from the Director instead.`);
+        }
+      }
+    }
+  }
+
   // oscillators
   if (m.oscillators !== undefined) {
     if (!Array.isArray(m.oscillators)) {
@@ -185,15 +271,46 @@ export function validateMotion(raw: unknown): ValidationResult {
         else checkBoneName(iss, `${opath}.bone`, osc.bone);
         if (osc.axis !== 'x' && osc.axis !== 'y' && osc.axis !== 'z') iss.err(`${opath}.axis`, `must be "x", "y" or "z", got ${JSON.stringify(osc.axis)}.`);
         if (!isNum(osc.amp)) iss.err(`${opath}.amp`, `required: amplitude in radians, got ${JSON.stringify(osc.amp)}.`);
-        else if (Math.abs(osc.amp as number) > 0.5) iss.warn(`${opath}.amp`, `amplitude ${osc.amp} rad is large for an oscillator (breathing-class layers are ~0.02..0.08). Intentional?`);
+        else if (Math.abs(osc.amp as number) > 0.5) iss.warn(`${opath}.amp`, `amplitude ${osc.amp} rad is large for an oscillator (breathing-class layers are ~0.02..0.08, tremor-class noise ~0.005..0.02). Intentional?`);
+        if (osc.kind !== undefined && osc.kind !== 'sine' && osc.kind !== 'noise') {
+          iss.err(`${opath}.kind`, `must be "sine" (default) or "noise", got ${JSON.stringify(osc.kind)}.`);
+        }
+        const isNoise = osc.kind === 'noise';
+        let hasWindow = false;
+        if (osc.window !== undefined) {
+          if (!Array.isArray(osc.window) || osc.window.length !== 2 || !osc.window.every(isNum)) {
+            iss.err(`${opath}.window`, `expected [startSeconds, endSeconds], got ${JSON.stringify(osc.window)}.`);
+          } else {
+            hasWindow = true;
+            const [w0, w1] = osc.window as [number, number];
+            if (w0 < 0 || w1 > duration || w0 >= w1) {
+              iss.err(`${opath}.window`, `window [${w0}, ${w1}] must satisfy 0 <= start < end <= duration (${duration}).`);
+            }
+          }
+        }
+        for (const f of ['attack', 'release'] as const) {
+          if (osc[f] !== undefined && (!isNum(osc[f]) || (osc[f] as number) < 0)) {
+            iss.err(`${opath}.${f}`, `must be seconds >= 0, got ${JSON.stringify(osc[f])}.`);
+          }
+        }
+        if (osc.seed !== undefined && !isNum(osc.seed)) iss.err(`${opath}.seed`, `must be a number, got ${JSON.stringify(osc.seed)}.`);
         if (!isNum(osc.period) || (osc.period as number) <= 0) iss.err(`${opath}.period`, `required: seconds > 0, got ${JSON.stringify(osc.period)}.`);
-        else if (loop && duration > 0) {
+        else if (loop && duration > 0 && !isNoise && !hasWindow) {
+          // noise wraps its lattice to the duration; a windowed layer fades to
+          // zero before the seam — only a bare sine can pop here.
           const ratio = duration / (osc.period as number);
           if (Math.abs(ratio - Math.round(ratio)) > 1e-3) {
             iss.warn(`${opath}.period`, `duration (${duration}s) is not an integer multiple of period (${osc.period}s) — the oscillator will pop at the loop seam. Use a period that divides the duration (e.g. ${duration} / ${Math.max(1, Math.round(ratio))} = ${(duration / Math.max(1, Math.round(ratio))).toFixed(3)}).`);
           }
         }
-        if (osc.phase !== undefined && !isNum(osc.phase)) iss.err(`${opath}.phase`, `must be radians, got ${JSON.stringify(osc.phase)}.`);
+        if (osc.phase !== undefined) {
+          if (!isNum(osc.phase)) iss.err(`${opath}.phase`, `must be radians, got ${JSON.stringify(osc.phase)}.`);
+          else if (isNoise) iss.warn(`${opath}.phase`, 'phase is ignored for kind:"noise" — use seed to decorrelate noise channels.');
+        }
+        const knownOsc = new Set(['bone', 'axis', 'amp', 'period', 'phase', 'kind', 'window', 'attack', 'release', 'seed']);
+        for (const k of Object.keys(osc)) {
+          if (!knownOsc.has(k)) iss.warn(`${opath}.${k}`, `unknown oscillator field "${k}" — ignored.${suggest(k, [...knownOsc])}`);
+        }
       });
     }
   }
@@ -229,7 +346,104 @@ export function validateMotion(raw: unknown): ValidationResult {
     }
   }
 
+  // exprCues (0.2 — preset-based expression cues)
+  if (m.exprCues !== undefined) {
+    if (!Array.isArray(m.exprCues)) {
+      iss.err('exprCues', 'expected an array of { "preset": id, "at": seconds, "intensity"?, "fadeIn"?, "hold"?, "fadeOut"? }.');
+    } else {
+      m.exprCues.forEach((c, i) => {
+        const cpath = `exprCues[${i}]`;
+        if (!isObj(c)) { iss.err(cpath, `expected an object, got ${JSON.stringify(c)}.`); return; }
+        const cue = c as Record<string, unknown>;
+        if (typeof cue.preset !== 'string' || cue.preset.length === 0) {
+          iss.err(`${cpath}.preset`, `required: an Expression Preset id. Available: ${EXPRESSION_PRESET_IDS.join(', ')}.`);
+        } else if (!EXPRESSION_PRESETS[cue.preset]) {
+          iss.err(`${cpath}.preset`, `unknown preset "${cue.preset}". Available: ${EXPRESSION_PRESET_IDS.join(', ')}.${suggest(cue.preset, EXPRESSION_PRESET_IDS)}`);
+        }
+        if (!isNum(cue.at)) iss.err(`${cpath}.at`, `required: start time in seconds, got ${JSON.stringify(cue.at)}.`);
+        else if (cue.at < 0 || cue.at > duration) iss.err(`${cpath}.at`, `start ${cue.at} is outside 0..duration (${duration}).`);
+        if (cue.intensity !== undefined && (!isNum(cue.intensity) || cue.intensity < 0 || cue.intensity > 1)) {
+          iss.err(`${cpath}.intensity`, `must be 0..1, got ${JSON.stringify(cue.intensity)}.`);
+        }
+        for (const f of ['fadeIn', 'fadeOut'] as const) {
+          if (cue[f] !== undefined && (!isNum(cue[f]) || (cue[f] as number) < 0)) {
+            iss.err(`${cpath}.${f}`, `must be seconds >= 0, got ${JSON.stringify(cue[f])}.`);
+          }
+        }
+        if (cue.hold !== undefined && (!isNum(cue.hold) || ((cue.hold as number) < 0 && cue.hold !== -1))) {
+          iss.err(`${cpath}.hold`, `must be seconds >= 0, or -1 (= hold until the end of the motion), got ${JSON.stringify(cue.hold)}.`);
+        }
+        if (cue.priority !== undefined && !isNum(cue.priority)) iss.err(`${cpath}.priority`, `must be a number, got ${JSON.stringify(cue.priority)}.`);
+        // Envelope overrun: warn when the cue can't finish inside the clip.
+        if (isNum(cue.at) && typeof cue.preset === 'string' && EXPRESSION_PRESETS[cue.preset]) {
+          const p = EXPRESSION_PRESETS[cue.preset];
+          const fadeIn = (cue.fadeIn as number | undefined) ?? p.timing?.fadeIn ?? 0.5;
+          const hold = cue.hold === -1 ? 0 : ((cue.hold as number | undefined) ?? p.timing?.hold ?? 0);
+          const fadeOut = (cue.fadeOut as number | undefined) ?? p.timing?.fadeOut ?? 0.5;
+          const end = (cue.at as number) + fadeIn + hold + (cue.hold === -1 ? 0 : fadeOut);
+          if (cue.hold !== -1 && end > duration + 1e-6) {
+            iss.warn(`${cpath}`, `cue runs until ${end.toFixed(2)}s but the motion ends at ${duration}s — it will be cut mid-envelope${loop ? ' at the loop seam (visible pop)' : ''}. Shorten hold/fades or start earlier.`);
+          }
+        }
+        const knownCue = new Set(['preset', 'at', 'intensity', 'fadeIn', 'hold', 'fadeOut', 'priority']);
+        for (const k of Object.keys(cue)) {
+          if (!knownCue.has(k)) iss.warn(`${cpath}.${k}`, `unknown cue field "${k}" — ignored.${suggest(k, [...knownCue])}`);
+        }
+      });
+    }
+  }
+
+  // gaze (0.2 — eye-direction keys)
+  if (m.gaze !== undefined) {
+    const g = m.gaze as Record<string, unknown>;
+    if (!isObj(g) || !Array.isArray(g.keys)) {
+      iss.err('gaze', 'expected { "keys": [ { "t": seconds, "to": "<direction>"|[yawDeg,pitchDeg], "move"?: seconds }, ... ] }.');
+    } else {
+      let prevT = -Infinity;
+      (g.keys as unknown[]).forEach((k, i) => {
+        const kpath = `gaze.keys[${i}]`;
+        if (!isObj(k)) { iss.err(kpath, `expected an object, got ${JSON.stringify(k)}.`); return; }
+        const key = k as Record<string, unknown>;
+        if (!isNum(key.t)) iss.err(`${kpath}.t`, `required: time in seconds, got ${JSON.stringify(key.t)}.`);
+        else {
+          if (key.t < 0 || key.t > duration) iss.err(`${kpath}.t`, `time ${key.t} is outside 0..duration (${duration}).`);
+          if ((key.t as number) <= prevT) iss.err(`${kpath}.t`, `key times must be strictly increasing (previous key is at ${prevT}).`);
+          prevT = key.t as number;
+        }
+        if (typeof key.to === 'string') {
+          if (!GAZE_DIRECTION_NAMES.includes(key.to)) {
+            iss.err(`${kpath}.to`, `unknown gaze direction "${key.to}". Named directions (screen-relative): ${GAZE_DIRECTION_NAMES.join(', ')} — or a raw [yawDeg, pitchDeg] pair.${suggest(key.to, GAZE_DIRECTION_NAMES)}`);
+          }
+        } else if (Array.isArray(key.to) && key.to.length === 2 && key.to.every(isNum)) {
+          const [yaw, pitch] = key.to as [number, number];
+          if (Math.abs(yaw) <= 1.0 && Math.abs(pitch) <= 1.0 && (yaw !== 0 || pitch !== 0)) {
+            iss.warn(`${kpath}.to`, `[${yaw}, ${pitch}] looks like radians — gaze directions are DEGREES (ちょい上 = [0, 15] 程度). Bones use radians; gaze does not.`);
+          }
+          if (Math.abs(yaw) > 90 || Math.abs(pitch) > 90) {
+            iss.err(`${kpath}.to`, `[${yaw}, ${pitch}] is out of range — degrees, usable range is about yaw ±35 / pitch ±25 (the eyes clamp beyond that).`);
+          }
+        } else {
+          iss.err(`${kpath}.to`, `required: a named direction (${GAZE_DIRECTION_NAMES.join(', ')}) or [yawDeg, pitchDeg], got ${JSON.stringify(key.to)}.`);
+        }
+        if (key.move !== undefined && (!isNum(key.move) || (key.move as number) < 0)) {
+          iss.err(`${kpath}.move`, `must be seconds >= 0 (saccade duration, default 0.25), got ${JSON.stringify(key.move)}.`);
+        }
+        const knownGaze = new Set(['t', 'to', 'move']);
+        for (const kk of Object.keys(key)) {
+          if (!knownGaze.has(kk)) iss.warn(`${kpath}.${kk}`, `unknown gaze key field "${kk}" — ignored.${suggest(kk, [...knownGaze])}`);
+        }
+      });
+      const first = (g.keys as unknown[])[0];
+      if (loop && isObj(first) && isNum((first as Record<string, unknown>).t) && ((first as Record<string, unknown>).t as number) > 0.1) {
+        iss.warn('gaze.keys', `loop=true but the first gaze key is at t=${(first as Record<string, unknown>).t} — between the seam and that key the eyes fall back to idle wander each cycle. Put a key at t=0 (matching the last key) for a stable loop.`);
+      }
+    }
+  }
+
   // lookAt
+  if (m.lookAt !== undefined && m.gaze !== undefined) {
+    iss.warn('lookAt', 'both "gaze" and legacy "lookAt" are present — lookAt is ignored. Remove it.');
+  }
   if (m.lookAt !== undefined) {
     const l = m.lookAt as unknown as Record<string, unknown>;
     if (!isObj(l)) iss.err('lookAt', 'expected { "mode": "cursor"|"camera"|"fixed"|"off", "point"?: [x,y,z], "strength"?: 0..1 }.');
@@ -247,13 +461,56 @@ export function validateMotion(raw: unknown): ValidationResult {
     }
   }
 
+  // microEvents (INF-4 — timed prop attach/detach executed at clip-local time)
   if (m.microEvents !== undefined) {
-    iss.warn('microEvents', 'accepted but not executed yet (Motion Director lands in 0.9).');
+    if (!Array.isArray(m.microEvents)) {
+      iss.err('microEvents', 'expected an array of { "t": seconds, "action": "attach"|"detach", "prop": id, "bone"?, "grip"? }.');
+    } else {
+      const knownBones = new Set(['rightHand', 'leftHand', 'head']);
+      m.microEvents.forEach((ev, i) => {
+        const epath = `microEvents[${i}]`;
+        if (!isObj(ev)) { iss.err(epath, `expected an object, got ${JSON.stringify(ev)}.`); return; }
+        const e = ev as Record<string, unknown>;
+        if (!isNum(e.t)) iss.err(`${epath}.t`, `required: clip-local time in seconds, got ${JSON.stringify(e.t)}.`);
+        else if ((e.t as number) < 0 || (e.t as number) > duration) iss.err(`${epath}.t`, `time ${e.t} is outside 0..duration (${duration}).`);
+        if (e.action !== 'attach' && e.action !== 'detach') iss.err(`${epath}.action`, `must be "attach" or "detach", got ${JSON.stringify(e.action)}.`);
+        if (typeof e.prop !== 'string' || e.prop.length === 0) iss.err(`${epath}.prop`, 'required: a prop id string (e.g. "cup").');
+        if (e.bone !== undefined && !knownBones.has(e.bone as string)) {
+          iss.err(`${epath}.bone`, `must be one of ${[...knownBones].join(', ')}, got ${JSON.stringify(e.bone)}.${suggest(String(e.bone), [...knownBones])}`);
+        }
+        if (e.grip !== undefined) {
+          if (e.action === 'detach') iss.warn(`${epath}.grip`, 'grip is ignored for a detach event.');
+          const g = e.grip as Record<string, unknown>;
+          if (!isObj(g)) iss.err(`${epath}.grip`, 'expected { "position": [x,y,z], "rotation": [x,y,z], "scale"?: number }.');
+          else {
+            checkV3(iss, `${epath}.grip.position`, g.position, 'position');
+            checkV3(iss, `${epath}.grip.rotation`, g.rotation, 'euler');
+            if (g.scale !== undefined && (!isNum(g.scale) || (g.scale as number) <= 0)) iss.err(`${epath}.grip.scale`, `must be a number > 0, got ${JSON.stringify(g.scale)}.`);
+          }
+        }
+        const knownEv = new Set(['t', 'action', 'prop', 'bone', 'grip']);
+        for (const k of Object.keys(e)) {
+          if (!knownEv.has(k)) iss.warn(`${epath}.${k}`, `unknown microEvent field "${k}" — ignored.${suggest(k, [...knownEv])}`);
+        }
+      });
+      // Sanity: events should be time-ordered, and a detach should follow an
+      // attach of the same prop (so nothing is left attached at clip end).
+      const held = new Map<string, number>();
+      let prevT = -Infinity;
+      (m.microEvents as unknown as Record<string, unknown>[]).forEach((e, i) => {
+        if (isNum(e.t)) { if ((e.t as number) < prevT) iss.warn(`microEvents[${i}].t`, `events are out of time order (previous at ${prevT}) — they fire in array order; sort by t.`); prevT = e.t as number; }
+        if (typeof e.prop === 'string') {
+          if (e.action === 'attach') held.set(e.prop, i);
+          else if (e.action === 'detach') held.delete(e.prop);
+        }
+      });
+      for (const [prop] of held) iss.warn('microEvents', `prop "${prop}" is attached but never detached — it will be force-returned to its rest when the clip ends/swaps, but author an explicit detach for a clean placement.`);
+    }
   }
 
   // Anything we don't know about is probably a typo — surface it.
   const knownTop = new Set(['schema', 'id', 'label', 'notes', 'category', 'tags', 'posture', 'duration', 'loop',
-    'fadeIn', 'fadeOut', 'hands', 'tracks', 'oscillators', 'expressions', 'lookAt', 'microEvents']);
+    'fadeIn', 'fadeOut', 'hands', 'tracks', 'hipsTrack', 'rootMotion', 'oscillators', 'expressions', 'exprCues', 'gaze', 'lookAt', 'microEvents']);
   for (const k of Object.keys(m)) {
     if (!knownTop.has(k)) iss.warn(k, `unknown top-level field "${k}" — ignored.${suggest(k, [...knownTop])}`);
   }

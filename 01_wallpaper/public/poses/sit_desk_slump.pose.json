@@ -1,0 +1,19 @@
+{
+  "schema": "pose/1",
+  "id": "sit_desk_slump",
+  "label": "座り・机に突っ伏し（睡眠）",
+  "notes": "sleep_desk の土台。sit_pc_neutral から派生: 上体を深く前傾させ机に突っ伏す（+x=前傾=机方向+zへ倒れる、試験Aで確認済みの座標系）。spine を主に大きく折り、chest で追従。頭は横を向けて頬を伏せる（head y で横向き＋z で傾け）。脚は neutral と同じ着座。⚠ 腕（机の上で枕にする前腕）は未確定 — sleep_desk モーション著作時(Phase1 W3)に track/hand で付与する。Phase0 試験A 検証済み(2026-06-12): 深い前傾で背側スカートのめくれ無し・腰で破綻無し、頭/上体が机面付近まで降りて『突っ伏し』として成立。採用構図 monitor_side では机が下半身を遮蔽。",
+  "hipsOffset": [0, -0.2, 0.04],
+  "bones": {
+    "spine": [0.55, 0, 0],
+    "chest": [0.33, 0, 0],
+    "neck": [0.12, -0.15, 0],
+    "head": [0.05, 0.5, 0.32],
+    "leftUpperLeg": [1.4, 0, 0.04],
+    "rightUpperLeg": [1.4, 0, -0.04],
+    "leftLowerLeg": [-1.5, 0, 0],
+    "rightLowerLeg": [-1.5, 0, 0],
+    "leftFoot": [0.1, 0, 0],
+    "rightFoot": [0.1, 0, 0]
+  }
+}

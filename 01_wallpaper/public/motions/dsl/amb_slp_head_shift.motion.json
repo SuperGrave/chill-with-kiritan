@@ -1,0 +1,41 @@
+{
+  "schema": "motion/1",
+  "id": "amb_slp_head_shift",
+  "label": "Ambient: 寝たまま頭の向きを変える",
+  "notes": "sleep_desk Ambient（12原則準拠改修済 2026-06-13）。突っ伏したまま頬の当たる向きをもぞっと反対へ替えて落ち着く。②フォロースルー: 向きを変える時に僅かに行き過ぎ→settle、neck が head をリード、戻りも同様。④副次: 頭の移動に肩が連れて動く。睡眠なので予備動作は無く緩慢。目は閉じたまま。oneshot。posture=sit_desk_slump。",
+  "category": "ambient",
+  "tags": ["mode:sleep_desk", "family:special"],
+  "posture": "sit_desk_slump",
+  "duration": 5.8,
+  "loop": false,
+  "fadeIn": 0.7,
+  "fadeOut": 0.8,
+  "tracks": {
+    "head": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 2.0, "e": [0.04, -0.9, -0.2], "ease": "sineInOut" },
+      { "t": 2.6, "e": [0.04, -0.82, -0.17], "ease": "easeOut" },
+      { "t": 3.8, "e": [0.04, -0.82, -0.17] },
+      { "t": 5.2, "e": [0.006, -0.06, -0.012], "ease": "sineInOut" },
+      { "t": 5.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "neck": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.8, "e": [0, -0.22, 0], "ease": "sineInOut" },
+      { "t": 3.8, "e": [0, -0.2, 0] },
+      { "t": 5.0, "e": [0, -0.02, 0], "ease": "sineInOut" },
+      { "t": 5.8, "e": [0, 0, 0] }
+    ] },
+    "leftShoulder": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 2.2, "e": [0, 0, -0.045], "ease": "sineInOut" },
+      { "t": 3.8, "e": [0, 0, -0.045] },
+      { "t": 5.4, "e": [0, 0, 0], "ease": "easeOut" },
+      { "t": 5.8, "e": [0, 0, 0] }
+    ] }
+  },
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "blink": 1.0 }, "fade": 0.5 },
+    { "t": 5.8, "set": { "blink": 1.0 }, "fade": 0.5 }
+  ] }
+}

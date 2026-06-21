@@ -1,0 +1,62 @@
+{
+  "schema": "motion/1",
+  "id": "tr_sit_to_stand",
+  "label": "遷移: 座り→立ち上がる",
+  "notes": "INF-3 検証用＆away/起床の土台。posture=sit_pc_neutral から、hipsTrack で腰を座面(-0.2)→立ち(0)へ上げつつ前へ送り、脚トラックが posture の折り(upperLeg +1.4 / lowerLeg -1.5 / foot 0.1)を打ち消して伸展、体幹は一度前傾して反動をつけてから直立。loop:false で最後＝立ちポーズを保持。最終状態は『立ち(脚伸展・hips=rest)』。検証: samplePose で hipsOffset が -0.2→0 へ動くこと、captureSet[0,0.6,1.2,1.8] で腰が上がっていくこと。",
+  "category": "transition",
+  "tags": ["mode:away_room", "family:special"],
+  "posture": "sit_pc_neutral",
+  "duration": 1.8,
+  "loop": false,
+  "fadeIn": 0.3,
+  "fadeOut": 0.3,
+  "hipsTrack": {
+    "keys": [
+      { "t": 0.0, "p": [0, -0.2, 0.05] },
+      { "t": 0.6, "p": [0, -0.19, 0.13] },
+      { "t": 1.2, "p": [0, -0.08, 0.06], "ease": "easeIn" },
+      { "t": 1.8, "p": [0, 0, 0], "ease": "easeOut" }
+    ]
+  },
+  "tracks": {
+    "spine": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.6, "e": [0.28, 0, 0] },
+      { "t": 1.2, "e": [0.12, 0, 0] },
+      { "t": 1.8, "e": [-0.06, 0, 0], "ease": "easeOut" }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.6, "e": [0.12, 0, 0] },
+      { "t": 1.8, "e": [-0.02, 0, 0] }
+    ] },
+    "leftUpperLeg": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.6, "e": [0.12, 0, 0] },
+      { "t": 1.8, "e": [-1.4, 0, -0.04], "ease": "cubicInOut" }
+    ] },
+    "rightUpperLeg": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.6, "e": [0.12, 0, 0] },
+      { "t": 1.8, "e": [-1.4, 0, 0.04], "ease": "cubicInOut" }
+    ] },
+    "leftLowerLeg": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.6, "e": [-0.1, 0, 0] },
+      { "t": 1.8, "e": [1.5, 0, 0], "ease": "cubicInOut" }
+    ] },
+    "rightLowerLeg": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.6, "e": [-0.1, 0, 0] },
+      { "t": 1.8, "e": [1.5, 0, 0], "ease": "cubicInOut" }
+    ] },
+    "leftFoot": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.8, "e": [-0.1, 0, 0] }
+    ] },
+    "rightFoot": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.8, "e": [-0.1, 0, 0] }
+    ] }
+  }
+}

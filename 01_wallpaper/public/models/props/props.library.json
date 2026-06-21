@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "_about": "Small-prop library (Prop Library 0.9). Motion-use desk items keyed by Director PropId (cup/phone/controller/book/headphones/snack_plate; see src/lib/motion/director/types.ts). Each entry loads as a normal SceneProp at its desk REST position (bottom sitting on the desk top y=0.73, horizontally centered on its `anchor` slot, scale baked to real-world size). `anchor` (desk_left/center/right) is the semantic rest slot the Motion Director 0.9 will use. INF-4(2026-06-13): hand/head attach mechanism is implemented (src/lib/scene/propAttach.ts; Lab __motionLab.attachProp/detachProp); per-item `attach.hand_r/hand_l/head` carries the bone-local grip offset. cup.attach.hand_r is PROVISIONAL (mechanism-verified at scale 1, follows the hand, returns to rest) — finalize the exact drink grip when authoring amb_work_sip. Per-item visibility persists in localStorage (props.itemSelection.v1). Every entry's license is also in ASSET_CREDITS.md.",
+  "deskTopY": 0.73,
+  "items": [
+    {
+      "id": "cup",
+      "label": "マグカップ",
+      "url": "/models/props/items/cup.glb",
+      "scale": 0.03967,
+      "position": [
+        0.52,
+        0.73,
+        0.2863
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "anchor": "desk_right",
+      "defaultOn": true,
+      "author": "mehreen1919",
+      "license": "CC-BY 3.0",
+      "source": "https://poly.pizza/m/Oee3tsmiKC",
+      "attribution": "Coffee Mug by mehreen1919 [CC-BY] via Poly Pizza",
+      "attach": {
+        "hand_r": { "position": [0.03, 0, 0], "rotation": [0, 0, 0] },
+        "hand_l": { "position": [-0.03, -0.02, 0.0], "rotation": [0, 0, 0.2] }
+      }
+    },
+    {
+      "id": "phone",
+      "label": "スマホ",
+      "url": "/models/props/items/phone.glb",
+      "scale": 0.66578,
+      "position": [
+        0.63,
+        0.73,
+        0.14
+      ],
+      "rotation": [
+        0,
+        0.6,
+        0
+      ],
+      "anchor": "desk_right",
+      "defaultOn": true,
+      "author": "smallbigsquare",
+      "license": "CC0 1.0",
+      "source": "https://poly.pizza/m/4DRZmTs3jq"
+    },
+    {
+      "id": "controller",
+      "label": "コントローラー",
+      "url": "/models/props/items/controller.glb",
+      "scale": 0.02069,
+      "position": [
+        0.5965,
+        0.7229,
+        0.4998
+      ],
+      "rotation": [
+        0,
+        3.14,
+        0
+      ],
+      "anchor": "desk_right",
+      "author": "Ginsta",
+      "license": "CC-BY 3.0",
+      "source": "https://poly.pizza/m/fCyA3Ug79X",
+      "attribution": "Low Poly Controller by Ginsta [CC-BY] via Poly Pizza"
+    },
+    {
+      "id": "book",
+      "label": "本（開）",
+      "url": "/models/props/items/book.glb",
+      "scale": 0.23976,
+      "position": [
+        -0.5,
+        0.7511,
+        0.28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "anchor": "desk_left",
+      "author": "Quaternius",
+      "license": "CC0 1.0",
+      "source": "https://poly.pizza/m/1A07aI9j2d"
+    },
+    {
+      "id": "headphones",
+      "label": "ヘッドホン",
+      "url": "/models/props/items/headphones.glb",
+      "scale": 0.17767,
+      "position": [
+        -0.6214,
+        0.7363,
+        0.52
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "anchor": "desk_left",
+      "author": "J-Toastie",
+      "license": "CC-BY 3.0",
+      "source": "https://poly.pizza/m/EwlPidEswV",
+      "attribution": "Headphones by J-Toastie [CC-BY] via Poly Pizza"
+    },
+    {
+      "id": "snack_plate",
+      "label": "おやつ皿",
+      "url": "/models/props/items/snack_plate.glb",
+      "scale": 0.48711,
+      "position": [
+        0.1208,
+        0.7271,
+        0.1475
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "anchor": "desk_center",
+      "author": "J-Toastie",
+      "license": "CC-BY 3.0",
+      "source": "https://poly.pizza/m/qBWsdUilNU",
+      "attribution": "Plate With Food by J-Toastie [CC-BY] via Poly Pizza"
+    }
+  ]
+}

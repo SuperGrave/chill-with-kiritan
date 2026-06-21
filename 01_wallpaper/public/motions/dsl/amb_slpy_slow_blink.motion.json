@@ -1,0 +1,38 @@
+{
+  "schema": "motion/1",
+  "id": "amb_slpy_slow_blink",
+  "label": "Ambient: 重いまばたき",
+  "notes": "work_sleepy Ambient（12原則準拠改修済 2026-06-13）。瞼が重く、ゆっくり半分閉じては薄く開く明滅。②重なり/④副次: 瞼が重くなる瞬間に頭が僅かに沈み＋傾き(eye-heavy に顔が連動)、胸はゆっくり眠い呼吸で沈む。体はほぼ不動・表情主体。oneshot。posture=sit_pc_neutral。",
+  "category": "ambient",
+  "tags": ["mode:work_sleepy", "family:A"],
+  "posture": "sit_pc_neutral",
+  "duration": 6.0,
+  "loop": false,
+  "fadeIn": 0.5,
+  "fadeOut": 0.6,
+  "tracks": {
+    "head": { "keys": [
+      { "t": 0.0, "e": [0.1, 0, 0] },
+      { "t": 1.3, "e": [0.14, 0, 0.025], "ease": "sineInOut" },
+      { "t": 2.3, "e": [0.1, 0, 0.005], "ease": "sineInOut" },
+      { "t": 3.7, "e": [0.155, 0, 0.03], "ease": "sineInOut" },
+      { "t": 4.7, "e": [0.1, 0, 0], "ease": "sineInOut" },
+      { "t": 6.0, "e": [0.1, 0, 0] }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.5, "e": [-0.025, 0, 0], "ease": "sineInOut" },
+      { "t": 3.0, "e": [0, 0, 0] },
+      { "t": 4.5, "e": [-0.025, 0, 0], "ease": "sineInOut" },
+      { "t": 6.0, "e": [0, 0, 0] }
+    ] }
+  },
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "blink": 0.35, "sorrow": 0.1 }, "fade": 0.5 },
+    { "t": 1.2, "set": { "blink": 0.75, "sorrow": 0.12 }, "fade": 0.9 },
+    { "t": 2.2, "set": { "blink": 0.3, "sorrow": 0.1 }, "fade": 0.7 },
+    { "t": 3.6, "set": { "blink": 0.8, "sorrow": 0.12 }, "fade": 1.0 },
+    { "t": 4.6, "set": { "blink": 0.35, "sorrow": 0.1 }, "fade": 0.7 },
+    { "t": 6.0, "set": { "blink": 0.45, "sorrow": 0.1 }, "fade": 0.6 }
+  ] }
+}

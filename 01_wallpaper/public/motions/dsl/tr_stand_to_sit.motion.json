@@ -1,0 +1,62 @@
+{
+  "schema": "motion/1",
+  "id": "tr_stand_to_sit",
+  "label": "遷移: 立ち→椅子に座る",
+  "notes": "tr_sit_to_stand の逆。帰還して椅子前に立った状態(脚伸展・hips=0)から、PC正対の着座(sit_pc_neutral・offset0・hips-0.2)へ下ろす。posture=sit_pc_neutral を使い、t0 では offset で脚を伸ばし腰を上げて『立ち』に見せ、終端で offset=0＝純sit。終端=loop_work_normal / tr_stand_to_sit後の各座りLoop開始姿勢に一致。12原則: ①予備動作=座る前にわずかに前傾し膝を曲げ始める ②腰を後ろ下へ送りながら下降 ③着座時に座面で僅かに沈んでsettle(overshoot) ④上体は降下中前傾→着座後に起きる(フォロースルー)。loop:false。",
+  "category": "transition",
+  "tags": ["mode:work_normal", "family:A"],
+  "posture": "sit_pc_neutral",
+  "duration": 1.8,
+  "loop": false,
+  "fadeIn": 0.3,
+  "fadeOut": 0.3,
+  "hipsTrack": {
+    "keys": [
+      { "t": 0.0, "p": [0, 0, 0] },
+      { "t": 0.5, "p": [0, -0.05, 0.11], "ease": "easeIn" },
+      { "t": 1.3, "p": [0, -0.215, 0.08], "ease": "sineInOut" },
+      { "t": 1.8, "p": [0, -0.2, 0.05], "ease": "easeOut" }
+    ]
+  },
+  "tracks": {
+    "spine": { "keys": [
+      { "t": 0.0, "e": [-0.06, 0, 0] },
+      { "t": 0.55, "e": [0.22, 0, 0], "ease": "easeIn" },
+      { "t": 1.3, "e": [0.12, 0, 0], "ease": "sineInOut" },
+      { "t": 1.8, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [-0.02, 0, 0] },
+      { "t": 0.55, "e": [0.12, 0, 0], "ease": "easeIn" },
+      { "t": 1.8, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] },
+    "leftUpperLeg": { "keys": [
+      { "t": 0.0, "e": [-1.4, 0, -0.04] },
+      { "t": 0.6, "e": [-1.2, 0, -0.04], "ease": "easeIn" },
+      { "t": 1.8, "e": [0, 0, 0], "ease": "cubicInOut" }
+    ] },
+    "rightUpperLeg": { "keys": [
+      { "t": 0.0, "e": [-1.4, 0, 0.04] },
+      { "t": 0.6, "e": [-1.2, 0, 0.04], "ease": "easeIn" },
+      { "t": 1.8, "e": [0, 0, 0], "ease": "cubicInOut" }
+    ] },
+    "leftLowerLeg": { "keys": [
+      { "t": 0.0, "e": [1.5, 0, 0] },
+      { "t": 0.6, "e": [1.3, 0, 0], "ease": "easeIn" },
+      { "t": 1.8, "e": [0, 0, 0], "ease": "cubicInOut" }
+    ] },
+    "rightLowerLeg": { "keys": [
+      { "t": 0.0, "e": [1.5, 0, 0] },
+      { "t": 0.6, "e": [1.3, 0, 0], "ease": "easeIn" },
+      { "t": 1.8, "e": [0, 0, 0], "ease": "cubicInOut" }
+    ] },
+    "leftFoot": { "keys": [
+      { "t": 0.0, "e": [-0.1, 0, 0] },
+      { "t": 1.8, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] },
+    "rightFoot": { "keys": [
+      { "t": 0.0, "e": [-0.1, 0, 0] },
+      { "t": 1.8, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] }
+  }
+}

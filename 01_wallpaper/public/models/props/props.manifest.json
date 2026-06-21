@@ -1,7 +1,7 @@
 {
   "version": 1,
   "activeSet": "basic",
-  "_about": "Prop asset set registry (Premium Props Preparation Pack 0.7). 'basic' = the bundled CC0 Kenney GLBs (currently at public/models/props/*.glb, NOT moved into a basic/ subfolder so scene.json paths keep working). 'premium' = upgraded models the user supplies later (null = slot declared but no asset provided yet; the loader falls back to a placeholder box at runtime). Reading this manifest AT RUNTIME is intentionally NOT implemented in 0.7 (this phase is preparation only) — scene.json still drives prop loading. Validate this file with: npm run check:props. Record every asset's license in ASSET_CREDITS.md.",
+  "_about": "Prop asset set registry (Premium Props Preparation Pack 0.7). 'basic' = the bundled CC0 Kenney GLBs (currently at public/models/props/*.glb, NOT moved into a basic/ subfolder so scene.json paths keep working). 'premium' = upgraded models the user supplies later (null = slot declared but no asset provided yet; the loader falls back to a placeholder box at runtime). Reading this manifest AT RUNTIME is intentionally NOT implemented in 0.7 (this phase is preparation only) — scene.json still drives prop loading. NOTE (0.8): runtime per-slot model swapping now exists via the SEPARATE props.variants.json registry (desk/chair/laptop alternatives under variants/, selectable in the app panel); this manifest remains the basic/premium set ledger only. Validate this file with: npm run check:props. Record every asset's license in ASSET_CREDITS.md.",
   "slots": {
     "priorityA": ["desk", "chair", "laptop", "monitor", "keyboard", "mouse"],
     "priorityB": ["mug", "book", "notebook", "desk_lamp", "speaker", "smartphone", "pen_stand", "plant"]

@@ -1,0 +1,94 @@
+{
+  "schema": "motion/1",
+  "id": "amb_work_sip",
+  "label": "Ambient: 一口飲む（カップ）",
+  "notes": "work_normal の一口飲むAmbient（INF-4 cup attach/detach 実演）。posture=sit_pc_neutral。左手（カップは desk_right=画面右=本人の左 にrest）で取る→口元→一口→机へ戻す。microEvents: t2.0 でカップを leftHand へ attach（手がカップ位置に到達した瞬間）、t6.0 で机へ detach。grip は暫定インライン値（Labで最終調整しlibrary cup.attach.hand_l へ反映）。12原則: ①予備動作=取る前に視線をカップへ送り腕を僅かに引く ②弧=reach/lift に中間キー ③肩→肘→手首の時間差 ④オーバーシュート=持ち上げ終端を僅かに越えてsettle、戻りも ⑤副次=上体が僅かに前後 ⑥飲んだ後に小さな満足(small_smile)と一拍の間。loop:false で終端=rest。",
+  "category": "ambient",
+  "tags": ["mode:work_normal", "family:A", "prop:cup"],
+  "posture": "sit_pc_neutral",
+  "duration": 7.0,
+  "loop": false,
+  "fadeIn": 0.5,
+  "fadeOut": 0.6,
+  "hands": { "left": "cup_grip" },
+  "tracks": {
+    "leftUpperArm": { "keys": [
+      { "t": 0.0, "e": [0, 0, 1.2] },
+      { "t": 0.4, "e": [-0.02, 0.04, 1.23], "ease": "easeOut" },
+      { "t": 1.2, "e": [0.1, -0.42, 1.0], "ease": "sineInOut" },
+      { "t": 1.9, "e": [0.16, -0.64, 0.92], "ease": "easeOut" },
+      { "t": 2.3, "e": [0.16, -0.64, 0.92] },
+      { "t": 3.4, "e": [0.08, -0.52, 0.06], "ease": "sineInOut" },
+      { "t": 3.7, "e": [0.06, -0.6, -0.03], "ease": "easeOut" },
+      { "t": 4.3, "e": [0.07, -0.56, 0.0], "ease": "sineInOut" },
+      { "t": 5.0, "e": [0.15, -0.6, 0.66], "ease": "sineInOut" },
+      { "t": 5.8, "e": [0.16, -0.64, 0.92], "ease": "easeIn" },
+      { "t": 6.0, "e": [0.16, -0.64, 0.92] },
+      { "t": 6.6, "e": [-0.02, 0.03, 1.22], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 1.2], "ease": "easeOut" }
+    ] },
+    "leftLowerArm": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.4, "e": [0, 0.04, 0.03], "ease": "easeOut" },
+      { "t": 1.2, "e": [0, -0.22, -0.18], "ease": "sineInOut" },
+      { "t": 1.9, "e": [0, -0.34, -0.3], "ease": "easeOut" },
+      { "t": 2.3, "e": [0, -0.34, -0.3] },
+      { "t": 3.4, "e": [0, -1.25, -0.92], "ease": "sineInOut" },
+      { "t": 3.7, "e": [0, -1.45, -1.05], "ease": "easeOut" },
+      { "t": 4.3, "e": [0, -1.38, -1.0], "ease": "sineInOut" },
+      { "t": 5.0, "e": [0, -0.7, -0.58], "ease": "sineInOut" },
+      { "t": 5.8, "e": [0, -0.34, -0.3], "ease": "easeIn" },
+      { "t": 6.0, "e": [0, -0.34, -0.3] },
+      { "t": 6.6, "e": [0, -0.1, -0.08], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "easeOut" }
+    ] },
+    "leftHand": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 3.5, "e": [0, 0, -0.15], "ease": "sineInOut" },
+      { "t": 3.9, "e": [0, 0, -0.3], "ease": "sineInOut" },
+      { "t": 4.3, "e": [0, 0, -0.3] },
+      { "t": 5.0, "e": [0, 0, 0], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0] }
+    ] },
+    "spine": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 1.5, "e": [0.06, 0, 0], "ease": "sineInOut" },
+      { "t": 2.5, "e": [0.03, 0, 0], "ease": "sineInOut" },
+      { "t": 4.0, "e": [-0.02, 0, 0], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] },
+    "neck": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.5, "e": [0.03, 0.06, 0], "ease": "easeOut" },
+      { "t": 2.2, "e": [0.05, 0.05, 0], "ease": "sineInOut" },
+      { "t": 3.5, "e": [0.08, 0.12, 0.02], "ease": "sineInOut" },
+      { "t": 3.9, "e": [0.02, 0.14, 0.03], "ease": "easeOut" },
+      { "t": 4.4, "e": [0.0, 0.1, 0.02], "ease": "sineInOut" },
+      { "t": 4.8, "e": [0, 0, 0], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0] }
+    ] },
+    "head": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.5, "e": [0.02, 0.08, 0.02], "ease": "easeOut" },
+      { "t": 2.2, "e": [0.04, 0.06, 0.01], "ease": "sineInOut" },
+      { "t": 3.5, "e": [0.09, 0.22, 0.05], "ease": "sineInOut" },
+      { "t": 3.9, "e": [0.05, 0.31, 0.08], "ease": "easeOut" },
+      { "t": 4.3, "e": [0.03, 0.27, 0.07], "ease": "sineInOut" },
+      { "t": 4.8, "e": [0, 0, 0], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0] }
+    ] }
+  },
+  "exprCues": [
+    { "preset": "small_smile", "at": 4.7, "intensity": 0.5, "fadeIn": 0.3, "hold": 0.6, "fadeOut": 0.6 }
+  ],
+  "gaze": { "keys": [
+    { "t": 0.0, "to": "front" },
+    { "t": 0.45, "to": "down_right", "move": 0.3 },
+    { "t": 3.4, "to": "down", "move": 0.3 },
+    { "t": 4.7, "to": "front", "move": 0.35 }
+  ] },
+  "microEvents": [
+    { "t": 2.0, "action": "attach", "prop": "cup", "bone": "leftHand", "grip": { "position": [-0.03, -0.02, 0.0], "rotation": [0, 0, 0.2] } },
+    { "t": 6.0, "action": "detach", "prop": "cup" }
+  ]
+}

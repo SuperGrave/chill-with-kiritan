@@ -141,6 +141,10 @@ __motionLab.thaw(); __motionLab.setPropsVisible(true);
 ## 5. DSLスキーマ要約
 
 実証済みの完全な実例: **`public/motions/dsl/test_stretch.motion.json`（伸びをする12秒ループ）** — まずこれを読むのが早い。軸検証用: `_axis_probe.motion.json`。
+人間味付けの3アプローチ実例（2026-06-12、同じ「伸び」をそれぞれ別の手法で制作）:
+- `stretch_principles` — DSL無変更のキーフレーム芸（予備動作/左右非対称/関節カスケード/オーバーシュート/指トラック直書き）
+- `stretch_noise` — test_stretch のキーを変えずノイズオシレータだけ重ねたレトロフィット
+- `stretch_spring` — `tools/bake_spring_motion.mjs`（バネ・ダンパー物理）が生成した密キー。**手編集禁止**、.mjs の events/ω/ζ を直して再ベイク
 
 ```jsonc
 // <id>.motion.json
@@ -152,7 +156,8 @@ __motionLab.thaw(); __motionLab.setPropsVisible(true);
   "tags": ["calm"],
   "posture": "stand_relaxed",          // poses/<id>.pose.json 参照（省略可）
   "duration": 12, "loop": true,
-  "fadeIn": 1.0, "fadeOut": 1.0,
+  "fadeIn": 1.0, "fadeOut": 1.0,    // 0.7.2からランタイムのクロスフェード実時間として実効
+
   "hands": { "left": "relax", "right": "relax" },   // poses/hands/ 参照（省略可）
   "tracks": {
     "head": { "keys": [
@@ -162,22 +167,55 @@ __motionLab.thaw(); __motionLab.setPropsVisible(true);
     ] }
   },
   "oscillators": [                      // ループ安全な周期揺らぎ（呼吸など）
-    { "bone": "chest", "axis": "x", "amp": 0.03, "period": 4.0 }
+    { "bone": "chest", "axis": "x", "amp": 0.03, "period": 4.0 },
     // loop時: duration が period の整数倍であること（validatorが警告する）
+    // 0.7.1拡張（後方互換）: kind:"noise" = 決定的バリューノイズ（生体ゆらぎ・筋緊張tremor用）。
+    //   loop時は格子がdurationにラップされ継ぎ目は常に厳密一致（period整除は不要）。
+    //   window:[t0,t1] = 時間窓。窓外ゼロ、attack/release秒のsmoothstepで出入り（既定0.4）。
+    //   seed = ノイズチャンネルの非相関化（phaseはnoiseでは無視）。
+    //   実例: ピーク保持中だけ腕を約5Hzで震わせる（人間の伸びの筋緊張）
+    { "bone": "leftUpperArm", "axis": "z", "amp": 0.014, "period": 0.19,
+      "kind": "noise", "window": [4.5, 7.2], "attack": 0.5, "seed": 1 }
   ],
-  "expressions": { "keys": [            // キーは「t時点で到達する完全な状態」
-    { "t": 0, "set": {} },              // {} = 真顔
-    { "t": 4.5, "set": { "blink": 0.75, "fun": 0.2 }, "fade": 1.2 },  // fade秒かけてtで到達
-    { "t": 11.8, "set": {}, "fade": 1.5 }
-  ] },
-  "lookAt": { "mode": "camera", "strength": 0.8 }   // cursor|camera|fixed|off
+  "exprCues": [                         // ★0.2: 表情はこれが本命（プリセット参照）
+    { "preset": "focused_monitor", "at": 0, "intensity": 0.8 },
+    { "preset": "surprised_light", "at": 3.2, "intensity": 0.8 },  // envelopeはプリセット既定
+    { "preset": "smile", "at": 5.0 }                               // intensity省略=1.0
+  ],
+  "gaze": { "keys": [                    // ★0.2: 視線（度数 or 名前。マウス追尾は廃止）
+    { "t": 0, "to": "away_left" },       // 遠くを見る
+    { "t": 3.0, "to": "camera", "move": 0.2 },  // こちらを見る（移動0.2秒のサッカード）
+    { "t": 5.5, "to": "front" }
+  ] }
+  // 旧 "lookAt":{...} も後方互換で動くが、新規は "gaze" を使う
 }
 ```
 
 - easing: `linear / step / sineInOut(既定) / easeIn / easeOut / cubicInOut`
-- 使える表情: `a i u e o blink blinkleft blinkright joy angry sorrow fun`（＋`neutral`=全ゼロ）
+
+### 表情（0.2 で刷新）— 2通りの書き方
+
+1. **`exprCues`（推奨）= 表情プリセットを時間に置くだけ**。`{ "preset": "<id>", "at": 秒 }` が最小形。
+   - `intensity` 0..1（省略=1.0。各プリセットは**1.0が上限**に調整済み）／`fadeIn` `hold` `fadeOut`（省略時はプリセット既定）。
+   - `hold: -1` ＝ モーション終端まで保持。
+   - 使えるプリセット（14種）と作例は **`docs/EXPRESSION_LIST_FOR_MOTION_IDEAS.md`**（別AI／人間に渡すカタログ・画像付き）が正典。
+     `neutral_soft / small_smile / smile / focused_monitor / sleepy / bored / thinking / wry_smile / surprised_light / annoyed / sad_soft / smug / embarrassed / yawn`。
+   - **特殊運用**: `embarrassed` は強度0か1のみ／`yawn` は強度エンベロープであくび1回を表現。
+2. **`expressions.keys`（低レベル）= フル状態を直接**。母音や生morphを細かく当てたい時だけ。
+   使える名: `a i u e o blink blinkleft blinkright joy angry sorrow fun neutral` ＋派生
+   `bikkuri jitome hau nagomi jiro uruuru majime komaru ikari_mayu nikori_mayu mayu_ue mayu_shita niyari nishishi pukuu pukuku omega nn akire mouth_up`。
+   - `exprCues` と併用可（max-blendで合成）。
+   - Labでの目視: `__motionLab.exprPresets()` / `await __motionLab.exprCapture("smile")` / `await __motionLab.exprCapture({ jitome: 0.5 })`。
+
+### 視線（0.2 新規 `gaze`）— マウス追尾は廃止
+
+- `{ "t": 秒, "to": <方向>, "move": 移動秒 }`。`to` は**名前**か `[yawDeg, pitchDeg]`（度数・`+yaw`=画面右/`+pitch`=上）。
+  名前: `front camera up down left right up_left up_right down_left down_right away_left away_right`。
+- キーを置かない間は**待機ワンダー**（自動の小さなきょろきょろ）。最初に1キー置けばそこに固定。
+- `move` 省略=0.25秒の自然なサッカード。`loop=true` は t=0 にも最終キーと同じ方向を置くと継ぎ目が安定。
+- **ランタイム実効**（0.2〜）: `exprCues`/`gaze` は **Lab の show/capture だけでなく play() の本番再生でも効く**（クリップ時刻でサンプルし、クリップweightでフェード）。
 - pose.json: `bones: { ボーン名: [x,y,z] }` ＋ `hipsOffset:[x,y,z]`（座りで使用、m単位）
-- 振幅 > 2.6rad で「度数法では？」警告が出る（ラジアンで書くこと）
+- 振幅 > 2.6rad で「度数法では？」警告が出る（ボーンはラジアン。**ただし gaze は度数**）
 
 ---
 
@@ -190,9 +228,25 @@ __motionLab.thaw(); __motionLab.setPropsVisible(true);
 5. 経過ポーズ問題: 2キー間の直線補間が硬く見えたら**中間キーを1つ足して弧を描く**（test_stretch の t3.3 がその実例）。
 6. SpringBone（髪・スカート・袖）はキャプチャ時 `settle`（既定1.0秒）で馴染ませる。袖が荒ぶって見えたら `settle: 2` で再確認。
 
-## 7. 既知の制約（0.7時点）
+### 6.5 アニメ12原則チェック（micro-motion 必須 — 2026-06-13）
 
-- **ランタイム再生（play/ミキサー経路）はボーン回転のみ**。expressions / lookAt / hipsOffset は Lab の show/capture では効くが、ランタイム適用は Motion Director（0.9）で実装予定。
+壁紙の小動作も**12原則**に則って作る。振幅は小さく（壁紙の落ち着き）、しかし原則は効かせる。oneshot Ambient／Transition は確定前に下記を満たすこと:
+
+1. **Anticipation（予備動作）**: 主動作の前に、逆方向の小さなタメを1キー入れる。例: 頷く前に頭をほんの少し上げる(−x)、右へ回す前に左へ僅かに。振幅は主動作の 10〜20%。
+2. **Follow-through / Overlap（フォロースルー・重なり）**: (a) 終わりで目標を僅かに**オーバーシュート**してから戻して**settle**する（最後にもう1キー）。(b) 連なるボーンは**時間差**で動かす（首が頭を 0.1〜0.15秒リードする／視線が頭をリードする＝『目で見てから顔が向く』）。SpringBone(髪/袖/裾)は物理で自動フォロースルー。
+3. **Arcs（弧）**: 直線軌道は硬い。2キー間に**垂直成分の中間キー**を足して弧にする（§6-5 の経過ポーズ問題）。頷き・首振りも僅かに弧を描かせる。
+4. **Secondary action（副次動作）**: 主動作を支える小さな別ボーンを1つ添える（例: 頭を上げると胸が僅かに開く、笑うと肩が弾む、眠気で頭が落ちると肩も落ちる）。
+5. **Slow in / Slow out**: キーの `ease` を必ず指定（`sineInOut`/`easeIn`/`easeOut`/`cubicInOut`）。瞬発は `easeOut`、タメは `easeIn`。
+6. **Timing / Exaggeration / Staging / Appeal**: 速さで重さと気分を出す（眠い=遅い、驚き=速い）。読めるギリギリまで僅かに誇張。1モーション1主動作で見せ場を明確に。表情で訴求。
+7. **Squash&Stretch / Solid / Pose-to-Pose**: リグに squash は無いので、呼吸や予備の沈み込みで代替。各キーが3Dとして破綻しない（キャプチャ確認）。
+
+検収追加チェック: 「予備動作・オーバーシュート・重なり時間差・弧・副次動作」の5点が入っているか各 oneshot で確認。ループは周期オシレータ＝本質的に slow-in/out＋弧なので①②③は不要だが、**呼吸の位相をボーン間でずらす**(phase)と overlap が出て生きる。
+
+## 7. 既知の制約（0.7→0.2 表情/視線で更新）
+
+- **ランタイム再生で効くもの（0.2〜 / Phase1拡張）**: ボーン回転 ＋ **expressions / exprCues / gaze**（クリップ時刻でサンプル、クリップweightでフェード）＋
+  **`hipsOffset`/`hipsTrack`**（座り・立ち座り、INF-3）＋ **`rootMotion`**（キャラ前進、INF-7。world絶対 `{t,p:[x,y,z],rotY?}`、loop時はnet-zero／across-roomはDirector駆動）＋ **`microEvents`**（prop attach/detach、INF-4。`{t,action,prop,bone?,grip?}` を `action.time` で発火、中断時は自動復旧）。
+  これらはすべて play() 本番再生でも効く（座位ポーズ0.8 / Motion Director 0.9 実装済み）。
 - モデルに `upperChest` / `leftToes` / `rightToes` は無い（`load()` の `missingBones` に出る。使っても安全にスキップされる）。
 - 座りポーズ（hipsOffset）はまだ未制作。椅子との位置合わせ＋スカート貫通の確認が必要（0.8の仕事）。
 - `?lab=1` は本番ビルドでも有効になるが、`/__lab/*`（保存・一覧）はdevサーバ専用。
@@ -211,5 +265,20 @@ __motionLab.thaw(); __motionLab.setPropsVisible(true);
 ## 9. 実績
 
 - 著作実証: `test_stretch`（ブリーフ→執筆→キャプチャ→修正1周→確定、計約15分・キャプチャ12枚）
+- 人間味付け3アプローチ比較（2026-06-12）: `stretch_principles` / `stretch_noise` / `stretch_spring`（§5参照）。
+  比較レポート: `../docs/STRETCH_HUMANIZE_COMPARISON_2026-06-12.md`。ランタイムベイクは30fpsに引き上げ済み（5Hz級tremorのエイリアス防止）。
 - 検証ログ: `.probe_tmp/captures/_axis_probe/`（軸検証）, `.probe_tmp/captures/test_stretch/`
 - パイプライン調査レポート: `../docs/MOTION_PIPELINE_RESEARCH_2026-06-11.md`
+- 注意: ヘッドレスプレビューはタブ非表示で rAF が止まるため `play()` のクロスフェードが進まない（weight が0のまま）。
+  ミキサー経路の確認は clipSource:'dsl' / playing:true まで。動きの目視はユーザーのブラウザで行うこと。
+- 0.7.2 再生遷移の修正（2026-06-12）: ①ミキサー'finished'をコントローラへ通知（oneshot終了で自動的に待機へフェード、playing も false に）
+  ②クリップ差し替えは「現行クリップをフェードアウト→エンベロープ0のフレームでスワップ→フェードイン」のペンディング方式
+  （旧実装は blend=1 のまま瞬間スワップ＝ポーズがテレポートし、SpringBone（髪・袖）が暴れて首がねじれて見えた）
+  ③ DSL の fadeIn/fadeOut がクロスフェード実時間として効くようになった。検証: コントローラ単体のNodeシナリオテスト全PASS。
+- **0.7.2追補 — 最重要の根本原因（同日）**: THREE.PropertyMixer は「ブレンド結果が前フレームと同値」のボーンへの setValue を
+  **スキップ**する。ビューアは mixer.update 後の node.quaternion を「クリップの生値」として読み戻して合成していたため、
+  スキップされたフレームでは**自分が書いた合成値（クリップ×アイドルオフセット）をクリップ値と誤認**→アイドルオフセットが
+  毎フレーム乗算され、1秒で約3rad も背骨・首が曲がった（実測: `.probe_tmp/mixer_skip_test.mjs`、60fps×60frで3.00rad）。
+  同値フレームが発生するのは モーション冒頭の静止区間（=再生開始時）/ oneshot終了後のクランプ保持・停止後のポーズ保持
+  （=再生終了後）/ 中間プラトー。修正: 純クリップ値キャッシュ（VrmViewer.clipPoseRef）を mixer.update 前に復元・後に再キャプチャし、
+  合成はキャッシュからのみ読む。**今後も「mixerが書いた値をノードから読み戻す」設計は禁止**（スキップ最適化に裏切られる）。

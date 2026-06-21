@@ -1,8 +1,11 @@
-mod api;
-mod models;
+pub mod api;
+pub mod models;
+pub mod services;
+pub mod state;
+mod tasks;
 
-use api::SharedState;
 use models::WallpaperState;
+use state::{AppState, Shared};
 use std::sync::{Arc, Mutex};
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -11,19 +14,22 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Shared wallpaper state — owned by Tauri state manager, also cloned for the HTTP server
-    let shared_state: SharedState = Arc::new(Mutex::new(WallpaperState::default()));
-    let state_for_api = Arc::clone(&shared_state);
+    // Load persisted data; the shared state is owned by Tauri and cloned for
+    // the HTTP server + background pollers.
+    let shared: Shared = Arc::new(Mutex::new(AppState::load()));
+    let state_for_api = Arc::clone(&shared);
+    let state_for_tasks = Arc::clone(&shared);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(shared_state)
+        .manage(shared)
         .setup(move |app| {
-            // ── HTTP API server ──────────────────────────────────────────
-            // Runs on Tauri's built-in tokio runtime (multi-thread)
+            // HTTP API server on Tauri's tokio runtime.
             tauri::async_runtime::spawn(api::serve(state_for_api));
+            // Background pollers (weather / news / spotify).
+            tasks::spawn_all(state_for_tasks);
 
-            // ── System tray ──────────────────────────────────────────────
+            // System tray.
             let _tray = TrayIconBuilder::new()
                 .tooltip("Tohoku Companion")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -49,7 +55,7 @@ pub fn run() {
 
             Ok(())
         })
-        // Close button hides to tray instead of quitting
+        // Close button hides to tray instead of quitting.
         .on_window_event(|win, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -61,11 +67,11 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// Tauri command — React frontend can call this directly (alternative to HTTP polling)
+/// Tauri command — React frontend can call this directly (alternative to HTTP).
 #[tauri::command]
-fn get_state_cmd(state: tauri::State<SharedState>) -> Result<WallpaperState, String> {
+fn get_state_cmd(state: tauri::State<Shared>) -> Result<WallpaperState, String> {
     state
         .lock()
-        .map(|s| s.clone())
+        .map(|s| s.state.clone())
         .map_err(|e| e.to_string())
 }

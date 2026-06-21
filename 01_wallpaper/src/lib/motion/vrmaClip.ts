@@ -16,7 +16,6 @@
 // Only normalized-bone `.quaternion` tracks survive and reach the AnimationMixer.
 
 import * as THREE from 'three';
-// @ts-ignore - three example loader has no bundled types in this setup
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip, VRMLookAtQuaternionProxy } from '@pixiv/three-vrm-animation';
 import type { VRM } from '@pixiv/three-vrm';

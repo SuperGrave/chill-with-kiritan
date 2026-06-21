@@ -53,27 +53,27 @@ export interface SceneBackgroundLayerProps {
 // Preload an image url and report whether it resolves. A null/empty url short-
 // circuits to 'missing' with no network request.
 function useImageStatus(url: string | null | undefined): 'loading' | 'ok' | 'missing' {
-  const [status, setStatus] = useState<'loading' | 'ok' | 'missing'>(url ? 'loading' : 'missing');
+  // Result is keyed by url so a stale load from a previous url is ignored. The
+  // no-url and pending states are derived during render, so the effect only
+  // setStates from the async image callbacks (never synchronously on mount).
+  const [resolved, setResolved] = useState<{ url: string; status: 'ok' | 'missing' } | null>(null);
   useEffect(() => {
-    if (!url) {
-      setStatus('missing');
-      return;
-    }
+    if (!url) return;
     let cancelled = false;
-    setStatus('loading');
     const img = new Image();
     img.onload = () => {
-      if (!cancelled) setStatus('ok');
+      if (!cancelled) setResolved({ url, status: 'ok' });
     };
     img.onerror = () => {
-      if (!cancelled) setStatus('missing');
+      if (!cancelled) setResolved({ url, status: 'missing' });
     };
     img.src = url;
     return () => {
       cancelled = true;
     };
   }, [url]);
-  return status;
+  if (!url) return 'missing';
+  return resolved && resolved.url === url ? resolved.status : 'loading';
 }
 
 function layerStyle(url: string, fit: BgFit): CSSProperties {

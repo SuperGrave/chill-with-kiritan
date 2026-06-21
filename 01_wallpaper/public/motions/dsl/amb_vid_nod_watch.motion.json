@@ -1,0 +1,43 @@
+{
+  "schema": "motion/1",
+  "id": "amb_vid_nod_watch",
+  "label": "Ambient: 内容に頷く",
+  "notes": "video_relax Ambient（12原則準拠改修済 2026-06-13）。①予備: 頷く前に頭を僅かに上げてタメ(t0.35 −x)。主動作: うんうんと2回頷く。③弧: 頷きに僅かな z を混ぜ弧に。②フォロースルー: 各頷きで僅かに戻り過ぎ、最後にオーバーシュート→settle、neck が head をリード。④副次: 胸が頷きに微連動。oneshot。posture=sit_pc_slouch。",
+  "category": "ambient",
+  "tags": ["mode:video_relax", "family:A'"],
+  "posture": "sit_pc_slouch",
+  "duration": 3.2,
+  "loop": false,
+  "fadeIn": 0.35,
+  "fadeOut": 0.4,
+  "tracks": {
+    "head": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.35, "e": [-0.04, 0, -0.01], "ease": "easeIn" },
+      { "t": 0.8, "e": [0.13, 0, 0.015], "ease": "easeOut" },
+      { "t": 1.2, "e": [-0.02, 0, 0], "ease": "easeIn" },
+      { "t": 1.65, "e": [0.12, 0, 0.012], "ease": "easeOut" },
+      { "t": 2.1, "e": [-0.01, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0], "ease": "sineInOut" }
+    ] },
+    "neck": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.7, "e": [0.05, 0, 0] },
+      { "t": 1.1, "e": [0, 0, 0] },
+      { "t": 1.55, "e": [0.05, 0, 0] },
+      { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0] }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 0.8, "e": [0.025, 0, 0] },
+      { "t": 1.65, "e": [0.025, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0] }
+    ] }
+  },
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "fun": 0.12 }, "fade": 0.3 },
+    { "t": 1.0, "set": { "fun": 0.2 }, "fade": 0.5 },
+    { "t": 3.2, "set": { "fun": 0.1 }, "fade": 0.6 }
+  ] }
+}

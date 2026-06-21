@@ -1,0 +1,19 @@
+{
+  "schema": "pose/1",
+  "id": "sit_pc_slouch",
+  "label": "座り・後傾（だらけ）",
+  "notes": "A'族（video_relax / snack_break）の土台。sit_pc_neutral から派生: 上体を背もたれへ後傾、脚をやや前へ投げ出した脱力姿勢。spine/chest −x で後傾（−x=反る）、頭は少し前に戻して画面を見る。脚は膝伸ばし気味（lowerLeg を浅く）。Phase0 試験A で sit_pc_neutral と同治具で貫通検証する。腕は触らない。",
+  "hipsOffset": [0, -0.22, 0.08],
+  "bones": {
+    "spine": [-0.12, 0, 0],
+    "chest": [-0.07, 0, 0],
+    "neck": [0.08, 0, 0],
+    "head": [0.06, 0, 0],
+    "leftUpperLeg": [1.2, 0, 0.05],
+    "rightUpperLeg": [1.2, 0, -0.05],
+    "leftLowerLeg": [-1.1, 0, 0],
+    "rightLowerLeg": [-1.1, 0, 0],
+    "leftFoot": [0.18, 0, 0],
+    "rightFoot": [0.18, 0, 0]
+  }
+}

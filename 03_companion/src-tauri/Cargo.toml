@@ -19,10 +19,15 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # HTTP server
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 axum = { version = "0.7", features = ["macros"] }
 tower-http = { version = "0.5", features = ["cors"] }
+
+# Outbound HTTP (weather / news / AI / Spotify). rustls avoids native OpenSSL.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
+dirs = "5"
+base64 = "0.22"

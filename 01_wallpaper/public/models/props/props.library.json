@@ -9,25 +9,24 @@
       "url": "/models/props/items/cup.glb",
       "scale": 0.03967,
       "position": [
-        -0.52,
+        -0.25,
         0.73,
-        0.2863
+        0.17
       ],
       "rotation": [
         0,
         0,
         0
       ],
-      "anchor": "desk_left",
-      "_anchorNote": "Canonical (Stage 2, issue #6/#7): cup rests on the character's RIGHT side (world -x; she faces +Z so her right hand is at world -x). This is what makes the right-hand sip (amb_work_sip) a natural same-side reach instead of a cross-body one.",
+      "anchor": "desk_right",
+      "_anchorNote": "Canonical (Stage 2/5, issue #6/#7/#8/#14): cup rests on the character's RIGHT side (world -x; she faces +Z so her right hand is at world -x), at a position the right hand actually REACHES (measured ~[-0.25,0.79,0.17] at desk height). The far -0.52 spot was beyond arm reach, which caused the old attach to teleport the cup. amb_work_sip grabs it here with the right hand.",
       "defaultOn": true,
       "author": "mehreen1919",
       "license": "CC-BY 3.0",
       "source": "https://poly.pizza/m/Oee3tsmiKC",
       "attribution": "Coffee Mug by mehreen1919 [CC-BY] via Poly Pizza",
       "attach": {
-        "hand_r": { "position": [0.03, 0, 0], "rotation": [0, 0, 0] },
-        "hand_l": { "position": [-0.03, -0.02, 0.0], "rotation": [0, 0, 0.2] }
+        "hand_r": { "position": [0.0, -0.04, 0.02], "rotation": [0, 0, 0] }
       }
     },
     {

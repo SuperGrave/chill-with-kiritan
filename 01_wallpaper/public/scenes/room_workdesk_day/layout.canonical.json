@@ -18,7 +18,7 @@
     "desk":   { "top": 0.73, "center": [0, 0.365, 0.5001], "note": "work surface; keyboard/typing happens here in front of her" },
     "chair":  { "backrestTop": 0.949, "center": [-0.01, 0.4743, -0.3937], "note": "office chair behind/under her; seat surface ~0.45-0.47, backrest behind (-z)" },
     "laptop": { "screenCenter": [0, 0.8928, 0.5001], "screenTop": 1.0556, "base": [0, 0.73, 0.45], "note": "monitor she looks at; keyboard/base is the near (smaller-z) part of the laptop on the desk" },
-    "cupRest":  { "center": [-0.52, 0.7775, 0.30], "bottom": [-0.52, 0.73, 0.2863], "hand": "right", "note": "CANONICAL right-side rest (issue #6/#7). amb_work_sip reaches here with the RIGHT hand (same-side reach)." },
+    "cupRest":  { "center": [-0.25, 0.78, 0.17], "bottom": [-0.25, 0.73, 0.17], "hand": "right", "note": "CANONICAL right-side rest (issue #6/#7/#8). Placed within the right hand's measured reach envelope (~[-0.25,0.79,0.17] at desk height); -0.52 was beyond reach and caused the old cup warp." },
     "phoneRest": { "center": [0.63, 0.7349, 0.14], "note": "left-side rest" }
   },
   "characterIdleBones": {
@@ -32,7 +32,7 @@
     "_note": "derived helpers for pose authoring; verify live with layoutSnapshot() at the frozen pose.",
     "sitHipsWorldY": 0.73,
     "typingHandZone": { "y": [0.74, 0.78], "z": [0.38, 0.46], "x": [-0.16, 0.16], "note": "both hands on the laptop keyboard; right hand can drift to the mouse on the right (-x)" },
-    "cupReachTargetRightHand": [-0.52, 0.78, 0.30],
+    "cupReachTargetRightHand": [-0.25, 0.79, 0.17],
     "reclineBackrestContactZ": -0.20
   },
   "cameraPresets": {

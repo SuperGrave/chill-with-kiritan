@@ -801,6 +801,65 @@ export class MotionLab {
     return s ? { ok: true, ...s } : { ok: true, running: false };
   }
 
+  // ---- canonical layout (Stage 2 — issues #6/#8) -------------------------------------------
+
+  /**
+   * Live world-space layout of the key anchors: where the desk / chair / laptop /
+   * cup / phone actually sit (scene.json + the selected variant + item placement,
+   * all resolved at runtime) plus the character root and current hand/head bone
+   * positions. This is the SINGLE source of truth motions should reach for (issue
+   * #8 — reach the real prop, not a magic number), and the basis for the canonical
+   * layout reference. Read it, then author reach/typing poses against these numbers.
+   */
+  layoutSnapshot(): Record<string, unknown> {
+    const vrm = this.h.getVrm();
+    const scene = this.h.scene;
+    scene.updateMatrixWorld(true);
+    const _v = new THREE.Vector3();
+    const r3v = (v: THREE.Vector3 | null): [number, number, number] | null =>
+      v ? [round4(v.x), round4(v.y), round4(v.z)] : null;
+    const propInfo = (id: string) => {
+      const c = findPropContainer(scene, id);
+      if (!c) return null;
+      const world = c.getWorldPosition(new THREE.Vector3());
+      const scl = c.getWorldScale(new THREE.Vector3());
+      // Visual centre (mesh AABB) — the cup rest a hand must reach is the geometry,
+      // not the container origin (issue #12: rest must match visual & coordinates).
+      const box = new THREE.Box3().setFromObject(c);
+      const ctr = box.getCenter(new THREE.Vector3());
+      const top = box.max.y;
+      return { world: r3v(world), worldScale: round4(scl.x), center: r3v(ctr), top: round4(top) };
+    };
+    const bonePos = (name: string): [number, number, number] | null => {
+      const node = vrm?.humanoid?.getNormalizedBoneNode(name as never);
+      return node ? r3v(node.getWorldPosition(_v.clone())) : null;
+    };
+    const rawBonePos = (name: string): [number, number, number] | null => {
+      const node = (vrm?.humanoid as unknown as { getRawBoneNode?: (n: string) => THREE.Object3D | null })?.getRawBoneNode?.(name);
+      return node ? r3v(node.getWorldPosition(_v.clone())) : null;
+    };
+    return {
+      ok: true,
+      note: 'world-space metres; pose-dependent bone positions reflect the CURRENT frame (idle unless frozen at a pose)',
+      character: vrm ? { root: r3v(vrm.scene.getWorldPosition(new THREE.Vector3())), rotationY: round4(vrm.scene.rotation.y) } : null,
+      bones: {
+        hips: bonePos('hips'),
+        head: bonePos('head'),
+        leftHand: bonePos('leftHand'),
+        rightHand: bonePos('rightHand'),
+      },
+      rawHands: { leftHand: rawBonePos('leftHand'), rightHand: rawBonePos('rightHand') },
+      props: {
+        desk: propInfo('desk'),
+        chair: propInfo('chair'),
+        laptop: propInfo('laptop'),
+        cup: propInfo('item:cup'),
+        phone: propInfo('item:phone'),
+      },
+      camera: r3v(this.h.camera.position),
+    };
+  }
+
   // ---- introspection ----------------------------------------------------------------------------
 
   status(): Record<string, unknown> {
@@ -832,6 +891,7 @@ export class MotionLab {
       '  __motionLab.play("my_motion")                           // live playback through the real mixer path',
       '  await __motionLab.play("amb_work_sip", { settleToContextLoop: true })  // one-shot → its mode loop (issue #1), not the standing idle',
       '  __motionLab.stop(); __motionLab.thaw()                  // back to the normal idle loop',
+      '  __motionLab.layoutSnapshot()                            // live world anchors (desk/chair/laptop/cup/phone + hands) — author reaches against these (issues #6/#8)',
       'Expression presets (Expression Preset System 0.2):',
       '  __motionLab.exprPresets()                               // list preset ids/labels/weights/gaze/flutter',
       '  await __motionLab.exprCapture("small_smile", { intensity: 1 })          // PNG (face close camera)',

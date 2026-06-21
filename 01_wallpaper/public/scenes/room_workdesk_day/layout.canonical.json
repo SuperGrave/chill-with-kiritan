@@ -1,0 +1,42 @@
+{
+  "_about": "CANONICAL LAYOUT (Phase 1 visual-QA, Stage 2 — issues #6/#8/#11). The single documented source of truth for where everything sits, in WORLD metres. This is a REFERENCE/spec, not a file the app loads: the running app resolves the same arrangement at runtime from scene.json + the selected prop variant + the item library (see `sources`), and BOTH the Motion Lab and production use that one path, so they are identical. Read these numbers (or call __motionLab.layoutSnapshot() live) when authoring motions so a hand reaches the REAL prop, not a magic number. Regenerate after any layout change: __motionLab.layoutSnapshot().",
+  "resolvedFrom": {
+    "sceneJson": "public/scenes/room_workdesk_day/scene.json",
+    "variants": "public/models/props/props.variants.json (registry defaults: desk=desk_office_metal, chair=chair_office, laptop=pc_laptop_modern — identical in production where there is no localStorage)",
+    "items": "public/models/props/props.library.json (defaultOn: cup, phone)",
+    "liveAccessor": "window.__motionLab.layoutSnapshot()",
+    "snapshotDate": "2026-06-21"
+  },
+  "world": {
+    "units": "metres",
+    "floorY": 0.0,
+    "facing": "+Z (character vrm.scene.rotation.y = PI). Therefore the character's RIGHT side is world -x (screen-left in the front camera) and her LEFT side is world +x.",
+    "character": { "root": [0, 0, 0], "rotationY": 3.1416 },
+    "deskTopY": 0.73
+  },
+  "anchors": {
+    "desk":   { "top": 0.73, "center": [0, 0.365, 0.5001], "note": "work surface; keyboard/typing happens here in front of her" },
+    "chair":  { "backrestTop": 0.949, "center": [-0.01, 0.4743, -0.3937], "note": "office chair behind/under her; seat surface ~0.45-0.47, backrest behind (-z)" },
+    "laptop": { "screenCenter": [0, 0.8928, 0.5001], "screenTop": 1.0556, "base": [0, 0.73, 0.45], "note": "monitor she looks at; keyboard/base is the near (smaller-z) part of the laptop on the desk" },
+    "cupRest":  { "center": [-0.52, 0.7775, 0.30], "bottom": [-0.52, 0.73, 0.2863], "hand": "right", "note": "CANONICAL right-side rest (issue #6/#7). amb_work_sip reaches here with the RIGHT hand (same-side reach)." },
+    "phoneRest": { "center": [0.63, 0.7349, 0.14], "note": "left-side rest" }
+  },
+  "characterIdleBones": {
+    "_note": "world positions at the STANDING idle rest pose (no posture). Sitting postures lower hips ~0.2 (sit_pc_neutral hipsOffset [0,-0.2,0.05]).",
+    "hips": [0, 0.9311, 0.0276],
+    "head": [-0.0004, 1.2223, -0.003],
+    "leftHand": [0.2061, 0.7958, -0.0129],
+    "rightHand": [-0.2069, 0.7958, -0.0129]
+  },
+  "authoringTargets": {
+    "_note": "derived helpers for pose authoring; verify live with layoutSnapshot() at the frozen pose.",
+    "sitHipsWorldY": 0.73,
+    "typingHandZone": { "y": [0.74, 0.78], "z": [0.38, 0.46], "x": [-0.16, 0.16], "note": "both hands on the laptop keyboard; right hand can drift to the mouse on the right (-x)" },
+    "cupReachTargetRightHand": [-0.52, 0.78, 0.30],
+    "reclineBackrestContactZ": -0.20
+  },
+  "cameraPresets": {
+    "production": { "preset": "monitor_side", "position": [0.4, 0.9, 0.8], "target": [0.0, 1.0, 0.0], "fov": 40 },
+    "labReview": ["desk wide", "face close", "monitor side", "workdesk_front", "workdesk_side", "workdesk_close"]
+  }
+}

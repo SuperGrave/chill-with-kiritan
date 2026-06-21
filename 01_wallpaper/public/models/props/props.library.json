@@ -9,7 +9,7 @@
       "url": "/models/props/items/cup.glb",
       "scale": 0.03967,
       "position": [
-        0.52,
+        -0.52,
         0.73,
         0.2863
       ],
@@ -18,7 +18,8 @@
         0,
         0
       ],
-      "anchor": "desk_right",
+      "anchor": "desk_left",
+      "_anchorNote": "Canonical (Stage 2, issue #6/#7): cup rests on the character's RIGHT side (world -x; she faces +Z so her right hand is at world -x). This is what makes the right-hand sip (amb_work_sip) a natural same-side reach instead of a cross-body one.",
       "defaultOn": true,
       "author": "mehreen1919",
       "license": "CC-BY 3.0",

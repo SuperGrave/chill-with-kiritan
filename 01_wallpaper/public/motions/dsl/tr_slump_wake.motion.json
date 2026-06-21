@@ -11,6 +11,32 @@
   "fadeIn": 0.4,
   "fadeOut": 0.6,
   "tracks": {
+    "leftUpperArm": { "keys": [
+      { "t": 0.0, "e": [0.15, -0.58, 1.42] },
+      { "t": 2.6, "e": [0.15, -0.50, 1.40], "ease": "sineInOut" },
+      { "t": 4.2, "e": [0.15, -0.42, 1.36], "ease": "easeOut" }
+    ] },
+    "rightUpperArm": { "keys": [
+      { "t": 0.0, "e": [0.15, 0.58, -1.42] },
+      { "t": 2.6, "e": [0.15, 0.50, -1.40], "ease": "sineInOut" },
+      { "t": 4.2, "e": [0.15, 0.42, -1.36], "ease": "easeOut" }
+    ] },
+    "leftLowerArm": { "keys": [
+      { "t": 0.0, "e": [0, -1.4, -0.35] },
+      { "t": 4.2, "e": [0, -0.95, -0.72], "ease": "sineInOut" }
+    ] },
+    "rightLowerArm": { "keys": [
+      { "t": 0.0, "e": [0, 1.4, 0.35] },
+      { "t": 4.2, "e": [0, 0.95, 0.72], "ease": "sineInOut" }
+    ] },
+    "leftHand": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 4.2, "e": [0.12, 0, 0], "ease": "sineInOut" }
+    ] },
+    "rightHand": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] },
+      { "t": 4.2, "e": [0.12, 0, 0], "ease": "sineInOut" }
+    ] },
     "spine": { "keys": [
       { "t": 0.0, "e": [0, 0, 0] },
       { "t": 1.2, "e": [-0.08, 0, 0], "ease": "sineInOut" },

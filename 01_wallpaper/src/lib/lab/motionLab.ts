@@ -860,6 +860,53 @@ export class MotionLab {
     };
   }
 
+  // ---- debug overlays (Stage 6/§3.3 review) ---------------------------------------------------
+
+  private gazeMarker: THREE.Mesh | null = null;
+  /** Show/hide a marker at the live gaze target (child of lookAtTarget — it tracks where she looks). */
+  gazeDebug(on: boolean): Record<string, unknown> {
+    if (on && !this.gazeMarker) {
+      this.gazeMarker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.028, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0xff3060, depthTest: false, transparent: true, opacity: 0.85 }),
+      );
+      this.gazeMarker.renderOrder = 999;
+      this.h.lookAtTarget.add(this.gazeMarker);
+    }
+    if (this.gazeMarker) this.gazeMarker.visible = on;
+    if (this.frozen) this.h.renderer.render(this.h.scene, this.h.camera);
+    return { ok: true, gazeDebug: on };
+  }
+
+  private anchorMarkers: THREE.Group | null = null;
+  /** Show/hide markers at the canonical prop rest anchors + hand bones (issue #8 reach check). */
+  anchorDebug(on: boolean): Record<string, unknown> {
+    if (this.anchorMarkers) {
+      this.h.scene.remove(this.anchorMarkers);
+      this.anchorMarkers = null;
+    }
+    if (on) {
+      const grp = new THREE.Group();
+      const snap = this.layoutSnapshot() as { props: Record<string, { center?: number[] } | null>; bones: Record<string, number[] | null> };
+      const dot = (pos: number[] | null | undefined, color: number) => {
+        if (!pos) return;
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), new THREE.MeshBasicMaterial({ color, depthTest: false }));
+        m.renderOrder = 999;
+        m.position.set(pos[0], pos[1], pos[2]);
+        grp.add(m);
+      };
+      dot(snap.props.cup?.center, 0x30a0ff);
+      dot(snap.props.phone?.center, 0x30ffa0);
+      dot(snap.props.laptop?.center, 0xffa030);
+      dot(snap.bones.rightHand, 0xff3060);
+      dot(snap.bones.leftHand, 0xff30c0);
+      this.anchorMarkers = grp;
+      this.h.scene.add(grp);
+    }
+    if (this.frozen) this.h.renderer.render(this.h.scene, this.h.camera);
+    return { ok: true, anchorDebug: on };
+  }
+
   // ---- introspection ----------------------------------------------------------------------------
 
   status(): Record<string, unknown> {

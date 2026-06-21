@@ -38,6 +38,7 @@ import type { LayoutGuides } from './lib/scene/layoutGuides';
 // Motion Lab (Motion Probe 0.7): DSL authoring loop on window.__motionLab,
 // installed only when the page is opened with ?lab=1 (see mount effect).
 import { installMotionLab } from './lib/lab/motionLab';
+import { installReviewPanel } from './lib/lab/reviewPanel';
 import { DirectorRunner } from './lib/motion/director/directorRunner';
 import { resolveTransitionChain } from './lib/motion/director/modeTable';
 import { PHASE1_MODE_LOOP } from './lib/motion/director/motionContext';
@@ -968,7 +969,8 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     // Motion Lab (0.7): install the authoring API when ?lab=1. The Lab reads
     // the VRM and bridge tables lazily through the refs, so installing before
     // the async VRM load is safe (calls before load fail with a clear message).
-    if (new URLSearchParams(window.location.search).has('lab')) {
+    const _reviewQuery = new URLSearchParams(window.location.search);
+    if (_reviewQuery.has('lab') || _reviewQuery.has('phase1Review')) {
       labRef.current = installMotionLab({
         renderer,
         scene,
@@ -988,6 +990,8 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         stopDirector,
         getDirectorStatus: () => directorRef.current?.status() ?? null,
       });
+      // Phase 1 visual-QA review panel (dev-only; never in the production wallpaper).
+      if (_reviewQuery.has('phase1Review') && labRef.current) installReviewPanel(labRef.current);
     }
 
     const loader = new GLTFLoader();

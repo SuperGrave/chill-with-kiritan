@@ -40,6 +40,7 @@ import type { LayoutGuides } from './lib/scene/layoutGuides';
 import { installMotionLab } from './lib/lab/motionLab';
 import { DirectorRunner } from './lib/motion/director/directorRunner';
 import { resolveTransitionChain } from './lib/motion/director/modeTable';
+import { PHASE1_MODE_LOOP } from './lib/motion/director/motionContext';
 import {
   LEAVE_SEQ, RETURN_SEQ, AWAY_MOTIONS, seqAt, seqDuration, leaveRoot, returnRoot,
 } from './lib/motion/director/awayWalk';
@@ -111,12 +112,9 @@ const CAMERA_PRESETS: Record<Exclude<CameraMode, 'free'>, { pos: [number, number
 // Director (INF-5) Phase-1 demo content: which authored motions each mode may
 // schedule. Modes absent here have no base loop yet, so the director keeps the
 // current clip on a transition into them (graceful until more content lands).
-const DIRECTOR_LOOPS: Partial<Record<ModeId, string>> = {
-  work_normal: 'loop_work_normal',
-  work_sleepy: 'loop_work_sleepy',
-  video_relax: 'loop_video_relax',
-  sleep_desk: 'loop_sleep_desk',
-};
+// mode → base-loop motion id. Single source of truth lives in motionContext.ts
+// (shared with the Lab's context-loop settle and the Node test harness, issue #1).
+const DIRECTOR_LOOPS: Partial<Record<ModeId, string>> = PHASE1_MODE_LOOP;
 const DIRECTOR_AMBIENTS: Partial<Record<ModeId, string[]>> = {
   work_normal: ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_screen_scan', 'amb_work_sip'],
   work_sleepy: ['amb_slpy_head_bob', 'amb_slpy_slow_blink', 'amb_slpy_tilt_drift'],
@@ -352,6 +350,10 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   // rAF loop executes the swap on the frame the envelope reaches 0. A newer
   // request simply replaces the pending one (last selection wins).
   const pendingSwapRef = useRef<ClipSwapRequest | null>(null);
+  // Lab context-loop settle (issue #1): a loop the host swaps to when the
+  // current standalone one-shot finishes, instead of fading to the standing
+  // idle. Armed/cleared by the Lab via setPendingSettle; consumed once on finish.
+  const pendingSettleRef = useRef<ClipSwapRequest | null>(null);
 
   // --- Prop microEvents (INF-4) ----------------------------------------------
   // Resolve the grip for an attach: the event's inline grip wins, else the prop
@@ -582,6 +584,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   const startDirector = async (opts?: { seed?: number; initialMode?: ModeId }): Promise<{ ok: boolean; loaded: string[]; error?: string }> => {
     if (!vrmRef.current) return { ok: false, loaded: [], error: 'VRM not loaded yet' };
     // Reset away/presence so a (re)start is clean.
+    pendingSettleRef.current = null; // drop any Lab context-loop settle
     awayRef.current = { active: false, stage: 'leave', elapsed: 0, segIndex: -1, returnTo: 'work_normal' };
     prevDirModeRef.current = null;
     directorRootRef.current = [0, 0, 0, 0];
@@ -636,6 +639,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     prevDirModeRef.current = null;
     directorRootRef.current = [0, 0, 0, 0];
     if (vrmRef.current) vrmRef.current.scene.visible = true;
+    pendingSettleRef.current = null; // drop any Lab context-loop settle
     extControllerRef.current.returnToIdle();
     propsRef.current.onStatusUpdate('[DIRECTOR] stopped — returning to idle');
     return { ok: true };
@@ -977,6 +981,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         lookAtTarget: lookAtTargetRef.current,
         propsRoot: propsRootRef.current,
         requestClipSwap,
+        setPendingSettle: (req) => { pendingSettleRef.current = req; },
         extController: extControllerRef.current,
         onStatus: (s) => propsRef.current.onStatusUpdate(s),
         startDirector,
@@ -1150,6 +1155,14 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
               playDirectorMotion(next.motionId);
               return;
             }
+          }
+          // Lab standalone play({settleToContextLoop}): land in the armed context
+          // loop instead of fading to the standing idle pose (issue #1).
+          const settle = pendingSettleRef.current;
+          if (settle) {
+            pendingSettleRef.current = null;
+            requestClipSwap(settle);
+            return;
           }
           extControllerRef.current.notifyFinished();
         });

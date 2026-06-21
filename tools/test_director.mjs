@@ -38,6 +38,7 @@ const files = [
   'src/lib/motion/director/kiritanState.ts',
   'src/lib/motion/director/directorRunner.ts',
   'src/lib/motion/director/awayWalk.ts',
+  'src/lib/motion/director/motionContext.ts',
 ];
 execSync(
   `npx tsc ${files.join(' ')} --ignoreConfig --outDir "${outDir}" --module commonjs --target es2022 --moduleResolution node --ignoreDeprecations 6.0 --skipLibCheck`,
@@ -528,6 +529,54 @@ section('8. Director runtime soak — host play→finished loop, no stall (3h ×
   ok(totAmb > 0, `ambients fired between transitions (${totAmb})`);
   ok(totLoop > 0, `loops resumed after chains/ambients (${totLoop})`);
   ok(maxChain >= 1 && maxChain <= 4, `transition chains bounded (max links ${maxChain})`);
+}
+
+// ===========================================================================
+// 9. Motion playback-context registry (Phase 1 visual-QA, Stage 1 — issue #1)
+// ===========================================================================
+section('9. Context-loop return registry (issue #1)');
+{
+  const { resolveMotionContext, contextReturnLoop, PHASE1_MODE_LOOP } = D('motionContext.js');
+
+  // 9a. Exact mappings from the issue #1 list (ambient/transition → settle loop).
+  const expect = {
+    amb_slp_dream_smile: 'loop_sleep_desk',
+    amb_slp_head_shift: 'loop_sleep_desk',
+    amb_vid_chuckle: 'loop_video_relax',
+    amb_vid_nod_watch: 'loop_video_relax',
+    amb_work_screen_scan: 'loop_work_normal',
+    amb_work_sip: 'loop_work_normal',
+    tr_sit_to_slump: 'loop_sleep_desk',
+    tr_slump_wake: 'loop_work_normal',
+    tr_lean_back: 'loop_video_relax',
+    tr_lean_forward: 'loop_work_normal',
+    tr_stand_to_sit: 'loop_work_normal',
+  };
+  for (const [id, loop] of Object.entries(expect)) {
+    ok(contextReturnLoop(id) === loop, `${id} → ${loop} (got ${contextReturnLoop(id)})`);
+  }
+
+  // 9b. Category classification.
+  ok(resolveMotionContext('loop_work_normal').category === 'loop', 'loop_ classified as loop');
+  ok(resolveMotionContext('amb_work_sip').category === 'ambient', 'amb_ classified as ambient');
+  ok(resolveMotionContext('tr_lean_back').category === 'transition', 'tr_ classified as transition');
+
+  // 9c. A loop settles into ITSELF (a Lab loop play is stable, never reverts).
+  ok(contextReturnLoop('loop_video_relax') === 'loop_video_relax', 'loop settles into itself');
+
+  // 9d. Every Phase-1 ambient resolves to a loop (never the standing rest pose).
+  const phase1Ambients = ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_screen_scan', 'amb_work_sip', 'amb_slpy_head_bob', 'amb_slpy_slow_blink', 'amb_slpy_tilt_drift', 'amb_vid_chuckle', 'amb_vid_nod_watch', 'amb_vid_eyes_widen', 'amb_slp_head_shift', 'amb_slp_dream_smile'];
+  ok(phase1Ambients.every((a) => contextReturnLoop(a) !== null), 'all Phase-1 ambients return to a loop (no standing fallback)');
+
+  // 9e. Locomotion / stand-up transitions END standing → no sitting settle loop.
+  ok(contextReturnLoop('tr_sit_to_stand') === null, 'tr_sit_to_stand has no sitting settle loop');
+  ok(contextReturnLoop('tr_walk_stop') === null, 'tr_walk_stop has no sitting settle loop');
+
+  // 9f. Host loop table == registry (single source of truth, issue #1).
+  ok(
+    PHASE1_MODE_LOOP.work_normal === 'loop_work_normal' && PHASE1_MODE_LOOP.sleep_desk === 'loop_sleep_desk',
+    'PHASE1_MODE_LOOP defines the 4 Phase-1 loops',
+  );
 }
 
 // --- summary ----------------------------------------------------------------

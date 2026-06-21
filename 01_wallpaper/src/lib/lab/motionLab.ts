@@ -29,6 +29,7 @@ import { gazeDirToPanelPoint, offsetToGazeDir, GAZE_ANCHOR_Y } from '../motion/g
 import { attachPropToBone, detachPropToHome, findPropContainer, type GripOffset } from '../scene/propAttach';
 import type { DirectorStatus } from '../motion/director/directorRunner';
 import type { ModeId } from '../motion/director/types';
+import { contextReturnLoop } from '../motion/director/motionContext';
 
 // --- handles the viewer passes in -------------------------------------------------
 
@@ -98,6 +99,12 @@ export interface LabHandles {
   /** Root group of the scene props (desk/chair/laptop) — hidable for clean captures. */
   propsRoot: THREE.Object3D;
   requestClipSwap: (req: ClipSwapRequest) => void;
+  /**
+   * Arm a "settle" clip the host swaps to when the current ONE-SHOT finishes,
+   * instead of fading to the standing idle (issue #1 — context-loop return for
+   * the standalone Lab play() path). null clears it.
+   */
+  setPendingSettle: (req: ClipSwapRequest | null) => void;
   extController: ExternalMotionController;
   onStatus: (status: string) => void;
   /** Director runner control (INF-5) — viewer-owned; null status when not running. */
@@ -630,23 +637,21 @@ export class MotionLab {
 
   // ---- runtime-path playback -------------------------------------------------------------------
 
-  /** Compile through the REAL AnimationMixer path and play live (thaws the loop). */
-  play(id: string, opts?: { weight?: number }): Record<string, unknown> {
-    const entry = this.registry.get(id);
-    if (!entry) return fail('$', `motion "${id}" is not loaded — call await __motionLab.load("${id}") first.`);
-    const ctx = this.ensureVrm();
-    if ('ok' in ctx) return ctx;
-
-    const compiled = compileDslClip(entry.evaluator, ctx.vrm);
-    this.thaw();
-    this.h.requestClipSwap({
+  /** Compile a registered motion to a live ClipSwapRequest (real mixer path). */
+  private buildSwap(
+    entry: RegistryEntry,
+    vrm: VRM,
+    weight: number,
+  ): { req: ClipSwapRequest; compiled: ReturnType<typeof compileDslClip> } {
+    const compiled = compileDslClip(entry.evaluator, vrm);
+    const req: ClipSwapRequest = {
       clip: compiled.clip,
       boneNames: compiled.boneNames,
       source: 'dsl',
       hasExpressionTracks: false,
       autoPlay: true,
       loop: entry.evaluator.loop,
-      clipWeight: opts?.weight ?? 1,
+      clipWeight: weight,
       fadeIn: entry.doc.motion.fadeIn,
       fadeOut: entry.doc.motion.fadeOut,
       faceTimeline: entry.evaluator.faceTimeline,
@@ -654,13 +659,50 @@ export class MotionLab {
       hipsCurve: compiled.hipsCurve,
       rootCurve: compiled.rootCurve,
       microEvents: entry.doc.motion.microEvents ?? null,
-    });
-    this.h.onStatus(`[LAB] playing "${id}" through the mixer path`);
+    };
+    return { req, compiled };
+  }
+
+  /**
+   * Compile through the REAL AnimationMixer path and play live (thaws the loop).
+   * `settleToContextLoop` (issue #1): for a ONE-SHOT motion, arm its context
+   * Loop so playback lands there when the clip finishes instead of fading to the
+   * standing idle — the same continuation the Director gives, for standalone
+   * review. Loops play unchanged. Async because the settle loop is loaded on demand.
+   */
+  async play(id: string, opts?: { weight?: number; settleToContextLoop?: boolean }): Promise<Record<string, unknown>> {
+    const entry = this.registry.get(id);
+    if (!entry) return fail('$', `motion "${id}" is not loaded — call await __motionLab.load("${id}") first.`);
+    const ctx = this.ensureVrm();
+    if ('ok' in ctx) return ctx;
+    const weight = opts?.weight ?? 1;
+
+    // Arm the context-loop settle BEFORE swapping in the one-shot (issue #1).
+    let settleLoop: string | null = null;
+    if (opts?.settleToContextLoop && !entry.evaluator.loop) {
+      const loopId = contextReturnLoop(id);
+      const loaded = loopId ? await this.load(loopId) : null;
+      const loopEntry = loaded?.ok ? this.registry.get(loopId as string) : undefined;
+      if (loopEntry) {
+        this.h.setPendingSettle(this.buildSwap(loopEntry, ctx.vrm, weight).req);
+        settleLoop = loopId;
+      } else {
+        this.h.setPendingSettle(null); // no/unloadable context loop → fall back to rest
+      }
+    } else {
+      this.h.setPendingSettle(null);
+    }
+
+    const { req, compiled } = this.buildSwap(entry, ctx.vrm, weight);
+    this.thaw();
+    this.h.requestClipSwap(req);
+    this.h.onStatus(`[LAB] playing "${id}" through the mixer path${settleLoop ? ` → settle "${settleLoop}"` : ''}`);
     return {
       ok: true,
       id,
       playing: true,
       loop: entry.evaluator.loop,
+      settleLoop,
       bones: compiled.boneNames.length,
       missingBones: compiled.missingBones,
       face: entry.evaluator.faceTimeline
@@ -671,6 +713,7 @@ export class MotionLab {
   }
 
   stop(): Record<string, unknown> {
+    this.h.setPendingSettle(null); // cancel any armed context-loop settle
     this.h.extController.returnToIdle();
     return { ok: true, playing: false };
   }
@@ -787,6 +830,7 @@ export class MotionLab {
       '  await __motionLab.capture("my_motion", 2.0, { camera: { position: [0,1,2.2], target: [0,0.9,0], fov: 40 } })  // custom camera',
       '  __motionLab.setPropsVisible(false)                      // hide desk/chair/laptop for clean pose captures',
       '  __motionLab.play("my_motion")                           // live playback through the real mixer path',
+      '  await __motionLab.play("amb_work_sip", { settleToContextLoop: true })  // one-shot → its mode loop (issue #1), not the standing idle',
       '  __motionLab.stop(); __motionLab.thaw()                  // back to the normal idle loop',
       'Expression presets (Expression Preset System 0.2):',
       '  __motionLab.exprPresets()                               // list preset ids/labels/weights/gaze/flutter',

@@ -1,8 +1,8 @@
 {
   "schema": "motion/1",
   "id": "loop_sleep_desk",
-  "label": "ループ: 睡眠（机に突っ伏し）",
-  "notes": "sleep_desk の基本ループ。posture=sit_desk_slump（机に突っ伏し・頬を伏せる）の上に、目を閉じ(blink 1.0)、ゆっくり深い寝息（spine/chest x のわずかな上下）を重ねた就寝。duration 12 は呼吸周期6の整数倍。視線off。腕枕は posture 未設定（content 拡張で track 付与予定）。",
+  "label": "ループ: 睡眠（机に突っ伏し・腕枕）",
+  "notes": "sleep_desk の基本ループ。posture=sit_desk_slump（深い前傾で机へ突っ伏し）の上に、両前腕を机上で枕にし(前へ伸ばし内転)、頬を腕へ預ける。顔は横(+y,本人の左=本番カメラ側)を向き完全には伏せず少し見える。目を閉じ(blink1.0)、静かな深い寝息(spine/chest x のゆっくり上下)。hipsは座面に残る。duration12=呼吸周期6の整数倍。視線off。",
   "category": "loop",
   "tags": ["mode:sleep_desk", "family:special", "daypart:night"],
   "posture": "sit_desk_slump",
@@ -10,9 +10,31 @@
   "loop": true,
   "fadeIn": 1.2,
   "fadeOut": 1.2,
+  "tracks": {
+    "head": { "keys": [
+      { "t": 0, "e": [0.2, 0.5, 0.16] },
+      { "t": 12, "e": [0.2, 0.5, 0.16] }
+    ] },
+    "leftUpperArm": { "keys": [
+      { "t": 0, "e": [0.15, -0.58, 1.42] },
+      { "t": 12, "e": [0.15, -0.58, 1.42] }
+    ] },
+    "rightUpperArm": { "keys": [
+      { "t": 0, "e": [0.15, 0.58, -1.42] },
+      { "t": 12, "e": [0.15, 0.58, -1.42] }
+    ] },
+    "leftLowerArm": { "keys": [
+      { "t": 0, "e": [0, -1.4, -0.35] },
+      { "t": 12, "e": [0, -1.4, -0.35] }
+    ] },
+    "rightLowerArm": { "keys": [
+      { "t": 0, "e": [0, 1.4, 0.35] },
+      { "t": 12, "e": [0, 1.4, 0.35] }
+    ] }
+  },
   "oscillators": [
-    { "bone": "spine", "axis": "x", "amp": 0.025, "period": 6 },
-    { "bone": "chest", "axis": "x", "amp": 0.02, "period": 6 }
+    { "bone": "spine", "axis": "x", "amp": 0.022, "period": 6 },
+    { "bone": "chest", "axis": "x", "amp": 0.018, "period": 6 }
   ],
   "expressions": { "keys": [
     { "t": 0.0, "set": { "blink": 1.0 }, "fade": 1.2 },

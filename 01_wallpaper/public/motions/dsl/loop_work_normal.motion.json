@@ -1,24 +1,59 @@
 {
   "schema": "motion/1",
   "id": "loop_work_normal",
-  "label": "ループ: 通常作業（座り）",
-  "notes": "work_normal の基本ループ（INF-5 デモ）。posture=sit_pc_neutral の上に呼吸（chest/spine x）と緩い首・頭の揺れをオシレータで重ねた静かな着座作業アイドル。画面を軽く注視（lookAt fixed、カメラ目線ではない）。duration 24 は全オシレータ周期(6/8/12)の整数倍＝シーム安全。タイピングのハンドポーズ(type_natural+腕前出し)は content 拡張で追加予定。",
+  "label": "ループ: 通常作業（座り・タイピング）",
+  "notes": "work_normal の基本ループ。posture=sit_pc_neutral の上に両前腕をキーボード高さへ寄せ(肘曲げ+内転 z>1.15で手を中央へ寄せる/y-で前へ)、画面を見ながら『打鍵→停止→画面確認→再開』のリズムでタイプする。打鍵は左右の手の小さな交互上下(window付きサイン)を2バースト、間に小休止。呼吸はchest/spine。canonical: desk top y0.73 / keyboard z~0.45。手はノートPCに大きく寄せて打鍵に見せる(本番カメラではPC本体に一部隠れるため上体・腕で読ませる)。duration16=周期4/8の整数倍, 打鍵windowは端で0=シーム安全。",
   "category": "loop",
   "tags": ["mode:work_normal", "family:A"],
   "posture": "sit_pc_neutral",
-  "duration": 24,
+  "duration": 16,
   "loop": true,
   "fadeIn": 0.8,
   "fadeOut": 0.8,
+  "tracks": {
+    "leftUpperArm": { "keys": [
+      { "t": 0, "e": [0.15, -0.42, 1.36] },
+      { "t": 16, "e": [0.15, -0.42, 1.36] }
+    ] },
+    "rightUpperArm": { "keys": [
+      { "t": 0, "e": [0.15, 0.42, -1.36] },
+      { "t": 16, "e": [0.15, 0.42, -1.36] }
+    ] },
+    "leftLowerArm": { "keys": [
+      { "t": 0, "e": [0, -0.95, -0.72] },
+      { "t": 16, "e": [0, -0.95, -0.72] }
+    ] },
+    "rightLowerArm": { "keys": [
+      { "t": 0, "e": [0, 0.95, 0.72] },
+      { "t": 16, "e": [0, 0.95, 0.72] }
+    ] },
+    "leftHand": { "keys": [
+      { "t": 0, "e": [0.12, 0, 0] },
+      { "t": 16, "e": [0.12, 0, 0] }
+    ] },
+    "rightHand": { "keys": [
+      { "t": 0, "e": [0.12, 0, 0] },
+      { "t": 16, "e": [0.12, 0, 0] }
+    ] }
+  },
   "oscillators": [
-    { "bone": "chest", "axis": "x", "amp": 0.03, "period": 6 },
-    { "bone": "spine", "axis": "x", "amp": 0.015, "period": 6 },
-    { "bone": "neck", "axis": "x", "amp": 0.018, "period": 6, "phase": 3.14159 },
-    { "bone": "head", "axis": "x", "amp": 0.012, "period": 6, "phase": 3.14159 },
-    { "bone": "head", "axis": "y", "amp": 0.02, "period": 12 },
-    { "bone": "head", "axis": "z", "amp": 0.013, "period": 8 },
-    { "bone": "leftShoulder", "axis": "z", "amp": 0.01, "period": 6, "phase": 3.14159 },
-    { "bone": "rightShoulder", "axis": "z", "amp": 0.01, "period": 6 }
+    { "bone": "chest", "axis": "x", "amp": 0.022, "period": 8 },
+    { "bone": "spine", "axis": "x", "amp": 0.012, "period": 8 },
+    { "bone": "head", "axis": "y", "amp": 0.02, "period": 8 },
+    { "bone": "head", "axis": "x", "amp": 0.012, "period": 4, "phase": 3.14159 },
+    { "bone": "leftHand", "axis": "x", "amp": 0.14, "period": 0.5, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "rightHand", "axis": "x", "amp": 0.14, "period": 0.5, "phase": 3.14159, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "leftHand", "axis": "x", "amp": 0.14, "period": 0.5, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "rightHand", "axis": "x", "amp": 0.14, "period": 0.5, "phase": 3.14159, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "leftLowerArm", "axis": "x", "amp": 0.03, "period": 1.0, "window": [0.6, 6.4], "attack": 0.4, "release": 0.4 },
+    { "bone": "rightLowerArm", "axis": "x", "amp": 0.03, "period": 1.0, "phase": 3.14159, "window": [9.2, 14.4], "attack": 0.4, "release": 0.4 }
   ],
-  "lookAt": { "mode": "fixed", "point": [0.0, 0.98, 0.9], "strength": 0.5 }
+  "gaze": { "keys": [
+    { "t": 0, "to": [0, -8] },
+    { "t": 3.0, "to": [-4, -18], "move": 0.4 },
+    { "t": 5.0, "to": [0, -8], "move": 0.4 },
+    { "t": 7.5, "to": [6, -6], "move": 0.5 },
+    { "t": 11.0, "to": [-3, -16], "move": 0.4 },
+    { "t": 13.5, "to": [0, -8], "move": 0.4 }
+  ] }
 }

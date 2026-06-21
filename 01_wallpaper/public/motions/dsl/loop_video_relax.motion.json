@@ -1,8 +1,8 @@
 {
   "schema": "motion/1",
   "id": "loop_video_relax",
-  "label": "ループ: 動画視聴（後傾・だらけ）",
-  "notes": "video_relax の基本ループ。posture=sit_pc_slouch（背もたれに後傾・脚投げ出し）の上に、ゆったりした呼吸と緩い頭の揺れ、口元のゆるみ(fun 薄め)を重ねた『観てだらけている』着座。画面を緩く注視。duration 20 はオシレータ周期(5/10)の整数倍。",
+  "label": "ループ: 動画視聴（明確に後傾・だらけ）",
+  "notes": "video_relax の基本ループ。posture=sit_pc_slouch の上に spine/chest を更に -x して背もたれへ明確に後傾、両手はキーボードから外して膝の上へ脱力(肘軽く曲げ手を腿へ)。タイピングは完全停止。首・視線だけモニターへ。work_normal(前傾・前腕キーボード)と横シルエットで一目で区別できることが要件。表情は緩め(fun)、動画への小反応はAmbientが主役。duration20=周期5/10の整数倍。",
   "category": "loop",
   "tags": ["mode:video_relax", "family:A'"],
   "posture": "sit_pc_slouch",
@@ -10,16 +10,53 @@
   "loop": true,
   "fadeIn": 1.0,
   "fadeOut": 1.0,
+  "tracks": {
+    "spine": { "keys": [
+      { "t": 0, "e": [-0.14, 0, 0] },
+      { "t": 20, "e": [-0.14, 0, 0] }
+    ] },
+    "chest": { "keys": [
+      { "t": 0, "e": [-0.07, 0, 0] },
+      { "t": 20, "e": [-0.07, 0, 0] }
+    ] },
+    "neck": { "keys": [
+      { "t": 0, "e": [-0.04, 0, 0] },
+      { "t": 20, "e": [-0.04, 0, 0] }
+    ] },
+    "head": { "keys": [
+      { "t": 0, "e": [-0.06, 0, 0] },
+      { "t": 20, "e": [-0.06, 0, 0] }
+    ] },
+    "leftUpperArm": { "keys": [
+      { "t": 0, "e": [0.05, -0.12, 1.24] },
+      { "t": 20, "e": [0.05, -0.12, 1.24] }
+    ] },
+    "rightUpperArm": { "keys": [
+      { "t": 0, "e": [0.05, 0.12, -1.24] },
+      { "t": 20, "e": [0.05, 0.12, -1.24] }
+    ] },
+    "leftLowerArm": { "keys": [
+      { "t": 0, "e": [0, -0.62, -0.5] },
+      { "t": 20, "e": [0, -0.62, -0.5] }
+    ] },
+    "rightLowerArm": { "keys": [
+      { "t": 0, "e": [0, 0.62, 0.5] },
+      { "t": 20, "e": [0, 0.62, 0.5] }
+    ] }
+  },
   "oscillators": [
-    { "bone": "chest", "axis": "x", "amp": 0.035, "period": 5 },
-    { "bone": "spine", "axis": "x", "amp": 0.02, "period": 5 },
+    { "bone": "chest", "axis": "x", "amp": 0.03, "period": 5 },
+    { "bone": "spine", "axis": "x", "amp": 0.018, "period": 5 },
     { "bone": "head", "axis": "y", "amp": 0.025, "period": 10 },
     { "bone": "head", "axis": "z", "amp": 0.015, "period": 10, "phase": 1.5 }
   ],
-  "expressions": { "keys": [
-    { "t": 0.0, "set": { "fun": 0.1 }, "fade": 1.5 },
-    { "t": 10.0, "set": { "fun": 0.16 }, "fade": 4.0 },
-    { "t": 20.0, "set": { "fun": 0.1 }, "fade": 4.0 }
-  ] },
-  "lookAt": { "mode": "fixed", "point": [0.0, 1.0, 0.9], "strength": 0.55 }
+  "exprCues": [
+    { "preset": "small_smile", "at": 2.0, "intensity": 0.35, "fadeIn": 1.5, "hold": 6.0, "fadeOut": 3.0 },
+    { "preset": "small_smile", "at": 12.0, "intensity": 0.4, "fadeIn": 1.5, "hold": 4.0, "fadeOut": 2.5 }
+  ],
+  "gaze": { "keys": [
+    { "t": 0, "to": [0, -2] },
+    { "t": 6, "to": [4, 0], "move": 0.6 },
+    { "t": 13, "to": [-3, -3], "move": 0.6 }
+  ] }
 }

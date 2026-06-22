@@ -1,0 +1,24 @@
+{
+  "schema": "hand/1",
+  "id": "type_hands",
+  "label": "タイピング（指を軽く曲げてキー上）",
+  "notes": "PC作業ループ用。手のひらを下へ、指をキー上で軽くカール(proximal主体)、親指は軽く内へ。side=both（右は[x,-y,-z]自動ミラー）。z+ がカール方向(左基準)。打鍵の上下は loop_work_normal の指オシレータでこの上に重ねる。",
+  "side": "both",
+  "bones": {
+    "thumbMetacarpal": [0, 0.18, 0.06],
+    "thumbProximal": [0, 0.12, 0.05],
+    "thumbDistal": [0, 0.06, 0.04],
+    "indexProximal": [0, 0, 0.34],
+    "indexIntermediate": [0, 0, 0.28],
+    "indexDistal": [0, 0, 0.18],
+    "middleProximal": [0, 0, 0.42],
+    "middleIntermediate": [0, 0, 0.34],
+    "middleDistal": [0, 0, 0.2],
+    "ringProximal": [0, 0, 0.44],
+    "ringIntermediate": [0, 0, 0.36],
+    "ringDistal": [0, 0, 0.22],
+    "littleProximal": [0, 0, 0.42],
+    "littleIntermediate": [0, 0, 0.34],
+    "littleDistal": [0, 0, 0.2]
+  }
+}

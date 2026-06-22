@@ -61,11 +61,12 @@ export function installReviewPanel(lab: MotionLab): void {
     try { const r = await fn(); setStatus(`${label}\n${JSON.stringify(r).slice(0, 160)}`); }
     catch (e) { setStatus(`${label} ERROR: ${e instanceof Error ? e.message : String(e)}`); }
   };
-  const playId = (id: string, settle: boolean) => guard(`play ${id}${settle ? ' →loop' : ''}`, async () => {
+  let lastId = 'loop_work_normal';
+  const playId = (id: string, settle: boolean) => { lastId = id; return guard(`play ${id}${settle ? ' →loop' : ''}`, async () => {
     const ld = await lab.load(id);
     if (!(ld as { ok: boolean }).ok) return ld;
     return lab.play(id, { settleToContextLoop: settle });
-  });
+  }); };
 
   const section = (title: string) => { const h = document.createElement('h4'); h.textContent = title; panel.appendChild(h); };
   const rowOf = (els: HTMLElement[]) => { const r = document.createElement('div'); r.className = 'row'; els.forEach((e) => r.appendChild(e)); panel.appendChild(r); return r; };
@@ -107,6 +108,16 @@ export function installReviewPanel(lab: MotionLab): void {
   const anchLbl = document.createElement('label'); anchLbl.append(anch, document.createTextNode(' propアンカー/手 位置'));
   anch.onchange = () => guard('anchorDebug', () => lab.anchorDebug(anch.checked));
   panel.appendChild(gazeLbl); panel.appendChild(anchLbl);
+
+  // Capture — download the current live view (to share), or film the last motion.
+  section('撮影（キャプチャ）');
+  const filmSel = selectOf([...MODES.map((m) => 'loop_' + m), ...AMBIENTS, ...TRANSITIONS]);
+  panel.appendChild(filmSel);
+  rowOf([
+    btn('📷 現在をDL', () => guard('download', () => lab.downloadCanvas('kiritan')), 'go'),
+    btn('🎞 選択をフィルム', () => guard('filmstrip', async () => { await lab.load(filmSel.value); return lab.filmstrip(filmSel.value, { withProps: true, camera: 'desk wide' }); })),
+    btn('🎞 直近をフィルム', () => guard('filmstrip', async () => { await lab.load(lastId); return lab.filmstrip(lastId, { withProps: true, camera: 'desk wide' }); })),
+  ]);
 
   panel.appendChild(status);
   const hint = document.createElement('div');

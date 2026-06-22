@@ -10,6 +10,7 @@
   "loop": true,
   "fadeIn": 0.8,
   "fadeOut": 0.8,
+  "hands": { "left": "type_hands", "right": "type_hands" },
   "tracks": {
     "leftUpperArm": { "keys": [
       { "t": 0, "e": [0.15, -0.42, 1.36] },
@@ -28,12 +29,12 @@
       { "t": 16, "e": [0, 0.95, 0.72] }
     ] },
     "leftHand": { "keys": [
-      { "t": 0, "e": [0.12, 0, 0] },
-      { "t": 16, "e": [0.12, 0, 0] }
+      { "t": 0, "e": [-0.22, 0, 0] },
+      { "t": 16, "e": [-0.22, 0, 0] }
     ] },
     "rightHand": { "keys": [
-      { "t": 0, "e": [0.12, 0, 0] },
-      { "t": 16, "e": [0.12, 0, 0] }
+      { "t": 0, "e": [-0.22, 0, 0] },
+      { "t": 16, "e": [-0.22, 0, 0] }
     ] }
   },
   "oscillators": [
@@ -41,12 +42,19 @@
     { "bone": "spine", "axis": "x", "amp": 0.012, "period": 8 },
     { "bone": "head", "axis": "y", "amp": 0.02, "period": 8 },
     { "bone": "head", "axis": "x", "amp": 0.012, "period": 4, "phase": 3.14159 },
-    { "bone": "leftHand", "axis": "x", "amp": 0.14, "period": 0.5, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
-    { "bone": "rightHand", "axis": "x", "amp": 0.14, "period": 0.5, "phase": 3.14159, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
-    { "bone": "leftHand", "axis": "x", "amp": 0.14, "period": 0.5, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 },
-    { "bone": "rightHand", "axis": "x", "amp": 0.14, "period": 0.5, "phase": 3.14159, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 },
-    { "bone": "leftLowerArm", "axis": "x", "amp": 0.03, "period": 1.0, "window": [0.6, 6.4], "attack": 0.4, "release": 0.4 },
-    { "bone": "rightLowerArm", "axis": "x", "amp": 0.03, "period": 1.0, "phase": 3.14159, "window": [9.2, 14.4], "attack": 0.4, "release": 0.4 }
+
+    { "bone": "leftIndexProximal", "axis": "z", "amp": 0.3, "period": 0.34, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "leftMiddleProximal", "axis": "z", "amp": 0.26, "period": 0.4, "phase": 1.6, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "rightIndexProximal", "axis": "z", "amp": 0.3, "period": 0.36, "phase": 2.0, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "rightMiddleProximal", "axis": "z", "amp": 0.26, "period": 0.44, "phase": 0.8, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
+
+    { "bone": "leftIndexProximal", "axis": "z", "amp": 0.3, "period": 0.34, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "leftMiddleProximal", "axis": "z", "amp": 0.26, "period": 0.4, "phase": 1.6, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "rightIndexProximal", "axis": "z", "amp": 0.3, "period": 0.36, "phase": 2.0, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "rightMiddleProximal", "axis": "z", "amp": 0.26, "period": 0.44, "phase": 0.8, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 },
+
+    { "bone": "leftHand", "axis": "x", "amp": 0.05, "period": 0.5, "window": [0.6, 6.4], "attack": 0.3, "release": 0.3 },
+    { "bone": "rightHand", "axis": "x", "amp": 0.05, "period": 0.5, "phase": 3.14159, "window": [9.2, 14.4], "attack": 0.3, "release": 0.3 }
   ],
   "gaze": { "keys": [
     { "t": 0, "to": [0, -8] },

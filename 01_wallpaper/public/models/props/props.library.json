@@ -9,9 +9,9 @@
       "url": "/models/props/items/cup.glb",
       "scale": 0.03967,
       "position": [
-        -0.25,
+        0.52,
         0.73,
-        0.17
+        0.2863
       ],
       "rotation": [
         0,
@@ -19,7 +19,7 @@
         0
       ],
       "anchor": "desk_right",
-      "_anchorNote": "Canonical (Stage 2/5, issue #6/#7/#8/#14): cup rests on the character's RIGHT side (world -x; she faces +Z so her right hand is at world -x), at a position the right hand actually REACHES (measured ~[-0.25,0.79,0.17] at desk height). The far -0.52 spot was beyond arm reach, which caused the old attach to teleport the cup. amb_work_sip grabs it here with the right hand.",
+      "_anchorNote": "マスター既定配置（画面右＝本人の左側）。Phase1ビジュアルQA中に一度本人の右へ移したが、マスター指示で既定へ復帰(2026-06-22)。amb_work_sip の取る手（左/右）と到達はマスター確認後に再著作する。",
       "defaultOn": true,
       "author": "mehreen1919",
       "license": "CC-BY 3.0",

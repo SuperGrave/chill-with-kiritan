@@ -466,6 +466,120 @@ export class MotionLab {
     return { ok: true, id, files };
   }
 
+  /**
+   * Apply the prop attach/detach STATE a motion's microEvents would produce by
+   * clip-time `t` (freeze-mode simulation). Lets a filmstrip show the cup IN the
+   * hand during the held phase, which a plain freeze (no rAF, no events) can't.
+   */
+  private applyMicroEventState(events: MicroEvent[] | undefined, t: number, vrm: VRM): void {
+    if (!events?.length) return;
+    const latest = new Map<string, MicroEvent>();
+    for (const ev of events) if (ev.t <= t) latest.set(ev.prop, ev);
+    for (const ev of events) {
+      const container = findPropContainer(this.h.scene, `item:${ev.prop}`);
+      if (!container) continue;
+      const cur = latest.get(ev.prop);
+      if (cur && cur.action === 'attach' && cur.grip) {
+        const bone = (vrm.humanoid as unknown as { getRawBoneNode?: (n: string) => THREE.Object3D | null })?.getRawBoneNode?.(cur.bone ?? 'rightHand');
+        if (bone) attachPropToBone(container, bone, { position: cur.grip.position, rotation: cur.grip.rotation, ...(cur.grip.scale !== undefined ? { scale: cur.grip.scale } : {}) });
+      } else {
+        detachPropToHome(container);
+      }
+    }
+  }
+
+  /**
+   * One-call MONTAGE of a whole motion: render N frames across the duration into a
+   * single labelled grid PNG (saved to .probe_tmp/captures/_film/), so the FULL
+   * motion arc is reviewable headless — not just one keyframe. `withProps:true`
+   * simulates the motion's microEvents so a held cup shows in the hand. Returns the
+   * absolute path to Read.
+   */
+  async filmstrip(
+    id: string,
+    opts?: { times?: number[]; frames?: number; camera?: CameraOpt; cols?: number; cellW?: number; cellH?: number; settle?: number; withProps?: boolean; file?: string },
+  ): Promise<Record<string, unknown>> {
+    const entry = this.registry.get(id);
+    if (!entry) return fail('$', `motion "${id}" is not loaded — call await __motionLab.load("${id}") first.`);
+    const ctx = this.ensureVrm();
+    if ('ok' in ctx) return ctx;
+
+    const dur = entry.evaluator.duration;
+    const n = opts?.frames ?? 12;
+    const times = opts?.times ?? Array.from({ length: n }, (_, i) => Math.round((dur * i) / (n - 1) * 100) / 100);
+    const cols = opts?.cols ?? 4;
+    const cw = opts?.cellW ?? 320;
+    const ch = opts?.cellH ?? 220;
+    const rows = Math.ceil(times.length / cols);
+    const grid = document.createElement('canvas');
+    grid.width = cols * cw;
+    grid.height = rows * ch;
+    const g = grid.getContext('2d');
+    if (!g) return fail('canvas', '2d context unavailable');
+    g.fillStyle = '#1b1d24';
+    g.fillRect(0, 0, grid.width, grid.height);
+
+    const renderer = this.h.renderer;
+    const camera = this.h.camera;
+    const prevSize = new THREE.Vector2();
+    renderer.getSize(prevSize);
+    const prevAspect = camera.aspect;
+    renderer.setSize(cw, ch, false);
+    camera.aspect = cw / ch;
+    camera.updateProjectionMatrix();
+    if (opts?.camera) this.setCamera(opts.camera);
+    this.frozen = true;
+
+    const events = opts?.withProps ? entry.doc.motion.microEvents ?? undefined : undefined;
+    for (let i = 0; i < times.length; i++) {
+      const t = times[i];
+      this.applyFrame(entry.evaluator.evalAt(t), ctx.vrm);
+      if (events) this.applyMicroEventState(events, t, ctx.vrm);
+      ctx.vrm.humanoid?.update();
+      this.settleSpringBones(ctx.vrm, opts?.settle ?? 0.6);
+      renderer.render(this.h.scene, this.h.camera);
+      const cx = (i % cols) * cw;
+      const cy = Math.floor(i / cols) * ch;
+      g.drawImage(renderer.domElement, cx, cy, cw, ch);
+      g.fillStyle = 'rgba(0,0,0,.6)';
+      g.fillRect(cx, cy, 52, 18);
+      g.fillStyle = '#9be6a0';
+      g.font = '13px monospace';
+      g.fillText(`t${t}`, cx + 4, cy + 13);
+    }
+    if (events) this.applyMicroEventState([], dur + 1, ctx.vrm); // detach everything back to rest
+    renderer.setSize(prevSize.x, prevSize.y, false);
+    camera.aspect = prevAspect;
+    camera.updateProjectionMatrix();
+
+    const dataUrl = grid.toDataURL('image/png');
+    const file = opts?.file ?? `_film/${id}.png`;
+    try {
+      const res = await fetch('/__lab/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ file, dataUrl }) });
+      const saved = await res.json();
+      if (!res.ok || !saved.ok) return fail('save', `saving failed: ${saved.error ?? `HTTP ${res.status}`}`);
+      return { ok: true, id, frames: times.length, times, file: saved.path };
+    } catch (e) {
+      return fail('save', `POST /__lab/save failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /**
+   * Trigger a BROWSER DOWNLOAD of the current live canvas as a PNG (for the master
+   * in a real foreground browser — capture exactly what you see and share it). No
+   * dev server needed. `name` is the download filename.
+   */
+  downloadCanvas(name = 'kiritan_capture'): Record<string, unknown> {
+    const url = this.h.renderer.domElement.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name.replace(/[^\w-]+/g, '_')}_${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return { ok: true, downloaded: a.download };
+  }
+
   // ---- expression presets (Expression Preset System 0.1) -----------------------------------
 
   /** List the expression presets (id / label / weights) for the authoring loop. */

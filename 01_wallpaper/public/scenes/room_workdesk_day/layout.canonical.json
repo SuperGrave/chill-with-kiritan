@@ -18,7 +18,7 @@
     "desk":   { "top": 0.73, "center": [0, 0.365, 0.5001], "note": "work surface; keyboard/typing happens here in front of her" },
     "chair":  { "backrestTop": 0.949, "center": [-0.01, 0.4743, -0.3937], "note": "office chair behind/under her; seat surface ~0.45-0.47, backrest behind (-z)" },
     "laptop": { "screenCenter": [0, 0.8928, 0.5001], "screenTop": 1.0556, "base": [0, 0.73, 0.45], "note": "monitor she looks at; keyboard/base is the near (smaller-z) part of the laptop on the desk" },
-    "cupRest":  { "center": [-0.25, 0.78, 0.17], "bottom": [-0.25, 0.73, 0.17], "hand": "right", "note": "CANONICAL right-side rest (issue #6/#7/#8). Placed within the right hand's measured reach envelope (~[-0.25,0.79,0.17] at desk height); -0.52 was beyond reach and caused the old cup warp." },
+    "cupRest":  { "center": [0.52, 0.7775, 0.30], "bottom": [0.52, 0.73, 0.2863], "hand": "TBD", "note": "マスター既定配置に復帰(2026-06-22, 画面右=本人の左)。NOTE: この位置は腕の到達域(~±0.27)の外側。sipの取る手(左/右)と到達方式(体幹リーン等)はマスター確認後に再設計。" },
     "phoneRest": { "center": [0.63, 0.7349, 0.14], "note": "left-side rest" }
   },
   "characterIdleBones": {

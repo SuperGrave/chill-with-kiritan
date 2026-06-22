@@ -100,11 +100,12 @@
           "id": "chair_office",
           "label": "オフィスチェア",
           "url": "/models/props/variants/chair_office.glb",
-          "scale": 0.021,
+          "scale": 0.027,
+          "_idealNote": "scale/offset are the master's 理想形(2026-06-21): container [-9.066,0,5.267] scale 0.027. offset = idealContainerPos - scene.json chair pos[0,0,-0.4].",
           "offset": [
-            -7.066,
-            -0.0002,
-            4.4165
+            -9.066,
+            0,
+            5.667
           ],
           "rotation": [
             0,
@@ -150,14 +151,15 @@
           "label": "ノートPC（モダン）",
           "url": "/models/props/variants/pc_laptop_modern.glb",
           "scale": 0.3477,
+          "_idealNote": "rotation/offset are the master's 理想形(2026-06-21): laptop turned 90deg sideways so it doesn't block the face/hands; moved ~0.15 forward. offset = idealContainerPos[-0.021,0.729,0.341] - scene.json laptop pos[0,0.73,0.5].",
           "offset": [
-            -0.0708,
-            -0.0015,
-            -0.009
+            -0.021,
+            -0.001,
+            -0.159
           ],
           "rotation": [
             0,
-            3.14,
+            1.569,
             0
           ],
           "author": "J-Toastie",

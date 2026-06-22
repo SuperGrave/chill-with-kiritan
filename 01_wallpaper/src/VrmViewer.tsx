@@ -70,6 +70,7 @@ export type CameraMode =
   | 'workdesk_front'
   | 'workdesk_side'
   | 'workdesk_close'
+  | 'ideal'
   | 'free';
 export type SpringBoneMode = 'normal' | 'lightweight' | 'off';
 
@@ -102,6 +103,9 @@ const CAMERA_PRESETS: Record<Exclude<CameraMode, 'free'>, { pos: [number, number
   'desk wide': { pos: [0, 0.8, 1.2], look: [0, 0.8, 0] },
   'face close': { pos: [0, 1.35, 0.5], look: [0, 1.35, 0] },
   'monitor side': { pos: [0.4, 0.9, 0.8], look: [0, 1.0, 0] },
+  // Master's IDEAL production view (理想形.txt 2026-06-21): 3/4 front-right, laptop sideways
+  // so the face/body/hands read; this is the default boot camera.
+  ideal: { pos: [1.116, 0.912, 0.845], look: [0, 0.9, 0] },
   // Chill-room front: desk edge in the foreground, body + face behind it.
   workdesk_front: { pos: [0.0, 1.05, 1.5], look: [0.0, 1.0, -0.1] },
   // Angled side: laptop/monitor reads as facing the wallpaper.

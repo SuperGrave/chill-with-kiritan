@@ -131,7 +131,7 @@ function Section(props: {
 }
 
 function App() {
-  const [cameraMode, setCameraMode] = useState<CameraMode>('desk wide');
+  const [cameraMode, setCameraMode] = useState<CameraMode>('ideal');
   const [lookAtEnabled, setLookAtEnabled] = useState(true);
   const [springBoneMode, setSpringBoneMode] = useState<SpringBoneMode>('normal');
   const [fpsLimit, setFpsLimit] = useState(true); // 30fps by default
@@ -818,6 +818,9 @@ function App() {
             {/* ------------------------------------------------ camera */}
             <Section id="camera" icon="🎥" title="カメラ" summary={cameraMode} open={openSections.camera} onToggle={toggleSection}>
               <div className="btn-row">
+                <button type="button" className={chip(cameraMode === 'ideal')} onClick={() => setCameraMode('ideal')}>
+                  理想（既定）
+                </button>
                 <button type="button" className={chip(cameraMode === 'desk wide')} onClick={() => setCameraMode('desk wide')}>
                   机ワイド <kbd>1</kbd>
                 </button>

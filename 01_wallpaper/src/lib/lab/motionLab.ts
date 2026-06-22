@@ -580,6 +580,51 @@ export class MotionLab {
     return { ok: true, downloaded: a.download };
   }
 
+  /**
+   * Dump the CURRENT on-screen layout — live world transforms (layoutSnapshot) +
+   * camera + persisted localStorage — to .probe_tmp/captures/_film/ideal_layout.json
+   * AND download a copy. The master loads their ideal arrangement, clicks this once,
+   * and the agent reads the saved JSON to bake it into scene.json / props as the
+   * default (their "理想の配置" → 本番の既定).
+   */
+  async dumpLayout(): Promise<Record<string, unknown>> {
+    const snap = this.layoutSnapshot();
+    const cam = this.h.camera;
+    const tgt = cam.userData.target as THREE.Vector3 | undefined;
+    const ls: Record<string, string | null> = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) ls[k] = localStorage.getItem(k);
+      }
+    } catch { /* private mode */ }
+    const data = {
+      kind: 'kiritan-ideal-layout',
+      date: new Date().toISOString(),
+      camera: {
+        position: [round4(cam.position.x), round4(cam.position.y), round4(cam.position.z)],
+        target: tgt ? [round4(tgt.x), round4(tgt.y), round4(tgt.z)] : null,
+        fov: cam.fov,
+      },
+      snapshot: snap,
+      localStorage: ls,
+    };
+    const json = JSON.stringify(data, null, 2);
+    const a = document.createElement('a');
+    a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+    a.download = `kiritan_ideal_layout_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    let savedToDisk: string | null = null;
+    try {
+      const res = await fetch('/__lab/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ file: '_film/ideal_layout.json', dataUrl: json }) });
+      const saved = await res.json();
+      if (res.ok && saved.ok) savedToDisk = saved.path;
+    } catch { /* not on dev server */ }
+    return { ok: true, downloaded: a.download, savedToDisk, props: (snap as { props?: unknown }).props };
+  }
+
   // ---- expression presets (Expression Preset System 0.1) -----------------------------------
 
   /** List the expression presets (id / label / weights) for the authoring loop. */

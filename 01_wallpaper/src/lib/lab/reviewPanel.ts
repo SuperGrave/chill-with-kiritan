@@ -118,6 +118,7 @@ export function installReviewPanel(lab: MotionLab): void {
     btn('🎞 選択をフィルム', () => guard('filmstrip', async () => { await lab.load(filmSel.value); return lab.filmstrip(filmSel.value, { withProps: true, camera: 'desk wide' }); })),
     btn('🎞 直近をフィルム', () => guard('filmstrip', async () => { await lab.load(lastId); return lab.filmstrip(lastId, { withProps: true, camera: 'desk wide' }); })),
   ]);
+  rowOf([btn('💾 理想配置をDL＋保存', () => guard('dumpLayout', () => lab.dumpLayout()), 'go')]);
 
   panel.appendChild(status);
   const hint = document.createElement('div');

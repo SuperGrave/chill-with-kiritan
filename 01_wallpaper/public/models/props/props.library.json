@@ -9,9 +9,9 @@
       "url": "/models/props/items/cup.glb",
       "scale": 0.03967,
       "position": [
-        0.52,
+        0.25,
         0.73,
-        0.2863
+        0.18
       ],
       "rotation": [
         0,
@@ -19,7 +19,7 @@
         0
       ],
       "anchor": "desk_right",
-      "_anchorNote": "マスター既定配置（画面右＝本人の左側）。Phase1ビジュアルQA中に一度本人の右へ移したが、マスター指示で既定へ復帰(2026-06-22)。amb_work_sip の取る手（左/右）と到達はマスター確認後に再著作する。",
+      "_anchorNote": "本人の左側・中央寄り（画面右）。マスター確認(2026-06-22): 理想写真に合わせ、左手が自然に届く位置 +0.25 へ（既定+0.52は腕の到達域外だった）。amb_work_sip は左手でここを取る。",
       "defaultOn": true,
       "author": "mehreen1919",
       "license": "CC-BY 3.0",

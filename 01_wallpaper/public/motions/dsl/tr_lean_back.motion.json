@@ -2,7 +2,7 @@
   "schema": "motion/1",
   "id": "tr_lean_back",
   "label": "遷移: 作業→動画（机へ前傾して寄りかかる）",
-  "notes": "work_normal → video_relax の橋渡し（2026-06-22c改: video が後傾→前傾になったので、これも机へ前傾して寄りかかる動きに）。posture=sit_pc_neutral。spine/chest を 0→前傾、前腕をキーボード位置から机へ前へ預ける。端点=新 loop_video_relax 姿勢に一致(seam0)。12原則: 予備=前傾前に僅か起こす / overshoot→settle / 肩→肘 time-offset。loop:false。",
+  "notes": "work_normal → video_relax の橋渡し（2026-06-22d: video が前傾(-x)になったので符号修正）。posture=sit_pc_neutral。spine/chest を 0→-x で机へ前傾、前腕をキーボードから机前方へ預け、頭を上げて画面視聴。端点=新 loop_video_relax に一致(seam0)。loop:false。",
   "category": "transition",
   "tags": ["mode:video_relax", "family:A'"],
   "posture": "sit_pc_neutral",
@@ -11,20 +11,15 @@
   "fadeIn": 0.4,
   "fadeOut": 0.4,
   "tracks": {
-    "leftUpperArm": { "keys": [ { "t": 0, "e": [0.15, -0.42, 1.36] }, { "t": 1.4, "e": [0.15, -0.5, 1.3], "ease": "sineInOut" } ] },
-    "rightUpperArm": { "keys": [ { "t": 0, "e": [0.15, 0.42, -1.36] }, { "t": 1.4, "e": [0.15, 0.5, -1.3], "ease": "sineInOut" } ] },
-    "leftLowerArm": { "keys": [ { "t": 0, "e": [0, -0.95, -0.72] }, { "t": 1.4, "e": [0, -1.15, -0.55], "ease": "sineInOut" } ] },
-    "rightLowerArm": { "keys": [ { "t": 0, "e": [0, 0.95, 0.72] }, { "t": 1.4, "e": [0, 1.15, 0.55], "ease": "sineInOut" } ] },
+    "leftUpperArm": { "keys": [ { "t": 0, "e": [0.18, -0.52, 1.33] }, { "t": 1.4, "e": [0.15, -0.5, 1.3], "ease": "sineInOut" } ] },
+    "rightUpperArm": { "keys": [ { "t": 0, "e": [0.18, 0.52, -1.33] }, { "t": 1.4, "e": [0.15, 0.5, -1.3], "ease": "sineInOut" } ] },
+    "leftLowerArm": { "keys": [ { "t": 0, "e": [0, -0.88, -0.68] }, { "t": 1.4, "e": [0, -1.15, -0.55], "ease": "sineInOut" } ] },
+    "rightLowerArm": { "keys": [ { "t": 0, "e": [0, 0.88, 0.68] }, { "t": 1.4, "e": [0, 1.15, 0.55], "ease": "sineInOut" } ] },
     "leftHand": { "keys": [ { "t": 0, "e": [0.1, 0, 0] }, { "t": 1.4, "e": [0.1, 0, 0] } ] },
     "rightHand": { "keys": [ { "t": 0, "e": [0.1, 0, 0] }, { "t": 1.4, "e": [0.1, 0, 0] } ] },
-    "spine": { "keys": [
-      { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 0.2, "e": [-0.03, 0, 0], "ease": "easeIn" },
-      { "t": 1.0, "e": [0.23, 0, 0], "ease": "easeOut" },
-      { "t": 1.4, "e": [0.2, 0, 0], "ease": "sineInOut" }
-    ] },
-    "chest": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 1.0, "e": [0.13, 0, 0], "ease": "easeOut" }, { "t": 1.4, "e": [0.12, 0, 0] } ] },
-    "neck": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 1.4, "e": [-0.12, 0, 0], "ease": "sineInOut" } ] },
-    "head": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 1.4, "e": [-0.16, 0, 0], "ease": "sineInOut" } ] }
+    "spine": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 0.2, "e": [0.04, 0, 0], "ease": "easeIn" }, { "t": 1.0, "e": [-0.29, 0, 0], "ease": "easeOut" }, { "t": 1.4, "e": [-0.26, 0, 0], "ease": "sineInOut" } ] },
+    "chest": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 1.4, "e": [-0.16, 0, 0], "ease": "sineInOut" } ] },
+    "neck": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 1.4, "e": [0.06, 0, 0], "ease": "sineInOut" } ] },
+    "head": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 1.4, "e": [0.12, 0, 0], "ease": "sineInOut" } ] }
   }
 }

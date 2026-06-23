@@ -151,11 +151,11 @@
           "label": "ノートPC（モダン）",
           "url": "/models/props/variants/pc_laptop_modern.glb",
           "scale": 0.3477,
-          "_idealNote": "rotation/offset are the master's 理想形(2026-06-21): laptop turned 90deg sideways so it doesn't block the face/hands; moved ~0.15 forward. offset = idealContainerPos[-0.021,0.729,0.341] - scene.json laptop pos[0,0.73,0.5].",
+          "_idealNote": "rotation/offset: master 理想形(2026-06-21) laptop 90deg sideways; +master 2026-06-22d moved ~0.1 toward kiritan so the keyboard is in reach (offset.z -0.159 -> -0.259, container z 0.341 -> 0.241).",
           "offset": [
             -0.021,
             -0.001,
-            -0.159
+            -0.259
           ],
           "rotation": [
             0,

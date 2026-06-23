@@ -101,11 +101,11 @@
           "label": "オフィスチェア",
           "url": "/models/props/variants/chair_office.glb",
           "scale": 0.027,
-          "_idealNote": "scale/offset are the master's 理想形(2026-06-21): container [-9.066,0,5.267] scale 0.027. offset = idealContainerPos - scene.json chair pos[0,0,-0.4].",
+          "_idealNote": "master 2026-06-22c: 椅子を本人の背中へスナッグに前進(container z 5.267->5.627)。offset.z = 5.627 - scene.json chair pos(-0.4) = 6.027。scale 0.027維持。",
           "offset": [
             -9.066,
             0,
-            5.667
+            6.027
           ],
           "rotation": [
             0,

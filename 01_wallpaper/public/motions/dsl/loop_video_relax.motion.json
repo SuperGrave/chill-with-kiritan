@@ -1,62 +1,40 @@
 {
   "schema": "motion/1",
   "id": "loop_video_relax",
-  "label": "ループ: 動画視聴（明確に後傾・だらけ）",
-  "notes": "video_relax の基本ループ。posture=sit_pc_slouch の上に spine/chest を更に -x して背もたれへ明確に後傾、両手はキーボードから外して膝の上へ脱力(肘軽く曲げ手を腿へ)。タイピングは完全停止。首・視線だけモニターへ。work_normal(前傾・前腕キーボード)と横シルエットで一目で区別できることが要件。表情は緩め(fun)、動画への小反応はAmbientが主役。duration20=周期5/10の整数倍。",
+  "label": "ループ: 動画視聴（前傾・机に寄りかかる）",
+  "notes": "video_relax の基本ループ。マスター指示(2026-06-22c): 椅子がリクライニングしないので後傾をやめ、机へ前傾して寄りかかる『だらけ』に。posture=sit_pc_neutral の上に spine/chest を +x で前傾、両前腕を机に置いて上体を預け、頭はやや上げて画面を見る(緩い)。work_normal(直立タイピング)とは前傾＋前腕を机に預ける点で、sleep_desk(完全突っ伏し・閉眼)とは頭を上げ目を開けている点で区別。表情ゆるめ(fun)。duration20=周期5/10整数倍。",
   "category": "loop",
   "tags": ["mode:video_relax", "family:A'"],
-  "posture": "sit_pc_slouch",
+  "posture": "sit_pc_neutral",
   "duration": 20,
   "loop": true,
   "fadeIn": 1.0,
   "fadeOut": 1.0,
   "tracks": {
-    "spine": { "keys": [
-      { "t": 0, "e": [-0.14, 0, 0] },
-      { "t": 20, "e": [-0.14, 0, 0] }
-    ] },
-    "chest": { "keys": [
-      { "t": 0, "e": [-0.07, 0, 0] },
-      { "t": 20, "e": [-0.07, 0, 0] }
-    ] },
-    "neck": { "keys": [
-      { "t": 0, "e": [-0.04, 0, 0] },
-      { "t": 20, "e": [-0.04, 0, 0] }
-    ] },
-    "head": { "keys": [
-      { "t": 0, "e": [-0.06, 0, 0] },
-      { "t": 20, "e": [-0.06, 0, 0] }
-    ] },
-    "leftUpperArm": { "keys": [
-      { "t": 0, "e": [0.05, -0.12, 1.24] },
-      { "t": 20, "e": [0.05, -0.12, 1.24] }
-    ] },
-    "rightUpperArm": { "keys": [
-      { "t": 0, "e": [0.05, 0.12, -1.24] },
-      { "t": 20, "e": [0.05, 0.12, -1.24] }
-    ] },
-    "leftLowerArm": { "keys": [
-      { "t": 0, "e": [0, -0.62, -0.5] },
-      { "t": 20, "e": [0, -0.62, -0.5] }
-    ] },
-    "rightLowerArm": { "keys": [
-      { "t": 0, "e": [0, 0.62, 0.5] },
-      { "t": 20, "e": [0, 0.62, 0.5] }
-    ] }
+    "spine": { "keys": [ { "t": 0, "e": [0.2, 0, 0] }, { "t": 20, "e": [0.2, 0, 0] } ] },
+    "chest": { "keys": [ { "t": 0, "e": [0.12, 0, 0] }, { "t": 20, "e": [0.12, 0, 0] } ] },
+    "neck": { "keys": [ { "t": 0, "e": [-0.12, 0, 0] }, { "t": 20, "e": [-0.12, 0, 0] } ] },
+    "head": { "keys": [ { "t": 0, "e": [-0.16, 0, 0] }, { "t": 20, "e": [-0.16, 0, 0] } ] },
+    "leftUpperArm": { "keys": [ { "t": 0, "e": [0.15, -0.5, 1.3] }, { "t": 20, "e": [0.15, -0.5, 1.3] } ] },
+    "rightUpperArm": { "keys": [ { "t": 0, "e": [0.15, 0.5, -1.3] }, { "t": 20, "e": [0.15, 0.5, -1.3] } ] },
+    "leftLowerArm": { "keys": [ { "t": 0, "e": [0, -1.15, -0.55] }, { "t": 20, "e": [0, -1.15, -0.55] } ] },
+    "rightLowerArm": { "keys": [ { "t": 0, "e": [0, 1.15, 0.55] }, { "t": 20, "e": [0, 1.15, 0.55] } ] },
+    "leftHand": { "keys": [ { "t": 0, "e": [0.1, 0, 0] }, { "t": 20, "e": [0.1, 0, 0] } ] },
+    "rightHand": { "keys": [ { "t": 0, "e": [0.1, 0, 0] }, { "t": 20, "e": [0.1, 0, 0] } ] }
   },
   "oscillators": [
     { "bone": "chest", "axis": "x", "amp": 0.03, "period": 5 },
     { "bone": "spine", "axis": "x", "amp": 0.018, "period": 5 },
-    { "bone": "head", "axis": "y", "amp": 0.025, "period": 10 },
-    { "bone": "head", "axis": "z", "amp": 0.015, "period": 10, "phase": 1.5 }
+    { "bone": "head", "axis": "y", "amp": 0.03, "period": 10 },
+    { "bone": "head", "axis": "z", "amp": 0.018, "period": 10, "phase": 1.5 }
   ],
   "exprCues": [
     { "preset": "small_smile", "at": 2.0, "intensity": 0.35, "fadeIn": 1.5, "hold": 6.0, "fadeOut": 3.0 },
     { "preset": "small_smile", "at": 12.0, "intensity": 0.4, "fadeIn": 1.5, "hold": 4.0, "fadeOut": 2.5 }
   ],
   "gaze": { "keys": [
-    { "t": 0, "to": [0, -2] },
-    { "t": 6, "to": [4, 0], "move": 0.6 },
-    { "t": 13, "to": [-3, -3], "move": 0.6 }
+    { "t": 0, "to": [0, 2] },
+    { "t": 6, "to": [5, 4], "move": 0.6 },
+    { "t": 13, "to": [-3, 1], "move": 0.6 }
   ] }
 }

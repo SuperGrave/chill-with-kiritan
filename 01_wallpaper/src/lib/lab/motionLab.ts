@@ -929,6 +929,32 @@ export class MotionLab {
     return { ok: true, attached: propId, to: boneName, offset, boneWorldScale: round4(bone.getWorldScale(new THREE.Vector3()).x) };
   }
 
+  /**
+   * Calibration: nudge a loaded prop CONTAINER's local position (and optionally
+   * multiply its scale), re-render, and report the new transform. Lets me fit the
+   * chair/desk live without a reload; bake the final values into props.variants.json.
+   */
+  nudgeProp(propId: string, d: [number, number, number] = [0, 0, 0], scaleMul = 1): Record<string, unknown> {
+    const prop = findPropContainer(this.h.scene, propId);
+    if (!prop) return fail('prop', `no loaded prop "${propId}" (try "chair"/"desk"/"laptop"/"item:cup").`);
+    prop.position.x += d[0];
+    prop.position.y += d[1];
+    prop.position.z += d[2];
+    if (scaleMul !== 1) prop.scale.multiplyScalar(scaleMul);
+    this.h.scene.updateMatrixWorld(true);
+    if (this.frozen) this.h.renderer.render(this.h.scene, this.h.camera);
+    const w = prop.getWorldPosition(new THREE.Vector3());
+    const box = new THREE.Box3().setFromObject(prop);
+    return {
+      ok: true,
+      propId,
+      localPosition: [round4(prop.position.x), round4(prop.position.y), round4(prop.position.z)],
+      scale: round4(prop.scale.x),
+      worldCenter: [round4((box.min.x + box.max.x) / 2), round4((box.min.y + box.max.y) / 2), round4((box.min.z + box.max.z) / 2)],
+      world: [round4(w.x), round4(w.y), round4(w.z)],
+    };
+  }
+
   /** Return a held prop to its desk rest. */
   detachProp(propId: string): Record<string, unknown> {
     const prop = findPropContainer(this.h.scene, propId);

@@ -9,6 +9,7 @@ import { StatusBadge } from './shared';
 interface MusicPanelProps {
   spotify?: SpotifyState;
   settings?: any;
+  offline?: boolean;
 }
 
 const formatMs = (ms?: number): string => {
@@ -19,7 +20,7 @@ const formatMs = (ms?: number): string => {
   return `${m}:${sec}`;
 };
 
-const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings }) => {
+const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings, offline = false }) => {
   const s = { ...musicPanelDefaults, ...settings };
   const track = spotify.track;
 
@@ -148,6 +149,7 @@ const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings
           opacity: 0.9,
         }}>
           <span>@ SPOTIFY</span>
+          {offline && <StatusBadge tone="warn">OFFLINE</StatusBadge>}
           <StatusBadge tone={statusTone}>STATUS: {spotify.status.toUpperCase()}</StatusBadge>
           {!spotify.connected && <StatusBadge tone="error">NOT CONNECTED</StatusBadge>}
         </div>

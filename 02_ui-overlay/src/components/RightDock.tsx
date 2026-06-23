@@ -10,13 +10,14 @@ interface RightDockProps {
   onTogglePanel: (id: PanelId) => void;
   settingsOpen: boolean;
   onToggleSettings: () => void;
+  showSettings?: boolean;
 }
 
 // The dock no longer swaps a shared panel — each button toggles the show/hide
 // of its standalone floating panel (active = currently visible). The gear opens
 // the Settings overlay.
 const RightDock: React.FC<RightDockProps> = ({
-  layout, debugMode, visibility, onTogglePanel, settingsOpen, onToggleSettings,
+  layout, debugMode, visibility, onTogglePanel, settingsOpen, onToggleSettings, showSettings = true,
 }) => {
   const buttons: { id: PanelId; label: string; icon: React.ReactNode }[] = [
     { id: 'WEATHER', label: 'WEATHER', icon: <Cloud size={20} strokeWidth={1.5} /> },
@@ -47,14 +48,14 @@ const RightDock: React.FC<RightDockProps> = ({
           <span>{btn.label}</span>
         </button>
       ))}
-      <button
+      {showSettings && <button
         className={`dock-button ${settingsOpen ? 'active' : ''}`}
         onClick={onToggleSettings}
         title="Settings"
       >
         <Settings size={20} strokeWidth={1.5} />
         <span>SETTINGS</span>
-      </button>
+      </button>}
     </div>
   );
 };

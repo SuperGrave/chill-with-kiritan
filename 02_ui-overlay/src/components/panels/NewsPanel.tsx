@@ -7,7 +7,7 @@ import { StatusBadge, clampLines, formatTimeHM } from './shared';
 interface NewsPanelProps {
   items?: NewsItem[];
   updatedAt?: string;
-  source?: 'live' | 'mock';
+  source?: 'live' | 'mock' | 'offline' | 'demo';
   settings?: any;
 }
 
@@ -30,6 +30,11 @@ const NewsPanel: React.FC<NewsPanelProps> = ({
       boxSizing: 'border-box',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: `${s.itemGap}px` }}>
+        {shown.length === 0 && (
+          <div style={{ opacity: 0.5, letterSpacing: '0.12em', fontSize: '14px' }}>
+            NO NEWS ITEMS
+          </div>
+        )}
         {shown.map((item, i) => {
           const latest = s.highlightLatest && i === 0;
           return (

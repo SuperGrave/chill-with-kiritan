@@ -8,9 +8,10 @@ import { StatusBadge, formatTimeHM } from './shared';
 interface AiPanelProps {
   ai?: AiState;
   settings?: any;
+  offline?: boolean;
 }
 
-const AiPanel: React.FC<AiPanelProps> = ({ ai = mockAi, settings }) => {
+const AiPanel: React.FC<AiPanelProps> = ({ ai = mockAi, settings, offline = false }) => {
   const s = { ...aiPanelDefaults, ...settings };
 
   const statusTone =
@@ -42,6 +43,7 @@ const AiPanel: React.FC<AiPanelProps> = ({ ai = mockAi, settings }) => {
           flexShrink: 0,
         }}>
           <span>@ {ai.provider === 'none' ? 'NO PROVIDER' : ai.provider.toUpperCase()}</span>
+          {offline && <StatusBadge tone="warn">OFFLINE</StatusBadge>}
           <StatusBadge tone={statusTone}>STATUS: {ai.status.toUpperCase()}</StatusBadge>
           {ai.error && <StatusBadge tone="error">ERROR</StatusBadge>}
         </div>

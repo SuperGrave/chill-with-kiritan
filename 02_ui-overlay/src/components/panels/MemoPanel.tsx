@@ -3,11 +3,12 @@ import { Pin } from 'lucide-react';
 import type { MemoItem } from '../../types/panels';
 import { mockMemos } from '../../data/mockPanels';
 import { memoPanelDefaults } from '../../config/uiSettings';
-import { clampLines } from './shared';
+import { StatusBadge, clampLines } from './shared';
 
 interface MemoPanelProps {
   memos?: MemoItem[];
   settings?: any;
+  offline?: boolean;
 }
 
 const formatDateHM = (iso: string): string => {
@@ -36,7 +37,7 @@ const SectionLabel: React.FC<{ icon?: React.ReactNode; children: React.ReactNode
   </div>
 );
 
-const MemoPanel: React.FC<MemoPanelProps> = ({ memos = mockMemos, settings }) => {
+const MemoPanel: React.FC<MemoPanelProps> = ({ memos = mockMemos, settings, offline = false }) => {
   const s = { ...memoPanelDefaults, ...settings };
 
   const limited = s.maxItems > 0 ? memos.slice(0, s.maxItems) : memos;
@@ -124,6 +125,7 @@ const MemoPanel: React.FC<MemoPanelProps> = ({ memos = mockMemos, settings }) =>
           opacity: 0.9,
         }}>
           <span>@ {limited.length} MEMOS</span>
+          {offline && <StatusBadge tone="warn">OFFLINE</StatusBadge>}
           {pinned.length > 0 && <span style={{ opacity: 0.6 }}>/ {pinned.length} PINNED</span>}
         </div>
       )}

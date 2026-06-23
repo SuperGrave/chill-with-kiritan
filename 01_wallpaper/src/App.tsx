@@ -45,6 +45,7 @@ import {
 } from './lib/scene/layoutCalibration';
 import type { LayoutTransforms, TransformEntry } from './lib/scene/layoutCalibration';
 import SceneBackgroundLayer from './components/SceneBackgroundLayer';
+import ProductionOverlay from './components/ProductionOverlay';
 import type { BgAssetStatus, BgDebug, BgFit } from './components/SceneBackgroundLayer';
 import VrmViewer from './VrmViewer';
 import './index.css';
@@ -131,6 +132,12 @@ function Section(props: {
 }
 
 function App() {
+  const params = new URLSearchParams(window.location.search);
+  const productionMode =
+    !params.has('probe') &&
+    !params.has('lab') &&
+    !params.has('phase1Review');
+
   const [cameraMode, setCameraMode] = useState<CameraMode>('ideal');
   const [lookAtEnabled, setLookAtEnabled] = useState(true);
   const [springBoneMode, setSpringBoneMode] = useState<SpringBoneMode>('normal');
@@ -502,6 +509,8 @@ function App() {
   // --- Keyboard shortcuts (unchanged from 0.6, plus H = panel show/hide) ----------
 
   useEffect(() => {
+    if (productionMode) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
 
@@ -610,7 +619,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [productionMode]);
 
   const idleKeyFor = (state: IdleState) => Object.keys(IDLE_KEYS).find((k) => IDLE_KEYS[k] === state) ?? '';
   const fading = idleDebug.progress < 1;
@@ -627,7 +636,7 @@ function App() {
       : undefined;
 
   return (
-    <div id="root">
+    <div className={`wallpaper-shell ${productionMode ? 'production-mode' : 'probe-mode'}`}>
       <SceneBackgroundLayer
         background={sceneDebug.background}
         enabled={backgroundEnabled}
@@ -677,7 +686,9 @@ function App() {
         onCameraReadback={setCameraReadback}
       />
 
-      <div className="ui-layer">
+      {productionMode && <ProductionOverlay />}
+
+      {!productionMode && <div className="ui-layer">
         {!panelVisible && (
           <button type="button" className="panel-reveal" onClick={() => setPanelVisible(true)} title="パネルを表示 (H)">
             ☰
@@ -1222,7 +1233,7 @@ function App() {
             {fps}fps · {externalDebug.clipSource} {externalDebug.playing ? '▶' : '⏸'}
           </span>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

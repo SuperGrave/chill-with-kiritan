@@ -734,14 +734,6 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.motionRequest]);
 
-  // Stage D: re-derive lighting from the cached scene block when the daypart
-  // flips (App re-computes it off the local clock — see daypart.ts) — no scene
-  // reload needed, day<->night is just a relight of the existing lights.
-  useEffect(() => {
-    applySceneLighting(currentSceneLightingRef.current, props.daypart);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.daypart]);
-
   // Blink state
   const blinkStateRef = useRef<{ time: number; phase: 'open' | 'closing' | 'closed' | 'opening'; nextBlink: number }>({
     time: 0, phase: 'open', nextBlink: 3.0
@@ -826,6 +818,13 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       dir.color.set(night?.mainLightColor ?? lighting.mainLightColor);
     }
   };
+
+  // Stage D: re-derive lighting from the cached scene block when the daypart
+  // flips (App re-computes it off the local clock — see daypart.ts) — no scene
+  // reload needed, day<->night is just a relight of the existing lights.
+  useEffect(() => {
+    applySceneLighting(currentSceneLightingRef.current, props.daypart);
+  }, [props.daypart]);
 
   // Scene loads are SERIALIZED through this chain: loadSceneProps clears then
   // appends into the shared propsRoot, so two overlapping loads (StrictMode's

@@ -13,7 +13,7 @@
 //     spaced by LOOP time (the ambient's own duration doesn't count against the
 //     interval) — which is what "every 25–70 s of working" should mean.
 
-import { ModeFsm, type SleepinessConfig } from './modeFsm';
+import { ModeFsm, type FsmSnapshot, type SleepinessConfig } from './modeFsm';
 import { AmbientScheduler, type SchedulerConfig } from './scheduler';
 import { makeRng } from './rng';
 import type { ModeId } from './types';
@@ -214,6 +214,12 @@ export class DirectorRunner {
   abortTransition(): DirectorAction | null {
     if (this.state !== 'transition') return null;
     return this.enterLoop();
+  }
+
+  /** Raw FSM snapshot (mode/prevMode/sinceMinutes/sleepiness) — the shape
+   * kiritanPoster.ts needs for the Companion wire object (Stage C). */
+  snapshot(): FsmSnapshot {
+    return this.fsm.snapshot();
   }
 
   status(): DirectorStatus {

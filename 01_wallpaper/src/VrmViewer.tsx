@@ -45,6 +45,7 @@ import { installPoseComposer } from './lib/lab/poseComposer/poseComposer';
 import type { PoseComposer } from './lib/lab/poseComposer/poseComposer';
 import { installPoseComposerPanel } from './lib/lab/poseComposer/poseComposerPanel';
 import { DirectorRunner } from './lib/motion/director/directorRunner';
+import { KiritanPoster } from './lib/motion/director/kiritanPoster';
 import { resolveTransitionChain } from './lib/motion/director/modeTable';
 import { PHASE1_MODE_LOOP } from './lib/motion/director/motionContext';
 import {
@@ -1219,8 +1220,13 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         // way the Lab's `__motionLab.director(true)` does, minus the manual
         // trigger. Dev/probe/lab entries pass autoStartDirector=false and keep
         // full manual control. Guarded against StrictMode's dev double-invoke:
-        // if cleanup already ran by the time this resolves, undo the start.
-        if (props.autoStartDirector && !directorRef.current) {
+        // this VRM-load callback can itself fire AFTER this mount's own cleanup
+        // (GLTFLoader has no abort hook, so a stale mount's in-flight fetch
+        // still resolves) — checking autoStartCancelled here, not just in the
+        // .then() below, stops a long-dead mount from ever calling
+        // startDirector() and clobbering directorRef.current out from under
+        // the surviving mount's own runner.
+        if (props.autoStartDirector && !directorRef.current && !autoStartCancelled) {
           startDirector().then((result) => {
             if (autoStartCancelled) {
               stopDirector();
@@ -1253,6 +1259,10 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     // (0.2) No mousemove listener — cursor-follow gaze was removed by design.
 
     const clock = new THREE.Clock();
+    // Stage C: fire-and-forget kiritanState sync to Companion, gated on the
+    // director's own mode-change/heartbeat cadence (see kiritanPoster.ts).
+    // A missing/offline Companion has zero effect on the wallpaper.
+    const kiritanPoster = new KiritanPoster();
     let frameCount = 0;
     let lastFpsTime = 0;
     let timeAccumulator = 0;
@@ -1437,6 +1447,10 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         //         Ambient end is handled by the mixer 'finished' listener.
         const director = directorRef.current;
         if (director) {
+          // Stage C: report mode/presence/sleepiness to Companion. The poster's
+          // own cadence gate (mode-change or ~30s heartbeat) decides whether
+          // this frame actually sends anything.
+          kiritanPoster.maybePost(director.snapshot(), { nowMs: Date.now(), ambient: null, away: null });
           // Tick the FSM/scheduler during normal play AND while hidden (so the
           // away dwell still expires and a return target is chosen) — but NOT
           // mid leave/return, where the host orchestrator owns the clips (else a

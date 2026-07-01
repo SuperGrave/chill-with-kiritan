@@ -1,17 +1,23 @@
 # POSE COMPOSER 0.8 — ハンドオフ / 再開ドキュメント（HANDOFF）
 
-- **Date**: 2026-06-24
-- **これは何**: Pose Composer 0.8 の作業を**中断→次回再開**するための1枚。現状(Stage 0–2 完了)・確定事項・絶対に踏むな落とし穴・残作業(Stage 3–7 具体手順) を自己完結でまとめる。
-- **関連**: 監査=[POSE_COMPOSER_0_8_AUDIT.md](POSE_COMPOSER_0_8_AUDIT.md) ／ 進捗詳細=[POSE_COMPOSER_0_8_PROGRESS.md](POSE_COMPOSER_0_8_PROGRESS.md) ／ 指示書=「Motion Lab Pose Composer 設計・実装指示書」
+- **Date**: 2026-06-24（初版）／ **2026-07-01 更新**（Stage 3・4 完了を反映）
+- **これは何**: Pose Composer 0.8 の作業を**中断→次回再開**するための1枚。現状(**Stage 0–4 完了**)・確定事項・絶対に踏むな落とし穴・残作業(Stage 5–7 具体手順) を自己完結でまとめる。
+- **関連**: 監査=[POSE_COMPOSER_0_8_AUDIT.md](POSE_COMPOSER_0_8_AUDIT.md) ／ 進捗詳細=[POSE_COMPOSER_0_8_PROGRESS.md](POSE_COMPOSER_0_8_PROGRESS.md) ／ スキーマ=[POSE_ASSET_SCHEMA_V1.md](POSE_ASSET_SCHEMA_V1.md) ／ 指示書=「Motion Lab Pose Composer 設計・実装指示書」
 
 ---
 
 ## ▶ 次回の再開方法（これを貼る / これを読ませる）
 
 > 新しいセッションで以下を渡す:
-> 「`docs/POSE_COMPOSER_0_8_HANDOFF.md` と `docs/POSE_COMPOSER_0_8_AUDIT.md` を読んで、Pose Composer 0.8 の **Stage 3** から続けて。master決定（§2）と落とし穴（§4）は厳守。各Stage末で `tsc -b` と `npm run build` を green に。」
+> 「`docs/POSE_COMPOSER_0_8_HANDOFF.md` と `docs/POSE_COMPOSER_0_8_AUDIT.md` を読んで、Pose Composer 0.8 の **Stage 5（Motion qキー連携）** から続けて。master決定（§2）と落とし穴（§4）は厳守。既存Motion DSLの後方互換（motions 54/director 90/expression 263 checks）を壊さないこと。各Stage末で `tsc -b`・`npm run build`・該当テストを green に。」
 
 着工前にやること: ①本書 §2 決定 と §4 不変条件を確認 ②`01_wallpaper/src/lib/lab/poseComposer/` の現コードを読む ③§6 の起動・検証レシピで現状を一度動かす ④§7 の該当Stage手順で実装。
+
+### 現状（2026-07-01）
+- **Stage 0–4 完了**。branch `feat/pose-composer-0.8`（base `5220449`）に3コミット: `d84fdd8`(Stage0-2) → `3b71ca9`(Stage3: ギズモ+Undo/Redo) → `ebe7c5f`(Stage4: pose/1 保存/読込)。
+- 動くもの: `?poseEdit=1` パネル / `window.__poseComposer`。FK編集・SVGボーンマップ・**3D回転ギズモ（hipsは移動）**・**Undo/Redo(Ctrl+Z/Shift+Z)**・**pose/1 保存/読込/Export/Import**・サンプル `public/poses/sample_wave.pose.json`。
+- テスト: `tools/test_pose_undo.mjs`(32) / `test_pose_math.mjs`(133) / `test_pose_codec.mjs`(22) = 187 checks green。
+- **⚠ 未コミットの統合行（触るな・別機能と混在）**: `VrmViewer.tsx`・`motionLab.ts` は Pose Composer の install/ゲート/handle行と、**無関係な未コミット機能「work-hand-pin IK」**（`WORK_HAND_PIN_POLICIES`/`applyWorkHandPins`/CCD-IK・`isSceneReady`）が同一ファイル内で交錯。ファイル単位で分離コミット不可のため作業ツリーに残置。`instruction #3`（無関係差分を触らない）遵守。**次セッションもこの2ファイルは単独コミット不可**。`vite.config.ts` は元々無変更→Stage4で単独コミット済み。
 
 ---
 
@@ -64,16 +70,22 @@
 
 ```
 01_wallpaper/src/lib/lab/poseComposer/
-  poseComposer.ts          window.__poseComposer 本体（session/override/overlay/capture/selectBone…）
-  poseComposerPanel.ts     ?poseEdit=1 の素DOMパネル（PC()ゲッター経由で生インスタンス駆動）
+  poseComposer.ts          window.__poseComposer 本体（session/override/overlay/capture/select/gizmo/undo/save/load）
+  poseComposerPanel.ts     ?poseEdit=1 の素DOMパネル（PC()ゲッター・gizmo/undo/save-load UI）
   boneMapDefinition.ts     人型SVG静的座標 22本（front/side・JPラベル・parent・group）
-01_wallpaper/src/lib/lab/motionLab.ts   LabHandles に getRestHipsPosition 追加（共有handle）
-01_wallpaper/src/VrmViewer.tsx          install(lab/poseComposer/panel)・freezeゲート拡張・cleanup
-docs/POSE_COMPOSER_0_8_{AUDIT,PROGRESS,HANDOFF}.md
+  poseHistory.ts           【Stage3】純THREE-math Undo/Redo スナップショットスタック（テスト対象）
+  poseMath.ts              【Stage4】基底変換 reference-offset⇄T-pose絶対euler（純関数・テスト対象）
+  poseAssetCodec.ts        【Stage4】pose/1 encode/decode（validatePose流用）
+01_wallpaper/src/lib/lab/motionLab.ts   LabHandles に getRestHipsPosition + controls? 追加（★未コミット・混在）
+01_wallpaper/src/VrmViewer.tsx          install・freezeゲート拡張・controls handle・cleanup（★未コミット・混在）
+01_wallpaper/vite.config.ts             【Stage4】POST /__lab/pose/save（dev白名簿・コミット済）
+01_wallpaper/public/poses/sample_wave.pose.json  【Stage4】サンプル
+tools/test_pose_undo.mjs / test_pose_math.mjs / test_pose_codec.mjs   【Stage3/4】
+docs/POSE_COMPOSER_0_8_{AUDIT,PROGRESS,HANDOFF}.md / POSE_ASSET_SCHEMA_V1.md
 ```
-**未作成（Stage 3+で追加予定）**: `poseMath.ts`(純関数・テスト対象) / `poseAssetTypes.ts` / `poseAssetCodec.ts` / `poseKeyframeBridge.ts` / `boneDragProfiles.ts` / `boneSoftLimits.ts` / `tools/test_pose_*.mjs` / `public/poses/samples/*`。
+**未作成（Stage 5+で追加予定）**: `poseKeyframeBridge.ts` / `boneDragProfiles.ts` / `boneSoftLimits.ts` / `tools/test_keyframe_bridge.mjs` / `test_pose_mirror.mjs` / `public/poses/hands/*`。DSL側 `evaluate.ts`/`types.ts`/`compileClip.ts`/`validate.ts` の q キー拡張（Stage 5・後方互換厳守）。
 
-**変更外**: motion/scene の `*.json` は触っていない（git status の他の M は本作業と無関係）。
+**変更外（触るな）**: motion/scene の `*.json`・`MOTION_AUTHORING_GUIDE.md`・`reviewPanel.ts`・`README.md`・`.gitignore`・staged deletions は本作業と無関係（別機能 work-hand-pin ほか）。
 
 ---
 
@@ -99,7 +111,7 @@ pc.resetAll(); pc.end();
 
 各Stage末で `tsc -b` + `npm run build` green、PROGRESS.md 追記、可能なら capture 目視。
 
-### Stage 3 — 3Dギズモ + Undo/Redo（次の着手）
+### Stage 3 — 3Dギズモ + Undo/Redo（✅ 完了 2026-07-01・commit `3b71ca9`・詳細は PROGRESS §3）
 - **TransformControls**（`three/examples/jsm/controls/TransformControls.js` 同梱確認済）を選択ボーンの normalized node に attach。`mode='rotate'`, `space='local'`。translate は hips のみ許可、scale 禁止。
 - ギズモは scene に add（freeze render に写る）。**ドラッグ中の値取り込み**: `objectChange` で node.quaternion を読み `offset = inv(ref)*local` を `setBoneLocalQuaternion` 相当で overrides に格納（drawFrame が `ref*offset` で再構築＝整合）。
 - **描画駆動**: 実ブラウザでは poseComposer active 中 viewer rAF は止まる。連続ループは持たず、**TransformControls `change` / OrbitControls `change` イベントで drawFrame をrender**（イベント駆動）。
@@ -107,7 +119,7 @@ pc.resetAll(); pc.end();
 - **Undo/Redo（§11）**: overrides(+hipsOffset) のスナップショット方式。**ギズモ1ドラッグ=1コマンド**（drag開始でsnapshot、`dragging-changed=false`でcommit）。数値入力は確定(blur/Enter)で1件。最大100。Undo後の新操作で redo破棄。asset load(Stage4)で履歴clear。
 - パネル: Undo/Redo/Gizmoトグル ボタン。pose-edit有効時のみ効く capture-phase キー（`Ctrl+Z`/`Ctrl+Shift+Z`、§17 衝突回避＝App handlerより先に intercept+stopPropagation）。最終キー割当を PROGRESS に記録。
 
-### Stage 4 — Pose Asset 保存/読込（master決定=pose/1）
+### Stage 4 — Pose Asset 保存/読込（✅ 完了 2026-07-01・commit `ebe7c5f`・詳細は PROGRESS §4 / スキーマは POSE_ASSET_SCHEMA_V1.md）
 - `poseMath.ts`(純関数・THREE math のみ): `offset⇄localQ`、`euler⇄quat`、**reference基準offset → T-pose絶対オイラー**(=`euler(ref*offset)`)、その逆(load: `offset=inv(ref)*Q(poseEuler)`)。`q`と`-q`同値は `|dot|` 比較。
 - `poseAssetCodec.ts`: 書き=各**編集ボーンのみ**を `pose/1`(`bones:{bone:[x,y,z]}`,`hipsOffset`,`schema:"pose/1"`,`id`,`label`)へ。読み=`validatePose` 流用＋offsetへ逆変換して overrides に load（reference は不変）。changed-bones-only を既定（§8.2）。
 - **dev endpoint 追加**（[vite.config.ts](../01_wallpaper/vite.config.ts) `motionLabApi`）: `POST /__lab/pose/save`（白名簿 `public/poses/` と `public/poses/hands/`、`ap/serve`限定、`..`拒否、`path.resolve`後 dir で startsWith 検査、上書き前backup）。Export/Import JSON はブラウザ blob/file input（dev非依存）。
@@ -141,6 +153,9 @@ pc.resetAll(); pc.end();
 ---
 
 ## 9. ロールバック / コミット
-- **未コミット**。ベース HEAD = `5220449`（"feat: add production wallpaper shell"）。
-- 本作業の変更=`poseComposer/`(新規3) ＋ `VrmViewer.tsx` ＋ `motionLab.ts`(handle1行) ＋ `docs/POSE_COMPOSER_0_8_*`。motion/scene json には未介入。
-- コミットは master 指示待ち（指示時は branch 切ってから）。
+- **branch** `feat/pose-composer-0.8`（base `5220449` "feat: add production wallpaper shell"）。コミット3件:
+  - `d84fdd8` checkpoint(Stage 0-2): `poseComposer/{poseComposer,poseComposerPanel,boneMapDefinition}.ts` + docs3。
+  - `3b71ca9` Stage 3: `poseComposer.ts`(gizmo+undo) / `poseComposerPanel.ts` / `poseHistory.ts`(新) / `tools/test_pose_undo.mjs`(新)。
+  - `ebe7c5f` Stage 4: `poseMath.ts`(新) / `poseAssetCodec.ts`(新) / `poseComposer.ts` / `poseComposerPanel.ts` / `vite.config.ts` / `public/poses/sample_wave.pose.json`(新) / `test_pose_math.mjs` `test_pose_codec.mjs`(新)。
+- **未コミット残置（意図的）**: `VrmViewer.tsx` / `motionLab.ts`。理由=無関係の未コミット機能「work-hand-pin IK」と同一ファイル内で交錯し、ファイル単位で分離不可（instruction #3）。**作業ツリーは全green**（tsc/build/tests）だが、branchのコミット状態だけでは統合行が欠けるため単体ビルド不可＝これは制約の必然。Stage 0-2 から同状態。
+- **doc更新のコミット**: 本 HANDOFF / PROGRESS / POSE_ASSET_SCHEMA_V1.md はStage完了ごとに pose-composer doc として単独コミット可。

@@ -9,11 +9,14 @@
 | 0 | 既存構造監査 | ✅ 完了（AUDIT.md） |
 | 1 | Authoring Session 基盤 | ✅ 完了（本書 §1） |
 | 2 | Bone選択＋数値編集＋素DOMパネル | ✅ 完了（本書 §2） |
-| 3 | 3Dギズモ＋Undo/Redo | ⬜ 次 |
-| 4 | Pose Asset 保存/読込（pose/1書き出し・dev endpoint） | ⬜ |
-| 5 | Motion Key連携（qキー評価器拡張） | ⬜ |
+| 3 | 3Dギズモ＋Undo/Redo | ✅ 完了（本書 §3・commit `3b71ca9`） |
+| 4 | Pose Asset 保存/読込（pose/1書き出し・dev endpoint） | ✅ 完了（本書 §4・commit `ebe7c5f`） |
+| 5 | Motion Key連携（qキー評価器拡張） | ⬜ 次（本丸・DSL共有コード改修） |
 | 6 | DragPad / Hand Shape | ⬜ |
 | 7 | Copy / Mirror / QA | ⬜ |
+
+> **コミット**（branch `feat/pose-composer-0.8`, base `5220449`）: `d84fdd8`(Stage0-2 checkpoint) → `3b71ca9`(Stage3) → `ebe7c5f`(Stage4)。
+> **未コミットの統合行**: `VrmViewer.tsx`(`controls,` handle・poseComposer install・freezeゲート) と `motionLab.ts`(`controls?`/`getRestHipsPosition` handle) は、**無関係な別機能「work-hand-pin IK」と同一ファイル内で交錯**するため作業ツリーに残置（instruction #3 遵守）。`vite.config.ts` は元々無変更だったので Stage4 で単独コミット済み。
 
 ---
 
@@ -140,3 +143,51 @@ Stage 1 変更ファイル: `poseComposer.ts`(新規) / `motionLab.ts`(LabHandle
 
 ### 2.6 ロールバック
 Stage 2 追加/変更: `boneMapDefinition.ts`(新規) / `poseComposerPanel.ts`(新規) / `poseComposer.ts`(選択+overlay) / `VrmViewer.tsx`(panel install)。未コミット。
+
+---
+
+## 3. Stage 3 — 3Dギズモ＋Undo/Redo（完了 2026-07-01・commit `3b71ca9`）
+
+### 3.1 何を作ったか
+- **新規** `poseHistory.ts` … 純THREE-math の Undo/Redo スナップショットスタック（VRM/renderer/DOM非依存＝Nodeで単体テスト可）。`PoseSnapshot`(overrides + hipsOffset) / `cloneSnapshot` / `snapshotsEqual`(q≡−q は `|dot|` 比較) / `class PoseHistory`(begin/commit/undo/redo/clear、上限100)。
+- **改修** `poseComposer.ts`:
+  - **ギズモ**: `three/examples/jsm/controls/TransformControls`(r0.184)を選択ボーンの normalized node に `attach`。`rotate`＋`local` space、hips のみ `translate` 可（root motion）。`getHelper()` を scene に add＝**freeze render に写る**。ドラッグ中は `objectChange` で `node.quaternion` を読み `offset = inv(ref)·local` を override へ格納→`drawFrame` が `ref·offset` で再構築（整合・無蓄積）。
+  - **描画駆動**: viewer rAF は session中停止のため**イベント駆動**。gizmo `change`/`objectChange`・orbit `change` で `drawFrame`。ドラッグ中は `change` を抑止し `objectChange` に描画を一本化（先発の `change` が bone quaternion を stale で上書きするのを回避）。
+  - **カメラ周回**: viewer の OrbitControls を handle 経由で借用（`h.controls`）。session中 `enableDamping=false`＋`enabled=true`、ギズモ `dragging-changed` 中は `enabled=false`。`end()` で元の状態へ復元。handle が無くても劣化動作（ギズモ/undoは有効）。
+  - **Undo/Redo**: 全 mutating setter を `withUndo()` 経由で「1操作=1コマンド」。ギズモ1ドラッグ=drag開始→drag終了で1件、パネル数値=focus→blur で1件（`beginCommandGroup`/`endCommandGroup`）。`undo()`/`redo()` は snapshot 復元→`recomputeDirty`→gizmo再同期→`drawFrame`。
+- **改修** `poseComposerPanel.ts`: ギズモtoggle＋回転/移動(hips)ボタン、Undo/Redoボタン、数値inputの focus/blur/Enter でコマンド境界、**capture-phase の `Ctrl+Z`/`Ctrl+Shift+Z`/`Ctrl+Y`**（pose-active時のみ・INPUT時除外・`stopPropagation` で App ハンドラと隔離＝§17）。
+- **改修（未コミット・混在ファイル）** `motionLab.ts`(`LabHandles.controls?: OrbitControls`) / `VrmViewer.tsx`(`controls,` を labHandles へ)。
+
+### 3.2 ショートカット最終割当（§17）
+- `Ctrl/⌘+Z` = Undo、`Ctrl/⌘+Shift+Z` / `Ctrl+Y` = Redo。**pose-edit active 時のみ** capture-phase で intercept＋`stopPropagation`（App の window ハンドラより先）。INPUT/TEXTAREA フォーカス時はネイティブundoに委ねる。ギズモtoggle・rotate/translate はパネルボタン（単キー空きが `d i q w y z` のみのため単キー割当は見送り）。
+
+### 3.3 検証
+- `tsc -b` green / `npm run build` green。
+- `node tools/test_pose_undo.mjs` = **32/32 PASS**（snapshotsEqual の q≡−q・1操作1件・no-change無push・undo/redo往復・redo無効化・上限100・clear・deep-copy分離）。
+- 実機（`?poseEdit=1`・freeze capture）: base→編集2件→undo×2→redo→ギズモ表示 を capture。**ギズモのRGB回転リングが選択ボーン(rightUpperArm)に描画**され、undoが編集を視覚的に巻き戻すことを確認。`status` の undo/redo 段数遷移・`end({discard})` 後の残留ゼロ（active/gizmo/overrides/history すべて空、`__motionLab.isFrozen()=false`）を確認。console error なし。
+
+---
+
+## 4. Stage 4 — Pose Asset 保存/読込（完了 2026-07-01・commit `ebe7c5f`）
+
+### 4.1 何を作ったか
+- **新規** `poseMath.ts`（純THREE-math）… 基底変換の要。`eulerToQuat`/`quatToEuler`/`offsetToAbsoluteLocal`(=ref·offset)/`absoluteLocalToOffset`(=inv(ref)·abs)/`poseEulerFromOffset`(**SAVE**: reference基準offset→T-pose絶対euler)/`offsetFromPoseEuler`(**LOAD**: 逆)/`isIdentityQuat`/`quatsEqual`。
+- **新規** `poseAssetCodec.ts` … `encodePose`（**changed-vs-T-pose**: `ref·offset` が identity でないボーンのみ書く＝未編集の腕ドロップ±1.2は保持しつつ identity ボーンは省略）/ `decodePose`（`validatePose` 流用・model欠損ボーンは `missingBones` 報告・saved==reference は offset identity で override化しない）/ `serializePose`。
+- **改修** `poseComposer.ts`: `savePose`/`loadPose`/`exportPose`/`listPoses`＋`buildPoseDoc`。**dirty を精緻化**＝`savedBaseline`（begin/save/load時点）からの差分（`snapshotsEqual`）。help更新。
+- **改修** `poseComposerPanel.ts`: 「保存/読込」セクション（id/label 入力・Save(POST)・Export(Blob DL)・Load(id)・Import(file)）。
+- **改修** `vite.config.ts`（元々無変更＝単独コミット可）: `POST /__lab/pose/save`。白名簿 `public/poses/` `public/poses/hands/`・`..`拒否・正規表現・上書き前に `.probe_tmp/pose_backups/` へバックアップ・`apply:'serve'`（本番非同梱）。
+- **新規サンプル** `public/poses/sample_wave.pose.json`。
+
+### 4.2 master方針の解釈（changed-only の意味）
+指示書「編集ボーンのみ/changed-only」は、pose/1 の基底では **「絶対local が T-pose identity と異なるボーン」** と解釈するのが正（既存 `stand_relaxed` が非identityボーンのみを持つのと一致し、かつ**単独で再現可能**）。単に overrides のみを書くと未編集の腕がT-pose化して壊れるため。編集ボーンは非identityの部分集合として自然に含まれる。
+
+### 4.3 検証
+- `tsc -b` green / `npm run build` green。
+- `node tools/test_pose_math.mjs` = **133/133 PASS**（euler⇄quat往復・offset⇄absolute逆写像・save/load往復・**任意referenceで保存絶対値を再現**・**10000回無drift**・厳密reset・q≡−q・腕ドロップ保持）。
+- `node tools/test_pose_codec.mjs` = **22/22 PASS**（changed-vs-Tpose選別・encode→decode往復・不正schema拒否/欠損ボーン報告・hipsOffset非零のみ・**実ファイル stand_relaxed の ±1.2 reference下での往復で 1.15 を再現**）。
+- 実機: 編集(head+右腕)→`savePose('sample_wave')`→`resetAll`→`loadPose`。**authored と reloaded が画素一致**、`overriddenBones` 一致、`dirty` は save/load 後 false。保存ファイルは `rightUpperArm=-0.4`(=−1.2+0.8)・`leftUpperArm=1.2`(未編集ドロップ)で正。console error なし。既存回帰: motions 54 / director 90 / expression 263 すべて PASS（DSL無改修）。
+
+### 4.4 既知の制約 / 次段
+- **samples ディレクトリ非対応**: 現endpointは `public/poses/` 直下と `hands/` のみ白名簿。サンプルは直下に置いた（`sample_wave`）。`samples/` サブdirが要るなら白名簿追加。
+- **hand bone 混入拒否は pose 側では未実装**: pose/1 は指ボーンも正当なため強制排除しない（hand/1 側の Stage 6 で扱う）。
+- Motion への q キー挿入（Stage 5）は未。Copy/Mirror（Stage 7）は未。

@@ -21,6 +21,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { SceneBackground } from '../lib/scene/sceneTypes';
+import type { Daypart } from '../lib/scene/daypart';
 
 export type BgFit = 'cover' | 'contain';
 
@@ -48,6 +49,11 @@ export interface SceneBackgroundLayerProps {
   lightOverlayEnabled: boolean;
   fit?: BgFit;
   onBgDebug?: (debug: BgDebug) => void;
+  // Stage D (2026-07-01): 'night' swaps in background.night.* images (when
+  // present — each falls back to the day image, same as a missing day image
+  // falls back to the CSS gradient) AND selects the night fallback gradient,
+  // so day/night is visible even with zero background art authored.
+  daypart?: Daypart;
 }
 
 // Preload an image url and report whether it resolves. A null/empty url short-
@@ -91,10 +97,16 @@ export default function SceneBackgroundLayer({
   lightOverlayEnabled,
   fit = 'cover',
   onBgDebug,
+  daypart = 'day',
 }: SceneBackgroundLayerProps) {
-  const roomUrl = background?.roomImage ?? null;
-  const outsideUrl = background?.outsideImage ?? null;
-  const lightUrl = background?.lightOverlay ?? null;
+  const isNight = daypart === 'night';
+  // A night image, if the scene authored one, wins; otherwise fall through to
+  // the day image (which itself falls back to the CSS gradient below when
+  // missing/broken — see useImageStatus). No art authored yet = always this
+  // fallback path, but the gradient itself still switches with isNight.
+  const roomUrl = (isNight ? background?.night?.roomImage : null) ?? background?.roomImage ?? null;
+  const outsideUrl = (isNight ? background?.night?.outsideImage : null) ?? background?.outsideImage ?? null;
+  const lightUrl = (isNight ? background?.night?.lightOverlay : null) ?? background?.lightOverlay ?? null;
 
   const roomRaw = useImageStatus(roomUrl);
   const outsideRaw = useImageStatus(outsideUrl);
@@ -113,14 +125,16 @@ export default function SceneBackgroundLayer({
   // shows through the transparent canvas, i.e. the pre-0.5 look.
   if (!enabled) return null;
 
+  const nightFallback = isNight ? ' scene-bg--night' : '';
+
   return (
     <div className="scene-bg-layer" aria-hidden="true">
       <div
-        className={outside === 'ok' ? 'scene-bg-outside' : 'scene-bg-outside scene-bg-outside--fallback'}
+        className={outside === 'ok' ? 'scene-bg-outside' : `scene-bg-outside scene-bg-outside--fallback${nightFallback}`}
         style={outside === 'ok' && outsideUrl ? layerStyle(outsideUrl, fit) : undefined}
       />
       <div
-        className={room === 'ok' ? 'scene-bg-room' : 'scene-bg-room scene-bg-room--fallback'}
+        className={room === 'ok' ? 'scene-bg-room' : `scene-bg-room scene-bg-room--fallback${nightFallback}`}
         style={room === 'ok' && roomUrl ? layerStyle(roomUrl, fit) : undefined}
       />
       {light === 'ok' && lightOverlayEnabled && lightUrl && (

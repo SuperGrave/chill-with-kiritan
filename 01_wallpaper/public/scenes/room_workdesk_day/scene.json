@@ -59,6 +59,11 @@
   "lighting": {
     "ambientStrength": 0.8,
     "mainLightColor": "#ffffff",
-    "mainLightStrength": 1.0
+    "mainLightStrength": 1.0,
+    "night": {
+      "ambientStrength": 0.35,
+      "mainLightColor": "#7f9be0",
+      "mainLightStrength": 0.45
+    }
   }
 }

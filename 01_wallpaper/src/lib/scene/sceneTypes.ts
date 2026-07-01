@@ -36,6 +36,15 @@ export interface SceneBackground {
   outsideImage?: string | null;
   lightOverlay?: string | null;
   windowVideo?: string | null;
+  // Stage D (2026-07-01): optional night variants. Any field left out falls
+  // back to the day image above (which itself falls back to the CSS gradient
+  // if missing/broken) — an asset slot final art can drop into later without a
+  // schema change. Deliberately just day/night, not a full daypart set.
+  night?: {
+    roomImage?: string | null;
+    outsideImage?: string | null;
+    lightOverlay?: string | null;
+  };
 }
 
 export interface SceneCharacterPlacement {
@@ -57,6 +66,14 @@ export interface SceneLighting {
   ambientStrength: number;
   mainLightColor: string;
   mainLightStrength: number;
+  // Stage D (2026-07-01): optional night override, applied on top of the day
+  // values above (missing fields keep the day value — dim/tint just what the
+  // scene author actually specifies).
+  night?: {
+    ambientStrength?: number;
+    mainLightColor?: string;
+    mainLightStrength?: number;
+  };
 }
 
 export interface ScenePreset {

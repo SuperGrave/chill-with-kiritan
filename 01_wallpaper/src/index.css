@@ -458,3 +458,14 @@ input[type='range'] {
   /* dim cozy-room fallback: warm-dark vignette */
   background: radial-gradient(125% 95% at 50% 16%, #2c2723 0%, #1d1a16 55%, #100e0c 100%);
 }
+
+/* Stage D (2026-07-01): night fallback gradients — the only visible day/night
+   cue until real background art exists (see docs/COMPLETION_AUDIT_2026-07-01.md).
+   Deep navy sky + a cooler, darker room vignette than the day fallback above. */
+.scene-bg-outside--fallback.scene-bg--night {
+  background: linear-gradient(180deg, #050a16 0%, #0b1530 45%, #131b2e 100%);
+}
+
+.scene-bg-room--fallback.scene-bg--night {
+  background: radial-gradient(125% 95% at 50% 16%, #171a22 0%, #0e1015 55%, #08090c 100%);
+}

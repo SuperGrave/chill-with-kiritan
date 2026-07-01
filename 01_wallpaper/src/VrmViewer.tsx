@@ -17,6 +17,7 @@ import { compileDslClip } from './lib/motion/dsl/compileClip';
 import { loadScenePreset } from './lib/scene/sceneLoader';
 import { loadSceneProps, applyPropVisibility } from './lib/scene/propLoader';
 import type { SceneLighting, SceneDebug } from './lib/scene/sceneTypes';
+import type { Daypart } from './lib/scene/daypart';
 // Prop Variants 0.8: per-slot model swaps picked in the panel.
 import { applyVariantsToScene, BASIC_VARIANT_ID } from './lib/scene/propVariants';
 import type { PropVariantsRegistry, VariantSelection } from './lib/scene/propVariants';
@@ -214,6 +215,10 @@ export interface VrmViewerProps {
   // __motionLab.director(true). Dev/probe/lab entries leave this false so the
   // Lab keeps full manual control (no competing auto-start).
   autoStartDirector: boolean;
+  // Stage D (2026-07-01): which lighting/background variant to show. App
+  // derives this from the local clock (see lib/scene/daypart.ts); changing it
+  // relights the current scene without a reload.
+  daypart: Daypart;
 }
 
 const VrmViewer: React.FC<VrmViewerProps> = (props) => {
@@ -729,6 +734,14 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.motionRequest]);
 
+  // Stage D: re-derive lighting from the cached scene block when the daypart
+  // flips (App re-computes it off the local clock — see daypart.ts) — no scene
+  // reload needed, day<->night is just a relight of the existing lights.
+  useEffect(() => {
+    applySceneLighting(currentSceneLightingRef.current, props.daypart);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.daypart]);
+
   // Blink state
   const blinkStateRef = useRef<{ time: number; phase: 'open' | 'closing' | 'closed' | 'opening'; nextBlink: number }>({
     time: 0, phase: 'open', nextBlink: 3.0
@@ -770,6 +783,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   const propLoaderRef = useRef<{ loadAsync(url: string): Promise<{ scene: THREE.Object3D }> } | null>(null);
   const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
   const directionalLightRef = useRef<THREE.DirectionalLight | null>(null);
+  // Stage D: the active scene's raw (day) lighting block, cached so a daypart
+  // flip can re-derive + re-apply the night overrides without a scene reload.
+  const currentSceneLightingRef = useRef<SceneLighting | undefined>(undefined);
 
   // --- Scene Layout Calibration (Motion Probe 0.6) ---
   // Live handles the per-frame layout apply / guides / camera nudge reach into.
@@ -797,13 +813,17 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
 
   // Apply a scene's lighting block to the existing lights (no-op if absent, so
   // the 0.1 defaults are preserved). Cosmetic only — never touches the rig.
-  const applySceneLighting = (lighting?: SceneLighting) => {
+  // Stage D: at 'night', a present `lighting.night.*` field overrides the day
+  // value; a field the scene author left out of `night` keeps the day value
+  // (partial override, not a full second lighting block).
+  const applySceneLighting = (lighting?: SceneLighting, daypart?: Daypart) => {
     const amb = ambientLightRef.current;
     const dir = directionalLightRef.current;
-    if (lighting && amb) amb.intensity = lighting.ambientStrength;
+    const night = daypart === 'night' ? lighting?.night : undefined;
+    if (lighting && amb) amb.intensity = night?.ambientStrength ?? lighting.ambientStrength;
     if (lighting && dir) {
-      dir.intensity = lighting.mainLightStrength;
-      dir.color.set(lighting.mainLightColor);
+      dir.intensity = night?.mainLightStrength ?? lighting.mainLightStrength;
+      dir.color.set(night?.mainLightColor ?? lighting.mainLightColor);
     }
   };
 
@@ -856,7 +876,8 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         );
         if (libraryProps.length > 0) console.log(`[ITEMS] +${libraryProps.length}: ${libraryProps.map((p) => p.id).join(', ')}`);
         const allProps = [...scene.props, ...libraryProps];
-        applySceneLighting(scene.lighting);
+        currentSceneLightingRef.current = scene.lighting;
+        applySceneLighting(scene.lighting, propsRef.current.daypart);
         const opts = {
           propsEnabled: propsRef.current.propsEnabled,
           placeholdersEnabled: propsRef.current.placeholdersEnabled,

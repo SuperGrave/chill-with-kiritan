@@ -61,11 +61,24 @@ function coerceProp(raw: unknown, i: number, warnings: string[]): SceneProp | nu
 function coerceLighting(v: unknown): SceneLighting | undefined {
   if (!v || typeof v !== 'object') return undefined;
   const l = v as Record<string, unknown>;
-  return {
+  const out: SceneLighting = {
     ambientStrength: isNum(l.ambientStrength) ? l.ambientStrength : 1.0,
     mainLightColor: isStr(l.mainLightColor) ? l.mainLightColor : '#ffffff',
     mainLightStrength: isNum(l.mainLightStrength) ? l.mainLightStrength : 1.0,
   };
+  // Stage D: night is a partial override — only carry through fields that are
+  // actually present/valid, so applySceneLighting's day fallback (missing
+  // field -> day value) works the same way whether the scene omits `night`
+  // entirely or just one field of it.
+  if (l.night && typeof l.night === 'object') {
+    const n = l.night as Record<string, unknown>;
+    const night: SceneLighting['night'] = {};
+    if (isNum(n.ambientStrength)) night.ambientStrength = n.ambientStrength;
+    if (isStr(n.mainLightColor)) night.mainLightColor = n.mainLightColor;
+    if (isNum(n.mainLightStrength)) night.mainLightStrength = n.mainLightStrength;
+    if (Object.keys(night).length > 0) out.night = night;
+  }
+  return out;
 }
 
 // Validate + normalize a raw parsed scene.json into a ScenePreset. Never throws;

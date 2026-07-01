@@ -5,6 +5,8 @@ import type { IdleState, IdleDebug } from './lib/motion/idleStateMachine';
 import { IDLE_STATES, IDLE_STATE_LABELS } from './lib/motion/idleStateMachine';
 import type { ExternalMotionDebug } from './lib/motion/externalMotionController';
 import type { SceneDebug } from './lib/scene/sceneTypes';
+import { getDaypart } from './lib/scene/daypart';
+import type { Daypart } from './lib/scene/daypart';
 // Expression Preset System 0.1
 import { EXPRESSION_PRESETS, EXPRESSION_PRESET_IDS } from './lib/expression/expressionPresets';
 import type { ExpressionOverlayDebug } from './lib/expression/expressionPresetEvaluator';
@@ -273,6 +275,17 @@ function App() {
       saveItemSelection(next);
       return next;
     });
+
+  // Daypart (Stage D, 2026-07-01): local-clock day/night, re-checked every
+  // minute — the boundary only needs to be caught within a minute or so, and
+  // this avoids a per-second re-render for something that flips twice a day.
+  // (No Companion override yet — daypart.ts's resolveDaypart() is ready for
+  // one, but wiring the setting itself is a later Companion-hardening item.)
+  const [daypart, setDaypart] = useState<Daypart>(() => getDaypart(new Date()));
+  useEffect(() => {
+    const id = window.setInterval(() => setDaypart(getDaypart(new Date())), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Background / Window / Light Overlay (Motion Probe 0.5).
   const [backgroundEnabled, setBackgroundEnabled] = useState(true);
@@ -644,6 +657,7 @@ function App() {
         lightOverlayEnabled={lightOverlayEnabled}
         fit={bgFit}
         onBgDebug={setBgDebug}
+        daypart={daypart}
       />
 
       <VrmViewer
@@ -686,6 +700,7 @@ function App() {
         }}
         onCameraReadback={setCameraReadback}
         autoStartDirector={productionMode}
+        daypart={daypart}
       />
 
       {productionMode && <ProductionOverlay />}

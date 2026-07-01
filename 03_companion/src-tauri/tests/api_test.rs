@@ -107,3 +107,79 @@ async fn crud_presets_and_ui_roundtrip() {
         .text().await.unwrap();
     assert!(!state_text.contains("sk-test"), "secrets must not appear in /api/state");
 }
+
+#[tokio::test]
+async fn kiritan_state_post_and_get() {
+    let base = spawn_server().await;
+    let c = reqwest::Client::new();
+
+    // Absent until the wallpaper reports at least once.
+    let empty: serde_json::Value = c.get(format!("{base}/api/kiritan/state")).send().await.unwrap()
+        .json().await.unwrap();
+    assert!(empty.is_null(), "kiritan state starts absent (null), got {empty}");
+
+    // A valid post (matches kiritanPoster.ts's wire object exactly).
+    let body = serde_json::json!({
+        "mode": "work_normal",
+        "modeLabel": "作業中",
+        "since": "2026-07-01T12:00:00.000Z",
+        "prevMode": null,
+        "presence": "present",
+        "ambient": null,
+        "interruptPolicy": "soft",
+        "chatDelayMsRange": [500, 1500],
+        "sleepiness": 0.2,
+        "away": null,
+    });
+    let posted: serde_json::Value = c.post(format!("{base}/api/kiritan/state"))
+        .json(&body).send().await.unwrap().json().await.unwrap();
+    assert_eq!(posted["ok"], true);
+
+    let got: serde_json::Value = c.get(format!("{base}/api/kiritan/state")).send().await.unwrap()
+        .json().await.unwrap();
+    assert_eq!(got["mode"], "work_normal");
+    assert_eq!(got["presence"], "present");
+    assert_eq!(got["sleepiness"], 0.2);
+    assert!(got["receivedAt"].as_str().is_some(), "server stamps receivedAt");
+
+    // A later post with a nested object + away payload round-trips too.
+    let away_body = serde_json::json!({
+        "mode": "away_room",
+        "modeLabel": "離席中",
+        "since": "2026-07-01T12:05:00.000Z",
+        "prevMode": "work_normal",
+        "presence": "away",
+        "ambient": { "id": "amb_work_sip", "endsAt": "2026-07-01T12:06:00.000Z" },
+        "interruptPolicy": "none",
+        "chatDelayMsRange": null,
+        "sleepiness": 0.4,
+        "away": { "reason": "snack", "expectedReturnAt": "2026-07-01T12:10:00.000Z" },
+    });
+    c.post(format!("{base}/api/kiritan/state")).json(&away_body).send().await.unwrap();
+    let got2: serde_json::Value = c.get(format!("{base}/api/kiritan/state")).send().await.unwrap()
+        .json().await.unwrap();
+    assert_eq!(got2["mode"], "away_room");
+    assert_eq!(got2["ambient"]["id"], "amb_work_sip");
+    assert_eq!(got2["away"]["reason"], "snack");
+
+    // Semantic validation rejects an out-of-range sleepiness even though it's
+    // structurally valid JSON.
+    let mut bad = body.clone();
+    bad["sleepiness"] = serde_json::json!(1.5);
+    let rejected: serde_json::Value = c.post(format!("{base}/api/kiritan/state"))
+        .json(&bad).send().await.unwrap().json().await.unwrap();
+    assert_eq!(rejected["ok"], false);
+
+    // Structurally malformed body (missing required fields) is rejected by the
+    // Json<KiritanStatePost> extractor itself — axum returns 422 (valid JSON,
+    // wrong shape) before the handler ever runs.
+    let resp = c.post(format!("{base}/api/kiritan/state"))
+        .json(&serde_json::json!({ "mode": "work_normal" }))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 422, "missing required fields → 422, not silently accepted");
+
+    // kiritan must never be persisted to disk (it's excluded from state::Persist).
+    let state_text = c.get(format!("{base}/api/state")).send().await.unwrap()
+        .text().await.unwrap();
+    assert!(state_text.contains("away_room"), "kiritan IS served live in /api/state");
+}

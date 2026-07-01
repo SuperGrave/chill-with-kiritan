@@ -19,6 +19,11 @@ pub struct WallpaperState {
     pub ui: UiState,
     /// Public (non-secret) configuration for weather/news/ai/spotify.
     pub settings: AppSettings,
+    /// Latest kiritanState the wallpaper POSTed (mode/presence/sleepiness).
+    /// `None` until the wallpaper has reported at least once. Memory-only —
+    /// not written to disk (see `state::Persist`), since it's a live runtime
+    /// signal re-sent on every mode change / ~30s heartbeat.
+    pub kiritan: Option<KiritanRuntimeState>,
     pub updated_at: String,
 }
 
@@ -36,6 +41,7 @@ impl Default for WallpaperState {
             notifications: vec![],
             ui: UiState::default(),
             settings: AppSettings::default(),
+            kiritan: None,
             updated_at: now_iso(),
         }
     }
@@ -375,4 +381,79 @@ pub struct NotificationItem {
     pub title: String,
     pub body: Option<String>,
     pub created_at: String,
+}
+
+// ─── Kiritan runtime state (Stage C, 2026-07-01) ─────────────────────────────
+// Wire schema mirrors 01_wallpaper/src/lib/motion/director/types.ts's
+// `KiritanState` exactly (that TS type is the source of truth — the wallpaper
+// is the sender). `POST /api/kiritan/state` accepts this shape directly, so a
+// malformed/incomplete body fails Json extraction (axum 400) before the
+// handler even runs.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KiritanAmbient {
+    pub id: String,
+    pub ends_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KiritanAway {
+    pub reason: String,
+    pub expected_return_at: String,
+}
+
+/// Body accepted by `POST /api/kiritan/state` — exactly the wallpaper's wire
+/// object, no server-generated fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KiritanStatePost {
+    pub mode: String,
+    pub mode_label: String,
+    pub since: String, // ISO
+    pub prev_mode: Option<String>,
+    pub presence: String, // "present" | "away"
+    pub ambient: Option<KiritanAmbient>,
+    pub interrupt_policy: String,
+    pub chat_delay_ms_range: Option<(u32, u32)>,
+    pub sleepiness: f64, // 0..1
+    pub away: Option<KiritanAway>,
+}
+
+/// Stored/served shape — the posted body plus a server-stamped `receivedAt` so
+/// consumers (Companion UI, AI context) can tell a live signal from a stale one
+/// if the wallpaper stops posting (e.g. closed) without a graceful "offline" message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KiritanRuntimeState {
+    pub mode: String,
+    pub mode_label: String,
+    pub since: String,
+    pub prev_mode: Option<String>,
+    pub presence: String,
+    pub ambient: Option<KiritanAmbient>,
+    pub interrupt_policy: String,
+    pub chat_delay_ms_range: Option<(u32, u32)>,
+    pub sleepiness: f64,
+    pub away: Option<KiritanAway>,
+    pub received_at: String, // ISO, server clock
+}
+
+impl From<KiritanStatePost> for KiritanRuntimeState {
+    fn from(p: KiritanStatePost) -> Self {
+        Self {
+            mode: p.mode,
+            mode_label: p.mode_label,
+            since: p.since,
+            prev_mode: p.prev_mode,
+            presence: p.presence,
+            ambient: p.ambient,
+            interrupt_policy: p.interrupt_policy,
+            chat_delay_ms_range: p.chat_delay_ms_range,
+            sleepiness: p.sleepiness,
+            away: p.away,
+            received_at: now_iso(),
+        }
+    }
 }

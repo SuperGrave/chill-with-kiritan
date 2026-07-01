@@ -30,6 +30,8 @@ pub fn build_router(shared: Shared) -> Router {
     Router::new()
         .route("/api/health", get(health))
         .route("/api/state", get(get_state))
+        // ── Kiritan runtime state (Stage C) ──────────────────────────
+        .route("/api/kiritan/state", get(get_kiritan_state).post(post_kiritan_state))
         // ── Display settings + presets ───────────────────────────────
         .route("/api/ui", get(get_ui).put(put_ui))
         .route("/api/presets", get(list_presets).post(create_preset))
@@ -114,6 +116,45 @@ async fn health() -> Json<Value> {
 
 async fn get_state(State(s): State<Shared>) -> Json<WallpaperState> {
     Json(s.lock().unwrap().state.clone())
+}
+
+// ─── Kiritan runtime state ──────────────────────────────────────────────────
+// The wallpaper's Motion Director POSTs here on every mode change and on a
+// ~30s heartbeat (fire-and-forget — see kiritanPoster.ts). `None`/absent means
+// the wallpaper hasn't reported yet (e.g. Companion just started, or the
+// wallpaper isn't running); callers should treat that as "unknown", not an error.
+
+async fn get_kiritan_state(State(s): State<Shared>) -> Json<Value> {
+    match &s.lock().unwrap().state.kiritan {
+        Some(k) => Json(serde_json::to_value(k).unwrap_or(json!(null))),
+        None => Json(json!(null)),
+    }
+}
+
+async fn post_kiritan_state(
+    State(s): State<Shared>,
+    Json(body): Json<KiritanStatePost>,
+) -> Json<Value> {
+    // Structural validity (required fields, correct types) is already enforced
+    // by the Json<KiritanStatePost> extractor — axum returns 422 before this
+    // function runs if the body doesn't match. Add the semantic checks the
+    // wallpaper's own validateKiritanState() applies on the TS side.
+    if body.mode.trim().is_empty() {
+        return Json(json!({ "ok": false, "error": "mode must not be empty" }));
+    }
+    if body.presence != "present" && body.presence != "away" {
+        return Json(json!({ "ok": false, "error": "presence must be 'present' or 'away'" }));
+    }
+    if !(0.0..=1.0).contains(&body.sleepiness) {
+        return Json(json!({ "ok": false, "error": "sleepiness out of 0..1" }));
+    }
+
+    let mut g = s.lock().unwrap();
+    g.state.kiritan = Some(KiritanRuntimeState::from(body));
+    // Deliberately NOT touch()/persist(): this is a live runtime signal
+    // re-sent every ~30s, not user data — see the `kiritan` field doc comment
+    // on WallpaperState and `state::Persist` (which excludes it).
+    ok()
 }
 
 // ─── UI settings ───────────────────────────────────────────────────────────────

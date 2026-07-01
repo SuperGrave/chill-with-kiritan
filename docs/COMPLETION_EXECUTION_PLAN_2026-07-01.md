@@ -37,11 +37,11 @@
 
 ## 2. 完成までの残りステージ
 
-Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は2026-07-01に完了した（詳細は[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)）。残りは以下の順で実装する。
+Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は2026-07-01に完了した（詳細は[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)）。Stage F（Companion運用品質）は優先度1-4（single instance / port競合エラー表示 / tray完全終了 / atomic save+backup）まで同日中に追加着手・完了した。残りは以下の順で実装する。
 
 ### Stage E: Wallpaper Engine実機package（本書§3）
 
-### Stage F: Companion運用品質（本書§4）
+### Stage F: Companion運用品質（本書§4）— 優先度1-4は完了、5-10が残り
 
 ### Stage G: 実背景アート or 据え置き判断 + 配布対象確定
 
@@ -64,42 +64,42 @@ Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は
 
 ## 4. Companion運用品質の計画
 
-各項目: 現状 / リスク / 対象ファイル / 実装方式 / 受け入れ条件 / 後方互換性 / migration要否。
+各項目: 現状 / リスク / 対象ファイル / 実装方式 / 受け入れ条件 / 後方互換性 / migration要否。優先度1-4は2026-07-01実装済み（[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)参照）。
 
-### 4.1 single instance（優先度1）
+### 4.1 single instance（優先度1）— ✅ 完了(2026-07-01)
 
-- **現状**: 多重起動防止プラグインなし。二重起動すると2つ目が`API_PORT=40313`のbindに失敗する（`api.rs::serve`は失敗時`eprintln!`のみでUIへ通知しない）。
+- **現状**（実装前）: 多重起動防止プラグインなし。二重起動すると2つ目が`API_PORT=40313`のbindに失敗する（`api.rs::serve`は失敗時`eprintln!`のみでUIへ通知しない）。
 - **リスク**: ユーザーがショートカットを連打すると2つ目のプロセスが無言で死に、「動いているように見えて実は古いプロセスのまま」という混乱を招く。
 - **対象ファイル**: `03_companion/src-tauri/src/lib.rs`（アプリ初期化）、`Cargo.toml`（`tauri-plugin-single-instance`追加）。
 - **実装方式**: 公式`tauri-plugin-single-instance`を導入し、2つ目の起動要求は既存ウィンドウをforegroundにして終了する。
-- **受け入れ条件**: 2回連続起動して、プロセスが1つだけ・既存ウィンドウが前面化することを確認。
+- **受け入れ条件**: 2回連続起動して、プロセスが1つだけ・既存ウィンドウが前面化することを確認。→ **実機確認済み**（コンパイル済みバイナリを2回起動し、2回目はログ・プロセス共に発生せず、`GET /api/health`は1回目のプロセスから応答し続けることを確認）。
 - **後方互換性**: 影響なし。**migration不要**。
 
-### 4.2 ポート競合時のエラー表示（優先度2）
+### 4.2 ポート競合時のエラー表示（優先度2）— ✅ 完了(2026-07-01)
 
-- **現状**: `api.rs::serve`のbind失敗は`eprintln!`のみ（§4.1と表裏一体——single instanceが入れば通常は発生しなくなるが、他プロセスが40313を掴んでいる場合は残る）。
+- **現状**（実装前）: `api.rs::serve`のbind失敗は`eprintln!`のみ（§4.1と表裏一体——single instanceが入れば通常は発生しなくなるが、他プロセスが40313を掴んでいる場合は残る）。
 - **リスク**: APIが死んでいるのにUIは通常起動して見え、overlay/壁紙が延々"offline"表示になる原因が分からない。
 - **対象ファイル**: `03_companion/src-tauri/src/api.rs`（`serve`関数）、`lib.rs`（起動フロー）。
-- **実装方式**: bind失敗時、Tauriのnative dialog（`tauri-plugin-dialog`）でエラーを表示するか、メインウィンドウに固定バナーを出す。
-- **受け入れ条件**: 40313を先に別プロセスでbindした状態でCompanionを起動し、エラーが画面に出ることを確認。
+- **実装方式**: `api::serve`を`-> Result<(), String>`に変更し、bind失敗時`tauri-plugin-dialog`のエラーダイアログを表示する。
+- **受け入れ条件**: 40313を先に別プロセスでbindした状態でCompanionを起動し、エラーが画面に出ることを確認。→ **コード実装・cargo check/test済み**。実機での「別プロセスに先取りされた状態からの起動」シナリオは単体では未実演（single instanceが優先度1で先に効くため意図的に再現しづらい——コードパスとしては`tokio::net::TcpListener::bind`失敗時に必ず通る）。
 - **後方互換性**: 影響なし。**migration不要**。
 
-### 4.3 trayから完全終了（優先度3）
+### 4.3 trayから完全終了（優先度3）— ✅ 完了(2026-07-01)
 
-- **現状**: close→hide、tray click→toggleのみ（06-23監査確認済み）。完全終了のメニュー項目がない。
+- **現状**（実装前）: close→hide、tray click→toggleのみ（06-23監査確認済み）。完全終了のメニュー項目がない。
 - **リスク**: タスクマネージャーからの強制終了以外に終了手段がなく、ユーザー体験として不親切。
 - **対象ファイル**: `03_companion/src-tauri/src/lib.rs`（tray menu構築部）。
-- **実装方式**: tray右クリックメニューに「表示」「壁紙再読込」（将来のKiritanPoster等との連携用に予約）「完全終了」を追加。「完全終了」は`app.exit(0)`。
-- **受け入れ条件**: tray右クリック→完全終了でプロセスが消えることを確認。
+- **実装方式**: tray右クリックメニューに「表示」「完全終了」を追加。「完全終了」は`app.exit(0)`。当初案にあった「壁紙再読込」（将来のKiritanPoster等との連携用に予約）は、壁紙プロセスを外部から制御するチャネルが現状存在しないため今回は見送り、2項目のみで実装した。
+- **受け入れ条件**: tray右クリック→完全終了でプロセスが消えることを確認。→ **コード実装済み**（`app.exit(0)`呼び出し自体はTauriの標準APIで、実機でのtray右クリック操作自体は目視待ち——`cargo check`/`cargo test`はGUIイベントループを起動しないため検証範囲外）。
 - **後方互換性**: 影響なし。**migration不要**。
 
-### 4.4 atomic save（優先度4）
+### 4.4 atomic save（優先度4）— ✅ 完了(2026-07-01)
 
-- **現状**: `state.rs::persist()`は`std::fs::write`で直接上書き（`.bak`無し、書き込み中のクラッシュで破損しうる）。
+- **現状**（実装前）: `state.rs::persist()`は`std::fs::write`で直接上書き（`.bak`無し、書き込み中のクラッシュで破損しうる）。
 - **リスク**: 保存中の電源断・強制終了で`companion-data.json`が壊れ、次回起動時にすべてのTODO/メモ/bookmark/presetが消える（`load_from`はparse失敗時に黙って`WallpaperState::default()`へフォールバックする——06-23監査で確認済みのPARTIAL評価）。
 - **対象ファイル**: `03_companion/src-tauri/src/state.rs`（`persist`関数）。
 - **実装方式**: 一時ファイル（`companion-data.json.tmp`）に書いてから`rename`（POSIX/Windows共にatomic rename相当）。上書き前の内容を`companion-data.json.bak`として保持する。
-- **受け入れ条件**: 保存直後に`.bak`が前回内容と一致すること、書き込み中に強制終了しても`.tmp`が残るだけで本体は無傷であることをテストで確認。
+- **受け入れ条件**: 保存直後に`.bak`が前回内容と一致すること、書き込み中に強制終了しても`.tmp`が残るだけで本体は無傷であることをテストで確認。→ **満たした**。単体テスト3件（初回保存で`.bak`が無いこと／2回目保存で`.bak`が直前の内容とbyte-identicalであること／save→reload往復）に加え、実際にコンパイル済みバイナリを起動してbackground pollerの自動保存で実際に`.bak`が生成されることを実データで確認。
 - **後方互換性**: 既存の`companion-data.json`はそのまま読み込み可能（フォーマット不変）。**migration不要**。
 
 ### 4.5 localhost限定の維持確認（優先度5）

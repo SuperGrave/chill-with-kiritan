@@ -11,12 +11,48 @@
 | 2 | Bone選択＋数値編集＋素DOMパネル | ✅ 完了（本書 §2） |
 | 3 | 3Dギズモ＋Undo/Redo | ✅ 完了（本書 §3・commit `3b71ca9`） |
 | 4 | Pose Asset 保存/読込（pose/1書き出し・dev endpoint） | ✅ 完了（本書 §4・commit `ebe7c5f`） |
-| 5 | Motion Key連携（qキー評価器拡張） | ⬜ 次（本丸・DSL共有コード改修） |
-| 6 | DragPad / Hand Shape | ⬜ |
-| 7 | Copy / Mirror / QA | ⬜ |
+| 5 | Motion Key連携（qキー評価器拡張） | ⏸ **park**（2026-07-01・完成ルート復帰の判断） |
+| 6 | DragPad / Hand Shape | ⏸ **park**（同上） |
+| 7 | Copy / Mirror / QA | ⏸ **park**（同上） |
 
-> **コミット**（branch `feat/pose-composer-0.8`, base `5220449`）: `d84fdd8`(Stage0-2 checkpoint) → `3b71ca9`(Stage3) → `ebe7c5f`(Stage4)。
-> **未コミットの統合行**: `VrmViewer.tsx`(`controls,` handle・poseComposer install・freezeゲート) と `motionLab.ts`(`controls?`/`getRestHipsPosition` handle) は、**無関係な別機能「work-hand-pin IK」と同一ファイル内で交錯**するため作業ツリーに残置（instruction #3 遵守）。`vite.config.ts` は元々無変更だったので Stage4 で単独コミット済み。
+> **コミット**（branch `feat/pose-composer-0.8`, base `5220449`）: `d84fdd8`(Stage0-2 checkpoint) → `3b71ca9`(Stage3) → `ebe7c5f`(Stage4) → `a50080f`(Stage1-4統合配線, 2026-07-01) → `099b9cf`(production gate fix, 2026-07-01)。
+> `vite.config.ts` は元々無変更だったので Stage4 で単独コミット済み。
+
+## Pose Composer 0.8 — 2026-07-01 着地点（完成ルート復帰）
+
+```text
+Pose Composer 0.8:
+- Stage 0〜4: completed / green
+- Stage 5〜7: parked
+- production completionには不要
+- 再開条件: 製品版完成後に明示的な判断があった場合のみ
+```
+
+2026-06-24〜06-30 の間、Stage 1-4 のコミット (`d84fdd8`/`3b71ca9`/`ebe7c5f`) が参照する
+`installPoseComposer`/`installPoseComposerPanel`/`window.__poseComposer` の実際の配線
+（`VrmViewer.tsx` の `labHandles` 共有・freezeゲート拡張・cleanup、`motionLab.ts` の
+`controls?`/`isSceneReady?`/`getRestHipsPosition` handle）が、無関係な実験
+「work-hand-pin IK」と同一ファイル内で交錯したまま**作業ツリーに未コミットで放置**されていた
+（Stage0-2/3/4のコミット単体をcheckoutしても Pose Composer は起動しない状態）。
+
+2026-07-01 の完成ルート復帰作業で以下を実施:
+1. 作業ツリーを rescue branch (`rescue/pre-split-2026-07-01`) へ退避コミットしてバックアップ。
+2. Pose Composer統合行のみを抽出し `a50080f` としてコミット（Stage 0-4が単独チェックアウトで
+   動作するようになった）。
+3. work-hand-pin IK は無関係の別ブランチ `wip/work-hand-pin-ik-2026-07-01` (`dbf0812`) へ隔離。
+4. `App.tsx` の `productionMode` 判定が `poseEdit` クエリを見ておらず、production URLに
+   `?poseEdit=1` を付けると `production-mode` のまま `window.__poseComposer` が有効化される
+   バグを発見・修正（`099b9cf`）。
+5. 実機検証（`?poseEdit=1`）: begin→bone編集→inspect→resetAll→end、savePose→resetAll→loadPose
+   の往復、production URL（クエリなし）で `__poseComposer`/`__motionLab` が共に未定義であること
+   を確認。console error なし。
+6. 全自動試験 green: motions 54 / director 90 / expression 263 / pose_math 133 /
+   pose_codec 22 / pose_undo 32 = **594/594 PASS**。
+
+Stage 5（qキー評価器拡張・DSLへのMotion Key連携）以降は、今回の完成ルート方針により
+**実装しない**。理由は「モーション制作は最低限で終了し、製品完成に直接必要な接続・配布・
+運用品質へ移行する」という2026-07-01の明示判断（`docs/COMPLETION_AUDIT_2026-07-01.md` 参照）。
+再開する場合は製品版完成後に改めて判断すること。
 
 ---
 

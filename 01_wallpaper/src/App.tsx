@@ -685,6 +685,7 @@ function App() {
           setCameraReadback({ position: init.camera.position, target: init.camera.target, fov: init.camera.fov });
         }}
         onCameraReadback={setCameraReadback}
+        autoStartDirector={productionMode}
       />
 
       {productionMode && <ProductionOverlay />}

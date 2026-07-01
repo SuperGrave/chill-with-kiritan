@@ -208,6 +208,11 @@ export interface VrmViewerProps {
   // Live camera pose, reported (throttled) so the HUD + JSON export reflect the
   // actual camera — including orbit-dragging and preset lerps, not just nudges.
   onCameraReadback: (cam: { position: [number, number, number]; target: [number, number, number]; fov: number }) => void;
+  // Production wallpaper (Stage B, 2026-07-01): auto-start the Motion Director
+  // once the VRM finishes loading, instead of requiring ?lab=1's manual
+  // __motionLab.director(true). Dev/probe/lab entries leave this false so the
+  // Lab keeps full manual control (no competing auto-start).
+  autoStartDirector: boolean;
 }
 
 const VrmViewer: React.FC<VrmViewerProps> = (props) => {
@@ -941,6 +946,12 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
 
   useEffect(() => {
     if (!canvasRef.current) return;
+    // Production auto-start (Stage B) cancellation flag for THIS mount cycle.
+    // A plain closure local, not a ref: StrictMode's dev double-invoke runs
+    // mount -> cleanup -> mount on the same component instance, so a ref would
+    // be shared across cycles and the first cleanup's cancellation would wrongly
+    // poison the second mount's own in-flight startDirector() too.
+    let autoStartCancelled = false;
 
     const canvas = canvasRef.current;
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
@@ -1203,6 +1214,25 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         console.log(`[EXT] mixer ready; built-in clip armed (bones=${built.boneNames.join(',')}). External Motion OFF by default.`);
 
         props.onStatusUpdate('Loaded: ふらすこ式風きりたん (VRM 0.x)');
+
+        // Production wallpaper (Stage B): start the Motion Director the same
+        // way the Lab's `__motionLab.director(true)` does, minus the manual
+        // trigger. Dev/probe/lab entries pass autoStartDirector=false and keep
+        // full manual control. Guarded against StrictMode's dev double-invoke:
+        // if cleanup already ran by the time this resolves, undo the start.
+        if (props.autoStartDirector && !directorRef.current) {
+          startDirector().then((result) => {
+            if (autoStartCancelled) {
+              stopDirector();
+              return;
+            }
+            if (result.ok) {
+              console.log(`[DIRECTOR] production auto-start ok (${result.loaded.length} motions preloaded)`);
+            } else {
+              console.warn('[DIRECTOR] production auto-start failed:', result.error);
+            }
+          });
+        }
       },
       (progress: ProgressEvent) => {
         const pct = Math.round(100.0 * (progress.loaded / progress.total));
@@ -1753,6 +1783,8 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
+      autoStartCancelled = true;
+      if (directorRef.current) stopDirector();
       removeReviewPanel?.();
       if (labRef.current) {
         labRef.current = null;

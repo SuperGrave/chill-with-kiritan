@@ -88,6 +88,13 @@ impl AppState {
     }
 
     /// Persist mutable user data + config + secrets to disk (best effort).
+    ///
+    /// Atomic write: serialize to a sibling `.tmp` file, back up whatever is
+    /// currently on disk to `.bak`, then rename `.tmp` over the real path.
+    /// Rename is atomic on both NTFS and POSIX filesystems, so a crash/power
+    /// loss mid-write can only ever leave a stray `.tmp` — the real file is
+    /// either the old complete content or the new complete content, never a
+    /// half-written one (see docs/COMPLETION_EXECUTION_PLAN_2026-07-01.md §4.4).
     pub fn persist(&self) {
         let p = Persist {
             ui: Some(self.state.ui.clone()),
@@ -98,9 +105,25 @@ impl AppState {
             bookmarks: self.state.bookmarks.clone(),
             chat: self.state.ai.messages.clone(),
         };
-        if let Ok(text) = serde_json::to_string_pretty(&p) {
-            let path = self.data_dir.join("companion-data.json");
-            let _ = std::fs::write(path, text);
+        let Ok(text) = serde_json::to_string_pretty(&p) else {
+            return;
+        };
+        let path = self.data_dir.join("companion-data.json");
+        let tmp_path = self.data_dir.join("companion-data.json.tmp");
+        let bak_path = self.data_dir.join("companion-data.json.bak");
+
+        if std::fs::write(&tmp_path, &text).is_err() {
+            return; // disk full / permissions — leave the existing file untouched
+        }
+        if path.exists() {
+            // Best-effort: a failed backup shouldn't block saving the new data.
+            let _ = std::fs::copy(&path, &bak_path);
+        }
+        if std::fs::rename(&tmp_path, &path).is_err() {
+            // Rename failed (e.g. cross-device on an unusual setup) — fall back
+            // to a direct write so a save attempt is never silently dropped.
+            let _ = std::fs::write(&path, &text);
+            let _ = std::fs::remove_file(&tmp_path);
         }
         // touch updatedAt so pollers can detect change
         // (caller already mutated `state`; we just stamp time here is not ideal
@@ -126,4 +149,77 @@ fn default_bookmarks() -> Vec<BookmarkItem> {
         mk(3, "Spotify Web", "https://open.spotify.com", "Music"),
         mk(4, "Google Calendar", "https://calendar.google.com", "Util"),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("tohoku-companion-persist-test-{label}-{}", uuid::Uuid::new_v4()));
+        dir
+    }
+
+    #[test]
+    fn first_persist_writes_the_file_with_no_backup_yet() {
+        let dir = temp_dir("first");
+        let app = AppState::load_from(dir.clone());
+        app.persist();
+
+        assert!(dir.join("companion-data.json").exists(), "main file written");
+        assert!(!dir.join("companion-data.json.bak").exists(), "no prior content to back up");
+        assert!(!dir.join("companion-data.json.tmp").exists(), "tmp file cleaned up (renamed away)");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn second_persist_backs_up_the_previous_content() {
+        let dir = temp_dir("second");
+        let mut app = AppState::load_from(dir.clone());
+        app.state.todos.push(TodoItem {
+            id: "1".into(),
+            title: "first save".into(),
+            done: false,
+            priority: None,
+            due_at: None,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        });
+        app.persist();
+        let first_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
+
+        app.state.todos[0].title = "second save".into();
+        app.persist();
+        let second_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
+        let bak_text = std::fs::read_to_string(dir.join("companion-data.json.bak")).unwrap();
+
+        assert!(second_text.contains("second save"), "main file has the newest content");
+        assert!(bak_text.contains("first save"), ".bak has the previous content");
+        assert_eq!(bak_text, first_text, ".bak is byte-identical to what was on disk before this save");
+        assert!(!dir.join("companion-data.json.tmp").exists(), "no stray tmp file after a successful save");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn persisted_data_round_trips_through_load() {
+        let dir = temp_dir("roundtrip");
+        let mut app = AppState::load_from(dir.clone());
+        app.state.memos.push(MemoItem {
+            id: "m1".into(),
+            text: "覚えておく".into(),
+            pinned: true,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        });
+        app.persist();
+
+        let reloaded = AppState::load_from(dir.clone());
+        assert_eq!(reloaded.state.memos.len(), 1);
+        assert_eq!(reloaded.state.memos[0].text, "覚えておく");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

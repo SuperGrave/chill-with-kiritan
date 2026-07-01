@@ -10,6 +10,8 @@
 
 # Rust / Tauri build artifacts
 **/target/
+# Stray prebuilt companion binary — the real build output lives in src-tauri/target/
+03_companion/tohoku-companion.exe
 
 # Vite / tooling caches
 **/.vite/

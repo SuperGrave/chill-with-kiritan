@@ -24,8 +24,8 @@ const TRANSITIONS = [
   'tr_stand_to_sit', 'tr_sit_to_stand', 'tr_walk_start', 'loop_walk', 'tr_walk_stop',
 ];
 
-export function installReviewPanel(lab: MotionLab): void {
-  if (document.getElementById('phase1-review-panel')) return;
+export function installReviewPanel(lab: MotionLab): () => void {
+  if (document.getElementById('phase1-review-panel')) return () => {};
 
   const css = `
   #phase1-review-panel{position:fixed;top:12px;right:12px;width:280px;max-height:92vh;overflow:auto;
@@ -42,6 +42,7 @@ export function installReviewPanel(lab: MotionLab): void {
   #phase1-review-panel .status{font-size:11px;color:#9be6a0;background:#1a2420;border-radius:6px;padding:4px 6px;margin-top:6px;white-space:pre-wrap}
   #phase1-review-panel .hint{color:#8b93a3;font-size:10px;margin-top:6px}`;
   const style = document.createElement('style');
+  style.id = 'phase1-review-panel-style';
   style.textContent = css;
   document.head.appendChild(style);
 
@@ -115,8 +116,8 @@ export function installReviewPanel(lab: MotionLab): void {
   panel.appendChild(filmSel);
   rowOf([
     btn('📷 現在をDL', () => guard('download', () => lab.downloadCanvas('kiritan')), 'go'),
-    btn('🎞 選択をフィルム', () => guard('filmstrip', async () => { await lab.load(filmSel.value); return lab.filmstrip(filmSel.value, { withProps: true, camera: 'desk wide' }); })),
-    btn('🎞 直近をフィルム', () => guard('filmstrip', async () => { await lab.load(lastId); return lab.filmstrip(lastId, { withProps: true, camera: 'desk wide' }); })),
+    btn('🎞 選択をフィルム', () => guard('filmstrip', async () => { await lab.load(filmSel.value); return lab.filmstrip(filmSel.value, { withProps: true, camera: 'ideal' }); })),
+    btn('🎞 直近をフィルム', () => guard('filmstrip', async () => { await lab.load(lastId); return lab.filmstrip(lastId, { withProps: true, camera: 'ideal' }); })),
   ]);
   rowOf([btn('💾 理想配置をDL＋保存', () => guard('dumpLayout', () => lab.dumpLayout()), 'go')]);
 
@@ -127,7 +128,7 @@ export function installReviewPanel(lab: MotionLab): void {
   panel.appendChild(hint);
 
   // Live Director status line.
-  setInterval(() => {
+  const statusInterval = window.setInterval(() => {
     const lab2 = window.__motionLab as unknown as { directorStatus?: () => { running?: boolean; mode?: string; state?: string; ambientCount?: number } };
     const s = lab2?.directorStatus?.();
     if (s && s.running !== false && s.mode) {
@@ -136,10 +137,18 @@ export function installReviewPanel(lab: MotionLab): void {
   }, 1000);
 
   // Hide/show with P.
-  window.addEventListener('keydown', (e) => {
+  const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'p' || e.key === 'P') panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-  });
+  };
+  window.addEventListener('keydown', onKeyDown);
 
   // eslint-disable-next-line no-console
   console.log('[REVIEW] Phase 1 review panel installed (?phase1Review=1). Press P to hide.');
+
+  return () => {
+    window.clearInterval(statusInterval);
+    window.removeEventListener('keydown', onKeyDown);
+    panel.remove();
+    style.remove();
+  };
 }

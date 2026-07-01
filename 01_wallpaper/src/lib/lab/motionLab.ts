@@ -17,6 +17,7 @@
 // Enabled only when the page is opened with `?lab=1` (see VrmViewer).
 
 import * as THREE from 'three';
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { VRM } from '@pixiv/three-vrm';
 import type { MotionDoc, ValidationIssue, MicroEvent } from '../motion/dsl/types';
 import { loadMotionDoc } from '../motion/dsl/loadMotionDoc';
@@ -90,9 +91,15 @@ export interface LabHandles {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   cameraPresets: CameraPresetTable;
+  /** The viewer's OrbitControls — borrowed by the Pose Composer for authoring orbit (0.8). */
+  controls?: OrbitControls;
   getVrm: () => VRM | null;
+  /** False while scene/variant/item loads are queued or running. */
+  isSceneReady?: () => boolean;
   /** Cached rest quaternions (captured after the arm drop) — viewer-owned. */
   getRestQuaternions: () => Map<string, THREE.Quaternion>;
+  /** Reference hips REST position (normalized rig), viewer-owned. null before VRM load. */
+  getRestHipsPosition: () => THREE.Vector3 | null;
   getFaceMeshes: () => THREE.Mesh[];
   getExpressionMap: () => Record<string, { index: number; weight: number }[]>;
   lookAtTarget: THREE.Object3D;
@@ -245,6 +252,9 @@ export class MotionLab {
   }
 
   private ensureVrm(): { vrm: VRM } | Fail {
+    if (this.h.isSceneReady && !this.h.isSceneReady()) {
+      return fail('$', 'Scene is still loading — wait until the final props/layout load finishes and retry.');
+    }
     const vrm = this.h.getVrm();
     if (!vrm) return fail('$', 'VRM is not loaded yet — wait for the model (status shows "Loaded: ...") and retry.');
     if (!this.hipsRestPos) {

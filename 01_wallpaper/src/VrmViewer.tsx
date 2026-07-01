@@ -39,6 +39,11 @@ import type { LayoutGuides } from './lib/scene/layoutGuides';
 // installed only when the page is opened with ?lab=1 (see mount effect).
 import { installMotionLab } from './lib/lab/motionLab';
 import { installReviewPanel } from './lib/lab/reviewPanel';
+// Pose Composer 0.8 (Stage 1): hand-author bones (FK) in a frozen session that
+// shares the Lab's handles. Installed alongside the Lab under ?lab=1.
+import { installPoseComposer } from './lib/lab/poseComposer/poseComposer';
+import type { PoseComposer } from './lib/lab/poseComposer/poseComposer';
+import { installPoseComposerPanel } from './lib/lab/poseComposer/poseComposerPanel';
 import { DirectorRunner } from './lib/motion/director/directorRunner';
 import { resolveTransitionChain } from './lib/motion/director/modeTable';
 import { PHASE1_MODE_LOOP } from './lib/motion/director/motionContext';
@@ -780,6 +785,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   // Present only with ?lab=1. While lab.isFrozen() the animate loop yields the
   // pose + render to the Lab (see the freeze gate at the top of animate()).
   const labRef = useRef<MotionLab | null>(null);
+  // Pose Composer (0.8): hand-authoring session. While isActive() the animate
+  // loop yields the pose + render to it, exactly like the Lab's freeze gate.
+  const poseComposerRef = useRef<PoseComposer | null>(null);
 
   // Apply a scene's lighting block to the existing lights (no-op if absent, so
   // the 0.1 defaults are preserved). Cosmetic only — never touches the rig.
@@ -798,12 +806,18 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   // dev double-effect, a quick variant change + reload, ...) would otherwise
   // both append and leave duplicate props in the scene (observed: 6 children).
   const sceneLoadChainRef = useRef<Promise<void>>(Promise.resolve());
+  const sceneLoadsPendingRef = useRef(0);
 
   // Fetch a scene preset, (re)load its props into propsRoot, apply lighting +
   // visibility, and report the aggregated status. Never throws / never blocks
   // the render loop — load failures resolve to the built-in default + placeholders.
   const loadSceneAndProps = (sceneId: string) => {
-    sceneLoadChainRef.current = sceneLoadChainRef.current.then(() => loadSceneAndPropsNow(sceneId));
+    sceneLoadsPendingRef.current += 1;
+    sceneLoadChainRef.current = sceneLoadChainRef.current
+      .then(() => loadSceneAndPropsNow(sceneId))
+      .finally(() => {
+        sceneLoadsPendingRef.current = Math.max(0, sceneLoadsPendingRef.current - 1);
+      });
   };
 
   const loadSceneAndPropsNow = (sceneId: string): Promise<void> => {
@@ -974,28 +988,38 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     // the VRM and bridge tables lazily through the refs, so installing before
     // the async VRM load is safe (calls before load fail with a clear message).
     const _reviewQuery = new URLSearchParams(window.location.search);
-    if (_reviewQuery.has('lab') || _reviewQuery.has('phase1Review')) {
-      labRef.current = installMotionLab({
+    let removeReviewPanel: (() => void) | null = null;
+    if (_reviewQuery.has('lab') || _reviewQuery.has('phase1Review') || _reviewQuery.has('poseEdit')) {
+      // One handle bag shared by the Lab and the Pose Composer (both dev-only).
+      const labHandles = {
         renderer,
         scene,
         camera,
         cameraPresets: CAMERA_PRESETS,
+        controls,
         getVrm: () => vrmRef.current,
+        isSceneReady: () => sceneLoadsPendingRef.current === 0,
         getRestQuaternions: () => initialRotationsRef.current,
+        getRestHipsPosition: () => initialHipsPosRef.current,
         getFaceMeshes: () => faceMeshesRef.current,
         getExpressionMap: () => expressionMapRef.current,
         lookAtTarget: lookAtTargetRef.current,
         propsRoot: propsRootRef.current,
         requestClipSwap,
-        setPendingSettle: (req) => { pendingSettleRef.current = req; },
+        setPendingSettle: (req: ClipSwapRequest | null) => { pendingSettleRef.current = req; },
         extController: extControllerRef.current,
-        onStatus: (s) => propsRef.current.onStatusUpdate(s),
+        onStatus: (s: string) => propsRef.current.onStatusUpdate(s),
         startDirector,
         stopDirector,
         getDirectorStatus: () => directorRef.current?.status() ?? null,
-      });
+      };
+      labRef.current = installMotionLab(labHandles);
+      // Pose Composer 0.8 (Stage 1): window.__poseComposer, sharing the handles.
+      poseComposerRef.current = installPoseComposer(labHandles);
+      // Stage 2: the bone-select + numeric DOM panel, only with ?poseEdit=1.
+      if (_reviewQuery.has('poseEdit')) installPoseComposerPanel(poseComposerRef.current);
       // Phase 1 visual-QA review panel (dev-only; never in the production wallpaper).
-      if (_reviewQuery.has('phase1Review') && labRef.current) installReviewPanel(labRef.current);
+      if (_reviewQuery.has('phase1Review') && labRef.current) removeReviewPanel = installReviewPanel(labRef.current);
     }
 
     const loader = new GLTFLoader();
@@ -1264,7 +1288,8 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       // Motion Lab (0.7): while frozen, the Lab owns the pose + rendering
       // (deterministic scrub/captures). Keep the rAF alive and keep consuming
       // the clock so thawing doesn't deliver a giant delta to the idle layer.
-      if (labRef.current?.isFrozen()) return;
+      // Pose Composer (0.8): same yield while a hand-authoring session is active.
+      if (labRef.current?.isFrozen() || poseComposerRef.current?.isActive()) return;
 
       timeAccumulator += delta;
 
@@ -1728,9 +1753,14 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
+      removeReviewPanel?.();
       if (labRef.current) {
         labRef.current = null;
         delete window.__motionLab;
+      }
+      if (poseComposerRef.current) {
+        poseComposerRef.current = null;
+        delete window.__poseComposer;
       }
       controls.dispose();
       renderer.dispose();

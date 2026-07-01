@@ -213,6 +213,62 @@ export function installPoseComposerPanel(pc: PoseComposer): void {
     refresh();
   }
 
+  // --- save / load (Stage 4) -------------------------------------------------
+  section('保存 / 読込');
+  const idInput = el('input', { type: 'text', placeholder: 'pose id (例: my_pose)' }) as HTMLInputElement;
+  idInput.style.flex = '1';
+  const labelInput = el('input', { type: 'text', placeholder: 'label（任意）' }) as HTMLInputElement;
+  labelInput.style.flex = '1';
+  panel.appendChild(el('div', { className: 'row' }, idInput));
+  panel.appendChild(el('div', { className: 'row' }, labelInput));
+  const saveBtn = el('button', { className: 'go', textContent: '💾 Save' }) as HTMLButtonElement;
+  const exportBtn = el('button', { textContent: '⬇ Export' }) as HTMLButtonElement;
+  const loadBtn = el('button', { textContent: '📂 Load' }) as HTMLButtonElement;
+  const importBtn = el('button', { textContent: 'Import…' }) as HTMLButtonElement;
+  const fileInput = el('input', { type: 'file', accept: '.json' }) as HTMLInputElement;
+  fileInput.style.display = 'none';
+  saveBtn.onclick = async () => {
+    const id = idInput.value.trim();
+    if (!id) { setStatus('pose id を入力してください'); return; }
+    const r = await PC().savePose({ id, label: labelInput.value.trim() || undefined }) as { ok?: boolean; path?: string; error?: string };
+    if (r.ok) setStatus(`保存: ${r.path}`); else guard('save', r);
+    refresh();
+  };
+  exportBtn.onclick = () => {
+    const id = idInput.value.trim() || 'pose';
+    const r = PC().exportPose({ id, label: labelInput.value.trim() || undefined }) as { ok?: boolean; json?: string; error?: string };
+    if (!r.ok || !r.json) { guard('export', r); return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([r.json], { type: 'application/json' }));
+    a.download = `${id}.pose.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus(`Export: ${id}.pose.json`);
+  };
+  loadBtn.onclick = async () => {
+    const id = idInput.value.trim();
+    if (!id) { setStatus('読み込む pose id を入力してください'); return; }
+    const r = await PC().loadPose(id) as { ok?: boolean; loaded?: string; missingBones?: string[]; error?: string };
+    if (r.ok) { setStatus(`読込: ${r.loaded}${r.missingBones && r.missingBones.length ? ' (欠損: ' + r.missingBones.join(',') + ')' : ''}`); if (selected) loadInspector(selected); }
+    else guard('load', r);
+    refresh();
+  };
+  importBtn.onclick = () => fileInput.click();
+  fileInput.onchange = async () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    try {
+      const doc = JSON.parse(await f.text());
+      const r = await PC().loadPose(doc) as { ok?: boolean; loaded?: string; error?: string };
+      if (r.ok) { setStatus(`Import: ${r.loaded}`); if (selected) loadInspector(selected); } else guard('import', r);
+    } catch {
+      setStatus('Import 失敗: JSON を解析できません');
+    }
+    fileInput.value = '';
+    refresh();
+  };
+  panel.appendChild(el('div', { className: 'row' }, saveBtn, exportBtn, loadBtn, importBtn, fileInput));
+
   // --- status / hint ---------------------------------------------------------
   const statusEl = el('div', { className: 'status', textContent: 'Begin で編集開始 → 人型でボーンを選び XYZ° を入力' }) as HTMLDivElement;
   panel.appendChild(statusEl);
@@ -297,6 +353,10 @@ export function installPoseComposerPanel(pc: PoseComposer): void {
     gizmoTransBtn.className = gz && st.gizmoMode === 'translate' ? 'go' : '';
     undoBtn.disabled = !st.active || !st.canUndo;
     redoBtn.disabled = !st.active || !st.canRedo;
+    saveBtn.disabled = !st.active;
+    exportBtn.disabled = !st.active;
+    loadBtn.disabled = !st.active;
+    importBtn.disabled = !st.active;
     paintDots();
     refreshDirty();
   }

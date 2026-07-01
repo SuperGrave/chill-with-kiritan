@@ -1,0 +1,28 @@
+{
+  "schema": "pose/1",
+  "id": "sample_wave",
+  "bones": {
+    "head": [
+      0.08,
+      0.2,
+      0.06
+    ],
+    "leftUpperArm": [
+      0,
+      0,
+      1.2
+    ],
+    "rightUpperArm": [
+      0,
+      0,
+      -0.4
+    ],
+    "rightLowerArm": [
+      0,
+      -1,
+      0
+    ]
+  },
+  "label": "見本・右手を上げて挨拶",
+  "notes": "Pose Composer 0.8 Stage 4 のサンプル。基準姿勢からの右腕挙上＋頭のかしげ。"
+}

@@ -21,6 +21,11 @@ function motionLabApi(): Plugin {
     configureServer(server) {
       const root = server.config.root
       const capturesRoot = path.resolve(root, '.probe_tmp/captures')
+      // Pose Composer 0.8: authored pose/hand assets are written back into the
+      // source tree, so the write is whitelisted to these two dirs only.
+      const posesRoot = path.resolve(root, 'public/poses')
+      const handsRoot = path.resolve(posesRoot, 'hands')
+      const poseBackupRoot = path.resolve(root, '.probe_tmp/pose_backups')
 
       const listIds = (dir: string, suffix: string): string[] => {
         try {
@@ -109,6 +114,50 @@ function motionLabApi(): Plugin {
             fs.mkdirSync(path.dirname(target), { recursive: true })
             fs.writeFileSync(target, buf)
             reply(200, { ok: true, path: target, bytes: buf.length })
+          } catch (e) {
+            reply(500, { ok: false, error: e instanceof Error ? e.message : String(e) })
+          }
+        })
+      })
+
+      // POST /__lab/pose/save  { file: "<id>.pose.json" | "hands/<id>.hand.json", json: "..." }
+      //   -> writes into public/poses/ (or public/poses/hands/), backing up any
+      //      existing file into .probe_tmp/pose_backups/ first. dev-only (apply:'serve').
+      server.middlewares.use('/__lab/pose/save', (req, res) => {
+        const reply = (status: number, body: object) => {
+          res.statusCode = status
+          res.setHeader('content-type', 'application/json')
+          res.end(JSON.stringify(body))
+        }
+        if (req.method !== 'POST') return reply(405, { ok: false, error: 'POST only' })
+        const chunks: Buffer[] = []
+        req.on('data', (c: Buffer) => chunks.push(c))
+        req.on('end', () => {
+          try {
+            const { file, json } = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+            // <id>.pose.json at the root, or hands/<id>.hand.json — no traversal.
+            if (typeof file !== 'string' || file.includes('..') ||
+                !/^(hands\/)?[\w-]+\.(pose|hand)\.json$/.test(file)) {
+              return reply(400, { ok: false, error: `bad file "${file}" — "<id>.pose.json" or "hands/<id>.hand.json"` })
+            }
+            if (typeof json !== 'string') {
+              return reply(400, { ok: false, error: 'json must be a string (the file contents)' })
+            }
+            const target = path.resolve(posesRoot, file)
+            const dir = path.dirname(target)
+            if (dir !== posesRoot && dir !== handsRoot) {
+              return reply(400, { ok: false, error: 'writes are limited to public/poses/ and public/poses/hands/' })
+            }
+            // Back up an existing file (never overwrite in place without a copy).
+            let backup: string | null = null
+            if (fs.existsSync(target)) {
+              fs.mkdirSync(poseBackupRoot, { recursive: true })
+              backup = path.resolve(poseBackupRoot, `${path.basename(file)}.${Date.now()}.bak`)
+              fs.copyFileSync(target, backup)
+            }
+            fs.mkdirSync(dir, { recursive: true })
+            fs.writeFileSync(target, json, 'utf8')
+            reply(200, { ok: true, path: target, backup })
           } catch (e) {
             reply(500, { ok: false, error: e instanceof Error ? e.message : String(e) })
           }

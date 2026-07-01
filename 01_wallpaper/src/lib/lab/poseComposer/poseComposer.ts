@@ -24,9 +24,10 @@ import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import type { VRM } from '@pixiv/three-vrm';
 import type { LabHandles, CameraPresetTable } from '../motionLab';
-import { HUMANOID_BONE_SET } from '../../motion/dsl/types';
+import { HUMANOID_BONE_SET, type PoseDef } from '../../motion/dsl/types';
 import { boneLabel } from './boneMapDefinition';
-import { PoseHistory, type PoseSnapshot } from './poseHistory';
+import { PoseHistory, snapshotsEqual, type PoseSnapshot } from './poseHistory';
+import { encodePose, decodePose, serializePose } from './poseAssetCodec';
 
 // --- session options ----------------------------------------------------------
 // Which of the "rest of the rig" layers stay live while authoring. All OFF by
@@ -97,6 +98,10 @@ export class PoseComposer {
   // Undo/Redo (Stage 3, 指示書 §11). One gesture = one entry. The history is a
   // pure snapshot stack; PoseComposer hands it snapshots of the live override.
   private history = new PoseHistory(100);
+
+  // Saved baseline (Stage 4): the pose as of the last begin / save / load. dirty
+  // now means "changed since then" (指示書 §7.3 refinement), not merely "!= reference".
+  private savedBaseline: PoseSnapshot | null = null;
 
   // Camera orbit while authoring: the viewer's OrbitControls, borrowed through the
   // handles. During a session the viewer's rAF is frozen, so we drive drawFrame on
@@ -178,6 +183,7 @@ export class PoseComposer {
     this.hipsOffset = null;
     this.dirty = false;
     this.history.clear();
+    this.savedBaseline = this.snapshot(); // clean baseline = the reference pose
 
     // 8-9. Switch to fixed-time render: become active (viewer yields), borrow the
     //      orbit controls, set camera if asked, restore reference, draw.
@@ -207,6 +213,7 @@ export class PoseComposer {
     this.hipsOffset = null;
     this.selectedBone = null;
     this.history.clear();
+    this.savedBaseline = null;
     this.releaseOrbit();
     this.disposeGizmo();
     this.disposeOverlay();
@@ -687,9 +694,11 @@ export class PoseComposer {
     return { ok: true, bone, ...this.boneReadout(bone) };
   }
 
-  /** dirty = the authored pose differs from the reference (any override / hips offset). */
+  /** dirty = the authored pose differs from the last saved/loaded baseline (else from reference). */
   private recomputeDirty(): void {
-    this.dirty = this.overrides.size > 0 || this.hipsOffset !== null;
+    this.dirty = this.savedBaseline
+      ? !snapshotsEqual(this.snapshot(), this.savedBaseline)
+      : this.overrides.size > 0 || this.hipsOffset !== null;
   }
 
   /** Current authored value of a bone as offset euler(deg) + quaternion. */
@@ -825,6 +834,106 @@ export class PoseComposer {
     }
   }
 
+  // ---- pose asset save / load (Stage 4, master decision = pose/1) ------------
+
+  /** Build the pose/1 doc for the current authored pose (changed-vs-T-pose bones). */
+  private buildPoseDoc(opts: { id: string; label?: string; notes?: string }): PoseDef {
+    return encodePose({
+      id: opts.id,
+      label: opts.label,
+      notes: opts.notes,
+      reference: this.h.getRestQuaternions(),
+      overrides: this.overrides,
+      hipsOffset: this.hipsOffset,
+    });
+  }
+
+  /**
+   * Save the authored pose to public/poses/<id>.pose.json via the dev endpoint
+   * (POST /__lab/pose/save). The reference basis is converted to T-pose-absolute
+   * eulers so the file drops straight into a motion's `posture`. Marks clean.
+   */
+  async savePose(opts: { id: string; label?: string; notes?: string; file?: string }): Promise<Record<string, unknown>> {
+    const ctx = this.ensureActive();
+    if ('ok' in ctx) return ctx;
+    if (!opts?.id || !/^[\w-]+$/.test(opts.id)) return fail('pose id is required — letters / digits / _ / - only (becomes <id>.pose.json).');
+    const doc = this.buildPoseDoc(opts);
+    const file = opts.file ?? `${opts.id}.pose.json`;
+    try {
+      const res = await fetch('/__lab/pose/save', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ file, json: serializePose(doc) }),
+      });
+      const saved = await res.json();
+      if (!res.ok || !saved.ok) return fail(`saving failed: ${saved.error ?? `HTTP ${res.status}`}`);
+      this.savedBaseline = this.snapshot();
+      this.recomputeDirty();
+      return { ok: true, path: saved.path, backup: saved.backup ?? null, id: doc.id, bones: Object.keys(doc.bones), hipsOffset: doc.hipsOffset ?? null };
+    } catch (e) {
+      return fail(`POST /__lab/pose/save failed: ${e instanceof Error ? e.message : String(e)} (dev server only).`);
+    }
+  }
+
+  /** Serialize the current pose to a pose/1 JSON string (no network — for Export / inspection). */
+  exportPose(opts: { id: string; label?: string; notes?: string }): Record<string, unknown> {
+    if (!opts?.id || !/^[\w-]+$/.test(opts.id)) return fail('pose id is required — letters / digits / _ / - only.');
+    const doc = this.buildPoseDoc(opts);
+    return { ok: true, id: doc.id, json: serializePose(doc), doc };
+  }
+
+  /**
+   * Load a pose into the session: from an id (fetched at /poses/<id>.pose.json),
+   * an explicit .json URL, or a pose/1 object (Import). Decodes to reference-basis
+   * offsets, clears Undo history (§11), and marks clean. Never throws.
+   */
+  async loadPose(source: string | PoseDef): Promise<Record<string, unknown>> {
+    const ctx = this.ensureActive();
+    if ('ok' in ctx) return ctx;
+    let raw: unknown;
+    if (typeof source === 'string') {
+      const url = source.endsWith('.json') ? source : `/poses/${source}.pose.json`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return fail(`could not fetch pose "${url}": HTTP ${res.status}.`);
+        raw = await res.json();
+      } catch (e) {
+        return fail(`fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    } else {
+      raw = source;
+    }
+    const decoded = decodePose(raw, this.h.getRestQuaternions());
+    if (!decoded.ok) return fail(`invalid pose: ${decoded.errors.join('; ')}`);
+    this.overrides.clear();
+    for (const [bone, q] of decoded.overrides) this.overrides.set(bone, q);
+    this.hipsOffset = decoded.hipsOffset;
+    this.history.clear();
+    this.savedBaseline = this.snapshot();
+    this.recomputeDirty();
+    this.syncGizmoToSelection();
+    this.drawFrame(ctx.vrm);
+    return {
+      ok: true,
+      loaded: (raw as PoseDef).id ?? null,
+      overriddenBones: [...this.overrides.keys()],
+      hipsOffset: this.hipsOffset,
+      missingBones: decoded.missingBones,
+      warnings: decoded.warnings,
+    };
+  }
+
+  /** List the pose ids the dev server can load (GET /__lab/ls). */
+  async listPoses(): Promise<Record<string, unknown>> {
+    try {
+      const res = await fetch('/__lab/ls');
+      const j = await res.json();
+      return { ok: true, poses: j.poses ?? [] };
+    } catch (e) {
+      return fail(`GET /__lab/ls failed: ${e instanceof Error ? e.message : String(e)} (dev server only).`);
+    }
+  }
+
   // ---- introspection ---------------------------------------------------------
 
   status(): Record<string, unknown> {
@@ -868,10 +977,13 @@ export class PoseComposer {
       '  __poseComposer.setLookAt(true) / setSpringBone(true) / setExpression("joy")  // re-enable a layer',
       '  await __poseComposer.capture({ file: "_pose/test.png" }) // PNG -> .probe_tmp/captures/, returns path',
       '  __poseComposer.resetBone("head") / resetAll()',
+      '  await __poseComposer.savePose({ id:"my_pose", label:"..." })  // -> public/poses/my_pose.pose.json (dev)',
+      '  await __poseComposer.loadPose("stand_relaxed")          // load a pose/1 into the session',
+      '  __poseComposer.exportPose({ id:"my_pose" })             // -> { json } for download / inspection',
       '  __poseComposer.end()                                    // restore + hand back to the normal loop',
       '  __poseComposer.status() / dumpPose()',
       'Drag the gizmo to rotate; orbit the camera with the mouse (suspended mid-drag). Ctrl+Z / Ctrl+Shift+Z undo/redo.',
-      'Save to .pose.json and Motion keyframe insertion arrive in Stages 4/5.',
+      'Poses save in the existing pose/1 schema (T-pose-absolute euler), so they plug into a motion posture. Motion keyframe insertion is Stage 5.',
     ].join('\n');
   }
 }

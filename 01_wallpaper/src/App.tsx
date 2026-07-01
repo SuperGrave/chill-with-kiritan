@@ -136,7 +136,8 @@ function App() {
   const productionMode =
     !params.has('probe') &&
     !params.has('lab') &&
-    !params.has('phase1Review');
+    !params.has('phase1Review') &&
+    !params.has('poseEdit');
 
   const [cameraMode, setCameraMode] = useState<CameraMode>('ideal');
   const [lookAtEnabled, setLookAtEnabled] = useState(true);

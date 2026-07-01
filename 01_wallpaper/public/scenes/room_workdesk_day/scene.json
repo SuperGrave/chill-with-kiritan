@@ -51,10 +51,10 @@
     "scale": [1.0, 1.0, 1.0]
   },
   "camera": {
-    "preset": "monitor_side",
-    "position": [0.4, 0.9, 0.8],
-    "target": [0.0, 1.0, 0.0],
-    "fov": 40
+    "preset": "ideal",
+    "position": [1.116, 0.912, 0.845],
+    "target": [0.0, 0.9, 0.0],
+    "fov": 45
   },
   "lighting": {
     "ambientStrength": 0.8,

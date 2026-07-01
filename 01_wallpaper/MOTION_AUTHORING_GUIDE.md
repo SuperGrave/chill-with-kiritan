@@ -105,6 +105,8 @@ __motionLab.thaw(); __motionLab.setPropsVisible(true);
 | `+y` | **本人の左**（画面右）へ回す |
 | `+z` | 頭頂が**本人の右肩**側（画面左）へ傾く（かしげ） |
 
+> **胴の大きな前後傾の符号（実測2026-06-24）**: 上の「+x=前傾」は**頭のうつむき**基準。`spine`/`chest` を大きく倒して上体を机へ寄せる/椅子へ反らす用途では逆で、**`spine −x` が上体を前(+z)へ、`+x` が後ろ(−z)へ**倒す（`loop_video_relax` の肘つき頬杖で確認）。胴を大きく動かすときは必ず `layoutSnapshot()` の head/shoulder z で前後を確認。
+
 ### 腕（upperArm）— T-pose（水平）が原点
 | 左腕 | 右腕 | 動き |
 |------|------|------|
@@ -115,6 +117,16 @@ __motionLab.thaw(); __motionLab.setPropsVisible(true);
 
 ### 肘（lowerArm）
 左: `y −` / `z −` で曲げ（右はミラー）。伸び上げ経過の実証値: 左 `[0, −0.9, −0.55]`。曲げの見えかたは服（振袖）に隠れやすいので必ずキャプチャ確認。
+**手首ロールには使わない**: 曲げ済み前腕に offset `x` を足すと、XYZオイラーで `x` が最外回転になり「前腕の長軸まわりの捻り」ではなく「手の横振り（手がキー上から外へ逃げる）」になる（実測2026-06-24）。回内は手首側で（下記）。
+
+### 手首（hand ボーンの offsetトラック）— 0.9.1 追補（実測2026-06-24）
+hand ボーンは posture も hand.json レイヤも持たない（指カールは指ボーン側）ので、**offset euler = 手首のローカル回転そのもの**。実測した軸: 指の長軸 = **local X** / 掌の法線 = **local Y**。したがって
+| 値 | 動き |
+|----|------|
+| offset `x` | **手首ロール（回内/回外）**。タイピングの palm-down（掌を真下）は左右とも `x ≈ −1.04`（元の `0.1` は実質ほぼ無回転だった） |
+| offset `y` / `z` | 手首のヨー/ピッチ（振り/あおり）。`x` でロールした後は軸が回るので必ずキャプチャ/数値確認 |
+
+数値検証の定石: `__motionLab.h.getVrm()`（TS private は実行時に素通し）で指ボーンの world 位置を取り、掌法線 = `cross(normalize(middleProx−wrist), normalize(littleProx−indexProx))` の y が **−1 で真下**。`leftMiddleDistal` の world y を desk top(0.73) と比べてキー接地、`leftHand` world y で机貫通を判定（オクルージョンに強い）。
 
 ### 指（hand.json、side:"both" の左手基準値）
 | 値 | 動き |

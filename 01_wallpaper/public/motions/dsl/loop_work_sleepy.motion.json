@@ -12,12 +12,12 @@
   "fadeOut": 1.0,
   "hands": { "left": "type_hands", "right": "type_hands" },
   "tracks": {
-    "leftUpperArm": { "keys": [ { "t": 0, "e": [0.15, -0.42, 1.36] }, { "t": 16, "e": [0.15, -0.42, 1.36] } ] },
-    "rightUpperArm": { "keys": [ { "t": 0, "e": [0.15, 0.42, -1.36] }, { "t": 16, "e": [0.15, 0.42, -1.36] } ] },
+    "leftUpperArm": { "keys": [ { "t": 0, "e": [0.15, -0.42, 1.29] }, { "t": 16, "e": [0.15, -0.42, 1.29] } ] },
+    "rightUpperArm": { "keys": [ { "t": 0, "e": [0.15, 0.42, -1.29] }, { "t": 16, "e": [0.15, 0.42, -1.29] } ] },
     "leftLowerArm": { "keys": [ { "t": 0, "e": [0, -0.95, -0.72] }, { "t": 16, "e": [0, -0.95, -0.72] } ] },
     "rightLowerArm": { "keys": [ { "t": 0, "e": [0, 0.95, 0.72] }, { "t": 16, "e": [0, 0.95, 0.72] } ] },
-    "leftHand": { "keys": [ { "t": 0, "e": [0.1, 0, 0] }, { "t": 16, "e": [0.1, 0, 0] } ] },
-    "rightHand": { "keys": [ { "t": 0, "e": [0.1, 0, 0] }, { "t": 16, "e": [0.1, 0, 0] } ] },
+    "leftHand": { "keys": [ { "t": 0, "e": [-1.04, 0, 0] }, { "t": 16, "e": [-1.04, 0, 0] } ] },
+    "rightHand": { "keys": [ { "t": 0, "e": [-1.04, 0, 0] }, { "t": 16, "e": [-1.04, 0, 0] } ] },
     "head": { "keys": [
       { "t": 0.0, "e": [0.1, 0, 0.02] },
       { "t": 8.0, "e": [0.17, 0, -0.02], "ease": "sineInOut" },
@@ -30,8 +30,8 @@
     ] }
   },
   "oscillators": [
-    { "bone": "chest", "axis": "x", "amp": 0.04, "period": 8 },
-    { "bone": "spine", "axis": "x", "amp": 0.02, "period": 8 }
+    { "bone": "chest", "axis": "x", "amp": 0.012, "period": 8 },
+    { "bone": "spine", "axis": "x", "amp": 0.006, "period": 8 }
   ],
   "expressions": { "keys": [
     { "t": 0.0, "set": { "blink": 0.4, "sorrow": 0.1 }, "fade": 1.0 },

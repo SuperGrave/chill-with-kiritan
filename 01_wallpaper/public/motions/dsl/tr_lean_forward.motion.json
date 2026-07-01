@@ -11,15 +11,15 @@
   "fadeIn": 0.4,
   "fadeOut": 0.4,
   "tracks": {
-    "leftUpperArm": { "keys": [ { "t": 0, "e": [0.15, -0.5, 1.3] }, { "t": 1.4, "e": [0.18, -0.52, 1.33], "ease": "sineInOut" } ] },
-    "rightUpperArm": { "keys": [ { "t": 0, "e": [0.15, 0.5, -1.3] }, { "t": 1.4, "e": [0.18, 0.52, -1.33], "ease": "sineInOut" } ] },
-    "leftLowerArm": { "keys": [ { "t": 0, "e": [0, -1.15, -0.55] }, { "t": 1.4, "e": [0, -0.88, -0.68], "ease": "sineInOut" } ] },
-    "rightLowerArm": { "keys": [ { "t": 0, "e": [0, 1.15, 0.55] }, { "t": 1.4, "e": [0, 0.88, 0.68], "ease": "sineInOut" } ] },
-    "leftHand": { "keys": [ { "t": 0, "e": [0.1, 0, 0] }, { "t": 1.4, "e": [0.1, 0, 0] } ] },
-    "rightHand": { "keys": [ { "t": 0, "e": [0.1, 0, 0] }, { "t": 1.4, "e": [0.1, 0, 0] } ] },
+    "leftUpperArm": { "keys": [ { "t": 0, "e": [0.2, -1.1, 1.05] }, { "t": 1.4, "e": [0.9118, -0.8458, 1.49], "ease": "sineInOut" } ] },
+    "rightUpperArm": { "keys": [ { "t": 0, "e": [0.2, 1.1, -1.05] }, { "t": 1.4, "e": [0.9118, 0.8458, -1.49], "ease": "sineInOut" } ] },
+    "leftLowerArm": { "keys": [ { "t": 0, "e": [0, -2.52, -0.22] }, { "t": 1.4, "e": [0.2196, -0.2961, -0.1359], "ease": "sineInOut" } ] },
+    "rightLowerArm": { "keys": [ { "t": 0, "e": [0, 2.52, 0.22] }, { "t": 1.4, "e": [0.2196, 0.2961, 0.1359], "ease": "sineInOut" } ] },
+    "leftHand": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 1.4, "e": [-1.04, 0, 0], "ease": "sineInOut" } ] },
+    "rightHand": { "keys": [ { "t": 0, "e": [0, 0, 0] }, { "t": 1.4, "e": [-1.04, 0, 0], "ease": "sineInOut" } ] },
     "spine": { "keys": [ { "t": 0, "e": [-0.26, 0, 0] }, { "t": 0.2, "e": [-0.29, 0, 0], "ease": "easeIn" }, { "t": 1.0, "e": [0.03, 0, 0], "ease": "easeOut" }, { "t": 1.4, "e": [0, 0, 0], "ease": "sineInOut" } ] },
     "chest": { "keys": [ { "t": 0, "e": [-0.16, 0, 0] }, { "t": 1.4, "e": [0, 0, 0], "ease": "sineInOut" } ] },
-    "neck": { "keys": [ { "t": 0, "e": [0.06, 0, 0] }, { "t": 1.4, "e": [0, 0, 0], "ease": "sineInOut" } ] },
-    "head": { "keys": [ { "t": 0, "e": [0.12, 0, 0] }, { "t": 1.4, "e": [0, 0, 0], "ease": "sineInOut" } ] }
+    "neck": { "keys": [ { "t": 0, "e": [0.06, 0, 0] }, { "t": 1.4, "e": [-0.08, 0, 0], "ease": "sineInOut" } ] },
+    "head": { "keys": [ { "t": 0, "e": [0.12, 0, 0] }, { "t": 1.4, "e": [-0.12, 0, 0], "ease": "sineInOut" } ] }
   }
 }

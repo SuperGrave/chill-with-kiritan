@@ -17,7 +17,7 @@
   "anchors": {
     "desk":   { "top": 0.73, "center": [0, 0.365, 0.5001], "note": "work surface; keyboard/typing happens here in front of her" },
     "chair":  { "backrestTop": 0.949, "center": [-0.01, 0.4743, -0.3937], "note": "office chair behind/under her; seat surface ~0.45-0.47, backrest behind (-z)" },
-    "laptop": { "screenCenter": [0, 0.8928, 0.5001], "screenTop": 1.0556, "base": [0, 0.73, 0.45], "note": "monitor she looks at; keyboard/base is the near (smaller-z) part of the laptop on the desk" },
+    "laptop": { "container": [-0.021, 0.729, 0.241], "aabb": { "x": [-0.272, 0.211], "y": [0.731, 1.056], "z": [0.136, 0.487] }, "note": "pc_laptop_modern final resolved transform after variant offset; the keyboard contact area is around z 0.28-0.34, not the old stale z~0.45 target" },
     "cupRest":  { "center": [0.52, 0.7775, 0.30], "bottom": [0.52, 0.73, 0.2863], "hand": "TBD", "note": "マスター既定配置に復帰(2026-06-22, 画面右=本人の左)。NOTE: この位置は腕の到達域(~±0.27)の外側。sipの取る手(左/右)と到達方式(体幹リーン等)はマスター確認後に再設計。" },
     "phoneRest": { "center": [0.63, 0.7349, 0.14], "note": "left-side rest" }
   },
@@ -31,12 +31,12 @@
   "authoringTargets": {
     "_note": "derived helpers for pose authoring; verify live with layoutSnapshot() at the frozen pose.",
     "sitHipsWorldY": 0.73,
-    "typingHandZone": { "y": [0.74, 0.78], "z": [0.38, 0.46], "x": [-0.16, 0.16], "note": "both hands on the laptop keyboard; right hand can drift to the mouse on the right (-x)" },
+    "typingHandZone": { "y": [0.73, 0.77], "z": [0.28, 0.34], "x": [-0.14, 0.14], "note": "finger contact zone on the final pc_laptop_modern keyboard, recalibrated in the fully loaded scene on 2026-06-24" },
     "cupReachTargetRightHand": [-0.25, 0.79, 0.17],
     "reclineBackrestContactZ": -0.20
   },
   "cameraPresets": {
-    "production": { "preset": "monitor_side", "position": [0.4, 0.9, 0.8], "target": [0.0, 1.0, 0.0], "fov": 40 },
+    "production": { "preset": "ideal", "position": [1.116, 0.912, 0.845], "target": [0.0, 0.9, 0.0], "fov": 45 },
     "labReview": ["desk wide", "face close", "monitor side", "workdesk_front", "workdesk_side", "workdesk_close"]
   }
 }

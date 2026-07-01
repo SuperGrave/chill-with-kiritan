@@ -8,9 +8,20 @@ use models::WallpaperState;
 use state::{AppState, Shared};
 use std::sync::{Arc, Mutex};
 use tauri::{
+    menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+/// Bring the main window to front (used by the single-instance relaunch
+/// handler, the tray's "表示" menu item, and its left-click toggle-on branch).
+fn show_and_focus(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -21,18 +32,59 @@ pub fn run() {
     let state_for_tasks = Arc::clone(&shared);
 
     tauri::Builder::default()
+        // Must be registered first: it needs to intercept a second launch
+        // before anything else initializes. A relaunch just focuses the
+        // existing window instead of spawning a second API server on the
+        // same port (see docs/COMPLETION_EXECUTION_PLAN_2026-07-01.md §4.1).
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            show_and_focus(app);
+        }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(shared)
         .setup(move |app| {
-            // HTTP API server on Tauri's tokio runtime.
-            tauri::async_runtime::spawn(api::serve(state_for_api));
+            // HTTP API server on Tauri's tokio runtime. A bind failure (stale
+            // process still holding the port, another app on 40313, ...) is
+            // surfaced as a dialog instead of leaving the wallpaper/overlay
+            // silently stuck on "offline" with no visible cause.
+            let dialog_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = api::serve(state_for_api).await {
+                    eprintln!("[companion] {e}");
+                    dialog_handle
+                        .dialog()
+                        .message(format!(
+                            "ローカルAPI（ポート{}）の起動に失敗しました。\n\
+                             他のTohoku Companionが起動中か、ポートが他のアプリに使われている可能性があります。\n\n詳細: {e}",
+                            api::API_PORT
+                        ))
+                        .title("Tohoku Companion — 起動エラー")
+                        .kind(MessageDialogKind::Error)
+                        .buttons(MessageDialogButtons::Ok)
+                        .show(|_| {});
+                }
+            });
             // Background pollers (weather / news / spotify).
             tasks::spawn_all(state_for_tasks);
 
-            // System tray.
+            // System tray: left-click toggles the window (unchanged); the
+            // attached menu (right-click, or the OS default for a tray with a
+            // menu) adds "表示" and "完全終了" — the only way to fully quit
+            // besides the task manager, previously missing entirely.
+            let show_item = MenuItem::with_id(app, "show", "表示", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "完全終了", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
             let _tray = TrayIconBuilder::new()
                 .tooltip("Tohoku Companion")
                 .icon(app.default_window_icon().unwrap().clone())
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => show_and_focus(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
@@ -45,8 +97,7 @@ pub fn run() {
                             if win.is_visible().unwrap_or(false) {
                                 let _ = win.hide();
                             } else {
-                                let _ = win.show();
-                                let _ = win.set_focus();
+                                show_and_focus(app);
                             }
                         }
                     }

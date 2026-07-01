@@ -65,23 +65,21 @@ pub fn build_router(shared: Shared) -> Router {
         .with_state(shared)
 }
 
-/// Async HTTP server — runs forever on Tauri's tokio runtime.
-pub async fn serve(shared: Shared) {
+/// Async HTTP server — runs forever on Tauri's tokio runtime. Returns `Err`
+/// only on a bind failure (e.g. a stale process still holding the port) or if
+/// the server itself errors out; the caller surfaces this to the user instead
+/// of leaving the wallpaper/overlay silently stuck on "offline" with no
+/// visible cause (see docs/COMPLETION_EXECUTION_PLAN_2026-07-01.md §4.2).
+pub async fn serve(shared: Shared) -> Result<(), String> {
     let app = build_router(shared);
     let addr = SocketAddr::from(([127, 0, 0, 1], API_PORT));
-    let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(l) => {
-            println!("[companion] HTTP API ready → http://{}", addr);
-            l
-        }
-        Err(e) => {
-            eprintln!("[companion] Failed to bind {} — {}", addr, e);
-            return;
-        }
-    };
-    if let Err(e) = axum::serve(listener, app).await {
-        eprintln!("[companion] API server error: {}", e);
-    }
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("Failed to bind {addr} — {e}"))?;
+    println!("[companion] HTTP API ready → http://{}", addr);
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| format!("API server error: {e}"))
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

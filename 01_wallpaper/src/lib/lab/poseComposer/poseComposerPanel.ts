@@ -178,6 +178,13 @@ export function installPoseComposerPanel(pc: PoseComposer): void {
   for (const ax of ['x', 'y', 'z'] as const) {
     inspGrid.append(el('span', { textContent: `${ax.toUpperCase()}°` }), axisInputs[ax]);
     axisInputs[ax].addEventListener('input', applyInspector);
+    // One committed numeric edit (focus → blur / Enter) = one undo entry: open a
+    // command group on focus, fold every keystroke into it, close it on blur.
+    axisInputs[ax].addEventListener('focus', () => { if (selected) PC().beginCommandGroup(); });
+    axisInputs[ax].addEventListener('blur', () => { PC().endCommandGroup(); refresh(); });
+    axisInputs[ax].addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { PC().endCommandGroup(); (e.target as HTMLInputElement).blur(); }
+    });
   }
   panel.appendChild(inspGrid);
   const resetBoneBtn = el('button', { textContent: 'このボーンをReset' }) as HTMLButtonElement;
@@ -186,10 +193,30 @@ export function installPoseComposerPanel(pc: PoseComposer): void {
   resetAllBtn.onclick = () => { guard('resetAll', PC().resetAll()); if (selected) loadInspector(selected); refresh(); };
   panel.appendChild(el('div', { className: 'row' }, resetBoneBtn, resetAllBtn));
 
+  // --- gizmo + undo/redo (Stage 3) -------------------------------------------
+  section('編集ツール');
+  const gizmoBtn = el('button', { textContent: '⊹ ギズモ' }) as HTMLButtonElement;
+  const gizmoRotBtn = el('button', { textContent: '回転' }) as HTMLButtonElement;
+  const gizmoTransBtn = el('button', { textContent: '移動(hips)' }) as HTMLButtonElement;
+  gizmoBtn.onclick = () => { guard('gizmo', PC().enableGizmo(!(PC().status() as { gizmo?: boolean }).gizmo)); refresh(); };
+  gizmoRotBtn.onclick = () => { guard('gizmoMode', PC().setGizmoMode('rotate')); refresh(); };
+  gizmoTransBtn.onclick = () => { guard('gizmoMode', PC().setGizmoMode('translate')); refresh(); };
+  panel.appendChild(el('div', { className: 'row' }, gizmoBtn, gizmoRotBtn, gizmoTransBtn));
+  const undoBtn = el('button', { textContent: '↩ Undo' }) as HTMLButtonElement;
+  const redoBtn = el('button', { textContent: '↪ Redo' }) as HTMLButtonElement;
+  undoBtn.onclick = () => { guard('undo', PC().undo()); syncAfterHistory(); };
+  redoBtn.onclick = () => { guard('redo', PC().redo()); syncAfterHistory(); };
+  panel.appendChild(el('div', { className: 'row' }, undoBtn, redoBtn));
+
+  function syncAfterHistory() {
+    if (selected) loadInspector(selected);
+    refresh();
+  }
+
   // --- status / hint ---------------------------------------------------------
   const statusEl = el('div', { className: 'status', textContent: 'Begin で編集開始 → 人型でボーンを選び XYZ° を入力' }) as HTMLDivElement;
   panel.appendChild(statusEl);
-  panel.appendChild(el('div', { className: 'hint', textContent: 'F=Front / S=Side は人型上のボタン。基準姿勢からのローカルoffset（度）。保存・ギズモ・Undoは次段。' }));
+  panel.appendChild(el('div', { className: 'hint', textContent: '基準姿勢からのローカルoffset（度）。ギズモをドラッグで回転／マウスでカメラ周回。Ctrl+Z / Ctrl+Shift+Z でUndo/Redo。保存は次段。' }));
 
   // --- behavior --------------------------------------------------------------
   function onPickBone(bone: string) {
@@ -244,7 +271,10 @@ export function installPoseComposerPanel(pc: PoseComposer): void {
   }
 
   function refresh() {
-    const st = PC().status() as { active?: boolean; selectedBone?: string | null; vrmLoaded?: boolean };
+    const st = PC().status() as {
+      active?: boolean; selectedBone?: string | null; vrmLoaded?: boolean;
+      gizmo?: boolean; gizmoMode?: 'rotate' | 'translate'; canUndo?: boolean; canRedo?: boolean;
+    };
     activePill.textContent = st.active ? 'active' : 'inactive';
     activePill.className = 'pill' + (st.active ? ' on' : '');
     // Begin is enabled whenever inactive; begin() itself reports gracefully if the
@@ -257,6 +287,16 @@ export function installPoseComposerPanel(pc: PoseComposer): void {
     if (!st.active) { selected = null; selName.firstChild!.textContent = '（未選択）'; for (const ax of ['x','y','z'] as const){ axisInputs[ax].value=''; axisInputs[ax].disabled = true; } }
     resetBoneBtn.disabled = !st.active || !selected;
     resetAllBtn.disabled = !st.active;
+    // gizmo + history controls
+    const gz = st.gizmo === true;
+    gizmoBtn.disabled = !st.active;
+    gizmoBtn.className = st.active && gz ? 'go' : '';
+    gizmoRotBtn.disabled = !st.active || !gz;
+    gizmoRotBtn.className = gz && st.gizmoMode === 'rotate' ? 'go' : '';
+    gizmoTransBtn.disabled = !st.active || !gz || st.selectedBone !== 'hips';
+    gizmoTransBtn.className = gz && st.gizmoMode === 'translate' ? 'go' : '';
+    undoBtn.disabled = !st.active || !st.canUndo;
+    redoBtn.disabled = !st.active || !st.canRedo;
     paintDots();
     refreshDirty();
   }
@@ -267,6 +307,25 @@ export function installPoseComposerPanel(pc: PoseComposer): void {
       panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     }
   });
+
+  // Undo/redo: Ctrl/⌘+Z and Ctrl/⌘+Shift+Z (or Ctrl+Y). Capture phase + a pose-
+  // active guard so it only fires while authoring, and stopPropagation so the
+  // App's own window shortcuts never also see it (§17 collision isolation). Text
+  // inputs keep their native undo (skip when focus is in a field).
+  window.addEventListener('keydown', (e) => {
+    if (!(PC().status() as { active?: boolean }).active) return;
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) {
+      e.preventDefault(); e.stopPropagation();
+      guard('undo', PC().undo()); syncAfterHistory();
+    } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+      e.preventDefault(); e.stopPropagation();
+      guard('redo', PC().redo()); syncAfterHistory();
+    }
+  }, true);
 
   // Light poll so external (console) begin/end/edits reflect in the panel.
   setInterval(refresh, 1000);

@@ -21,10 +21,12 @@
 // window.__poseComposer (a DOM panel is added in Stage 2).
 
 import * as THREE from 'three';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import type { VRM } from '@pixiv/three-vrm';
 import type { LabHandles, CameraPresetTable } from '../motionLab';
 import { HUMANOID_BONE_SET } from '../../motion/dsl/types';
 import { boneLabel } from './boneMapDefinition';
+import { PoseHistory, type PoseSnapshot } from './poseHistory';
 
 // --- session options ----------------------------------------------------------
 // Which of the "rest of the rig" layers stay live while authoring. All OFF by
@@ -82,11 +84,35 @@ export class PoseComposer {
   private _wpos = new THREE.Vector3();
   private _wquat = new THREE.Quaternion();
 
+  // 3D gizmo (Stage 3): a TransformControls attached to the selected bone's
+  // normalized node. Rotate is 'local' space for every bone; translate is hips
+  // only (basePose). The visual helper is added to the scene so it shows in the
+  // frozen render. Created lazily on first enable, disposed on end().
+  private gizmo: TransformControls | null = null;
+  private gizmoHelper: THREE.Object3D | null = null;
+  private gizmoEnabled = false;
+  private gizmoMode: 'rotate' | 'translate' = 'rotate';
+  private gizmoDragging = false;
+
+  // Undo/Redo (Stage 3, 指示書 §11). One gesture = one entry. The history is a
+  // pure snapshot stack; PoseComposer hands it snapshots of the live override.
+  private history = new PoseHistory(100);
+
+  // Camera orbit while authoring: the viewer's OrbitControls, borrowed through the
+  // handles. During a session the viewer's rAF is frozen, so we drive drawFrame on
+  // the controls' 'change' event (event-driven, no continuous loop) and suspend it
+  // during a gizmo drag. State is saved on begin() and restored on end().
+  private orbitChangeHandler: (() => void) | null = null;
+  private orbitPrevEnabled = false;
+  private orbitPrevDamping = false;
+  private orbitBorrowed = false;
+
   // scratch (reused — no per-frame allocation, 指示書 §20)
   private _q = new THREE.Quaternion();
   private _qRef = new THREE.Quaternion();
   private _qOff = new THREE.Quaternion();
   private _euler = new THREE.Euler();
+  private _qIdentity = new THREE.Quaternion();
 
   constructor(handles: PoseComposerHandles) {
     this.h = handles;
@@ -151,13 +177,15 @@ export class PoseComposer {
     this.overrides.clear();
     this.hipsOffset = null;
     this.dirty = false;
+    this.history.clear();
 
-    // 8-9. Switch to fixed-time render: become active (viewer yields), set camera
-    //      if asked, restore reference, draw.
+    // 8-9. Switch to fixed-time render: become active (viewer yields), borrow the
+    //      orbit controls, set camera if asked, restore reference, draw.
     this.active = true;
+    this.borrowOrbit();
     if (opts?.camera) {
       const cam = this.setCamera(opts.camera);
-      if (!cam.ok) { this.active = false; return cam; }
+      if (!cam.ok) { this.releaseOrbit(); this.active = false; return cam; }
     }
     this.drawFrame(ctx.vrm);
     this.h.onStatus(`[POSE] session started (${this.mode}) — author bones, then save/insert. __poseComposer.help()`);
@@ -178,6 +206,9 @@ export class PoseComposer {
     this.overrides.clear();
     this.hipsOffset = null;
     this.selectedBone = null;
+    this.history.clear();
+    this.releaseOrbit();
+    this.disposeGizmo();
     this.disposeOverlay();
     if (vrm?.humanoid) this.restoreReference(vrm); // guarantee no residual
     this.dirty = false;
@@ -307,6 +338,7 @@ export class PoseComposer {
     if ('ok' in ctx) return ctx;
     if (bone === null) {
       this.selectedBone = null;
+      this.syncGizmoToSelection();
       this.drawFrame(ctx.vrm);
       return { ok: true, selected: null };
     }
@@ -314,6 +346,7 @@ export class PoseComposer {
     if (bad) return bad;
     this.selectedBone = bone;
     this.ensureOverlay();
+    this.syncGizmoToSelection();
     this.drawFrame(ctx.vrm);
     return { ok: true, selected: bone, label: boneLabel(bone), present: !!this.refQuat(bone), ...this.boneReadout(bone) };
   }
@@ -347,6 +380,225 @@ export class PoseComposer {
     return { ok: true, rendered: true };
   }
 
+  // ---- Undo / Redo (Stage 3, 指示書 §11) -------------------------------------
+
+  /** Snapshot the live authoring override (deep copy) for the history stack. */
+  private snapshot(): PoseSnapshot {
+    const overrides = new Map<string, THREE.Quaternion>();
+    for (const [bone, q] of this.overrides) overrides.set(bone, q.clone());
+    return { overrides, hipsOffset: this.hipsOffset ? [this.hipsOffset[0], this.hipsOffset[1], this.hipsOffset[2]] : null };
+  }
+
+  /** Replace the live override with a snapshot's contents (undo/redo target). */
+  private restoreSnapshot(s: PoseSnapshot): void {
+    this.overrides.clear();
+    for (const [bone, q] of s.overrides) this.overrides.set(bone, q.clone());
+    this.hipsOffset = s.hipsOffset ? [s.hipsOffset[0], s.hipsOffset[1], s.hipsOffset[2]] : null;
+  }
+
+  /**
+   * Run a mutation as ONE undo command. If a command group is already open (a
+   * gizmo drag, or a panel focus-edit between beginCommandGroup/endCommandGroup),
+   * the mutation folds into it; otherwise it commits atomically.
+   */
+  private withUndo(mutate: () => void): void {
+    const opened = !this.history.hasPending;
+    if (opened) this.history.begin(this.snapshot());
+    mutate();
+    if (opened) this.history.commit(this.snapshot());
+  }
+
+  /** Open a multi-edit undo group (panel: input focus / gizmo: drag start). */
+  beginCommandGroup(): Record<string, unknown> {
+    if (this.active) this.history.begin(this.snapshot());
+    return { ok: true };
+  }
+
+  /** Close the open undo group, pushing at most one entry (panel: blur/Enter). */
+  endCommandGroup(): Record<string, unknown> {
+    const pushed = this.active ? this.history.commit(this.snapshot()) : false;
+    return { ok: true, pushed, ...this.history.depth };
+  }
+
+  /** Undo the last command, restoring the previous pose from the history. */
+  undo(): Record<string, unknown> {
+    const ctx = this.ensureActive();
+    if ('ok' in ctx) return ctx;
+    if (this.history.hasPending) this.history.commit(this.snapshot()); // flush any open group first
+    const s = this.history.undo(this.snapshot());
+    if (!s) return { ok: true, undone: false, ...this.history.depth };
+    this.restoreSnapshot(s);
+    this.recomputeDirty();
+    this.syncGizmoToSelection();
+    this.drawFrame(ctx.vrm);
+    return { ok: true, undone: true, ...this.history.depth };
+  }
+
+  /** Redo the last undone command. */
+  redo(): Record<string, unknown> {
+    const ctx = this.ensureActive();
+    if ('ok' in ctx) return ctx;
+    const s = this.history.redo(this.snapshot());
+    if (!s) return { ok: true, redone: false, ...this.history.depth };
+    this.restoreSnapshot(s);
+    this.recomputeDirty();
+    this.syncGizmoToSelection();
+    this.drawFrame(ctx.vrm);
+    return { ok: true, redone: true, ...this.history.depth };
+  }
+
+  // ---- 3D gizmo (Stage 3, 指示書 §6.4) ---------------------------------------
+
+  /** Show/hide the TransformControls gizmo on the selected bone. */
+  enableGizmo(on: boolean): Record<string, unknown> {
+    const ctx = this.ensureActive();
+    if ('ok' in ctx) return ctx;
+    this.gizmoEnabled = on;
+    if (on) this.ensureGizmo();
+    this.syncGizmoToSelection();
+    this.drawFrame(ctx.vrm);
+    return { ok: true, gizmo: on, mode: this.gizmoMode };
+  }
+
+  /** Switch the gizmo between rotate (any bone) and translate (hips only). */
+  setGizmoMode(mode: 'rotate' | 'translate'): Record<string, unknown> {
+    if (mode !== 'rotate' && mode !== 'translate') return fail(`gizmo mode must be "rotate" or "translate", got "${mode}".`);
+    if (mode === 'translate' && this.selectedBone !== 'hips') {
+      return fail('translate gizmo is only available on the hips bone (basePose root motion).');
+    }
+    this.gizmoMode = mode;
+    this.gizmo?.setMode(mode);
+    if (this.active) this.render();
+    return { ok: true, mode };
+  }
+
+  private ensureGizmo(): void {
+    if (this.gizmo) return;
+    const g = new TransformControls(this.h.camera, this.h.renderer.domElement);
+    g.setMode(this.gizmoMode);
+    g.setSpace('local');
+    g.setSize(0.85);
+    g.addEventListener('change', this.onGizmoChange);
+    g.addEventListener('objectChange', this.onGizmoObjectChange);
+    g.addEventListener('dragging-changed', this.onGizmoDragging);
+    const helper = g.getHelper() as unknown as THREE.Object3D;
+    helper.renderOrder = 1001;
+    this.h.scene.add(helper);
+    this.gizmo = g;
+    this.gizmoHelper = helper;
+  }
+
+  private disposeGizmo(): void {
+    this.gizmoEnabled = false;
+    this.gizmoDragging = false;
+    if (!this.gizmo) return;
+    this.gizmo.removeEventListener('change', this.onGizmoChange);
+    this.gizmo.removeEventListener('objectChange', this.onGizmoObjectChange);
+    this.gizmo.removeEventListener('dragging-changed', this.onGizmoDragging);
+    this.gizmo.detach();
+    if (this.gizmoHelper) this.h.scene.remove(this.gizmoHelper);
+    this.gizmo.dispose();
+    this.gizmo = null;
+    this.gizmoHelper = null;
+  }
+
+  /** Attach/detach the gizmo to the selected bone (translate falls back to rotate off-hips). */
+  private syncGizmoToSelection(): void {
+    if (!this.gizmo) return;
+    if (this.gizmoMode === 'translate' && this.selectedBone !== 'hips') {
+      this.gizmoMode = 'rotate';
+      this.gizmo.setMode('rotate');
+    }
+    const vrm = this.h.getVrm();
+    const node = this.gizmoEnabled && this.selectedBone && vrm?.humanoid
+      ? vrm.humanoid.getNormalizedBoneNode(this.selectedBone as never)
+      : null;
+    if (node) this.gizmo.attach(node); else this.gizmo.detach();
+  }
+
+  // Render on any gizmo change (frozen rAF ⇒ event-driven). During a drag the
+  // objectChange handler owns the redraw, so skip here to avoid clobbering the
+  // bone's freshly-set quaternion before objectChange reads it.
+  private onGizmoChange = (): void => {
+    if (this.gizmoDragging) return;
+    const vrm = this.h.getVrm();
+    if (this.active && vrm?.humanoid) this.drawFrame(vrm);
+  };
+
+  // Gizmo moved the bone: capture node.local -> override (offset = inv(ref)*local),
+  // or hips.position -> hipsOffset, then redraw so drawFrame rebuilds ref*offset.
+  private onGizmoObjectChange = (): void => {
+    if (!this.active || !this.selectedBone) return;
+    const vrm = this.h.getVrm();
+    const node = vrm?.humanoid?.getNormalizedBoneNode(this.selectedBone as never);
+    if (!node) return;
+    if (this.gizmoMode === 'translate' && this.selectedBone === 'hips') {
+      if (this.hipsRest) {
+        this.hipsOffset = [
+          node.position.x - this.hipsRest.x,
+          node.position.y - this.hipsRest.y,
+          node.position.z - this.hipsRest.z,
+        ];
+      }
+    } else {
+      const ref = this.refQuat(this.selectedBone);
+      if (!ref) return;
+      // offset = inv(ref) * local(node).
+      this._qOff.copy(this._qRef.copy(ref).invert()).multiply(node.quaternion).normalize();
+      if (Math.abs(this._qOff.dot(this._qIdentity)) > 1 - 1e-6) {
+        this.overrides.delete(this.selectedBone);
+      } else {
+        this.overrides.set(this.selectedBone, this._qOff.clone());
+      }
+    }
+    this.recomputeDirty();
+    if (vrm) this.drawFrame(vrm);
+  };
+
+  // Drag start/end: bound the edit as one undo command and suspend orbit so a
+  // gizmo drag never also spins the camera.
+  private onGizmoDragging = (event: { value: unknown }): void => {
+    const dragging = Boolean(event.value);
+    this.gizmoDragging = dragging;
+    const orbit = this.h.controls;
+    if (dragging) {
+      this.history.begin(this.snapshot());
+      if (orbit) orbit.enabled = false;
+    } else {
+      this.history.commit(this.snapshot());
+      if (orbit && this.orbitBorrowed) orbit.enabled = true;
+      const vrm = this.h.getVrm();
+      if (this.active && vrm?.humanoid) this.drawFrame(vrm); // settle the final frame
+    }
+  };
+
+  // ---- camera orbit (borrow the viewer's OrbitControls while authoring) ------
+
+  private borrowOrbit(): void {
+    const orbit = this.h.controls;
+    if (!orbit || this.orbitBorrowed) return;
+    this.orbitPrevEnabled = orbit.enabled;
+    this.orbitPrevDamping = orbit.enableDamping;
+    orbit.enableDamping = false; // event-driven redraw ⇒ no inertia tail to animate
+    orbit.enabled = true;        // let the master orbit to inspect the pose
+    this.orbitChangeHandler = () => {
+      const vrm = this.h.getVrm();
+      if (this.active && vrm?.humanoid) this.drawFrame(vrm);
+    };
+    orbit.addEventListener('change', this.orbitChangeHandler);
+    this.orbitBorrowed = true;
+  }
+
+  private releaseOrbit(): void {
+    const orbit = this.h.controls;
+    if (!orbit || !this.orbitBorrowed) return;
+    if (this.orbitChangeHandler) orbit.removeEventListener('change', this.orbitChangeHandler);
+    this.orbitChangeHandler = null;
+    orbit.enabled = this.orbitPrevEnabled;
+    orbit.enableDamping = this.orbitPrevDamping;
+    this.orbitBorrowed = false;
+  }
+
   // ---- override editing (minimal setters; full UI in Stages 2/3) -------------
 
   /**
@@ -362,12 +614,14 @@ export class PoseComposer {
     if (!e || e.length !== 3 || !e.every((n) => Number.isFinite(n))) return fail(`euler must be 3 finite numbers [x,y,z], got ${JSON.stringify(e)}.`);
     const k = opts?.degrees ? DEG2RAD : 1;
     const [x, y, z] = [e[0] * k, e[1] * k, e[2] * k];
-    if (x === 0 && y === 0 && z === 0) {
-      this.overrides.delete(bone);
-    } else {
-      this._qOff.setFromEuler(this._euler.set(x, y, z, 'XYZ'));
-      this.overrides.set(bone, this._qOff.clone().normalize());
-    }
+    this.withUndo(() => {
+      if (x === 0 && y === 0 && z === 0) {
+        this.overrides.delete(bone);
+      } else {
+        this._qOff.setFromEuler(this._euler.set(x, y, z, 'XYZ'));
+        this.overrides.set(bone, this._qOff.clone().normalize());
+      }
+    });
     return this.afterEdit(bone);
   }
 
@@ -388,7 +642,7 @@ export class PoseComposer {
     this._q.normalize();
     // offset = inv(ref) * local
     this._qOff.copy(this._qRef.copy(ref).invert()).multiply(this._q);
-    this.overrides.set(bone, this._qOff.clone().normalize());
+    this.withUndo(() => { this.overrides.set(bone, this._qOff.clone().normalize()); });
     return this.afterEdit(bone);
   }
 
@@ -398,7 +652,7 @@ export class PoseComposer {
     if ('ok' in ctx) return ctx;
     const bad = this.checkBone(bone);
     if (bad) return bad;
-    this.overrides.delete(bone);
+    this.withUndo(() => { this.overrides.delete(bone); });
     return this.afterEdit(bone);
   }
 
@@ -406,9 +660,8 @@ export class PoseComposer {
   resetAll(): Record<string, unknown> {
     const ctx = this.ensureActive();
     if ('ok' in ctx) return ctx;
-    this.overrides.clear();
-    this.hipsOffset = null;
-    this.dirty = false;
+    this.withUndo(() => { this.overrides.clear(); this.hipsOffset = null; });
+    this.recomputeDirty();
     this.drawFrame(ctx.vrm);
     return { ok: true, reset: 'all' };
   }
@@ -419,17 +672,24 @@ export class PoseComposer {
     if ('ok' in ctx) return ctx;
     if (this.mode !== 'basePose') return fail(`hips translation is only editable in basePose mode (current: ${this.mode}).`);
     if (offset && (offset.length !== 3 || !offset.every((n) => Number.isFinite(n)))) return fail(`hips offset must be 3 finite numbers or null, got ${JSON.stringify(offset)}.`);
-    this.hipsOffset = offset && (offset[0] !== 0 || offset[1] !== 0 || offset[2] !== 0) ? [offset[0], offset[1], offset[2]] : null;
-    this.dirty = true;
+    this.withUndo(() => {
+      this.hipsOffset = offset && (offset[0] !== 0 || offset[1] !== 0 || offset[2] !== 0) ? [offset[0], offset[1], offset[2]] : null;
+    });
+    this.recomputeDirty();
     this.drawFrame(ctx.vrm);
     return { ok: true, hipsOffset: this.hipsOffset };
   }
 
   private afterEdit(bone: string): Record<string, unknown> {
-    this.dirty = true;
+    this.recomputeDirty();
     const vrm = this.h.getVrm();
     if (vrm) this.drawFrame(vrm);
     return { ok: true, bone, ...this.boneReadout(bone) };
+  }
+
+  /** dirty = the authored pose differs from the reference (any override / hips offset). */
+  private recomputeDirty(): void {
+    this.dirty = this.overrides.size > 0 || this.hipsOffset !== null;
   }
 
   /** Current authored value of a bone as offset euler(deg) + quaternion. */
@@ -577,6 +837,11 @@ export class PoseComposer {
       options: this.options,
       overriddenBones: [...this.overrides.keys()],
       hipsOffset: this.hipsOffset,
+      gizmo: this.gizmoEnabled,
+      gizmoMode: this.gizmoMode,
+      canUndo: this.history.canUndo,
+      canRedo: this.history.canRedo,
+      history: this.history.depth,
       vrmLoaded: !!this.h.getVrm(),
     };
   }
@@ -597,11 +862,15 @@ export class PoseComposer {
       '  __poseComposer.setBoneOffsetEuler("rightUpperArm", [0,0,0.6])           // radians by default',
       '  __poseComposer.selectBone("head")                       // highlight in 3D + drive the panel inspector',
       '  __poseComposer.inspectBone("head")                      // read current offset (euler deg + quat)',
+      '  __poseComposer.enableGizmo(true)                        // 3D rotate handle on the selected bone (drag it)',
+      '  __poseComposer.setGizmoMode("translate")                // hips only (root motion); "rotate" for all',
+      '  __poseComposer.undo() / redo()                          // one gizmo drag / numeric edit = one step',
       '  __poseComposer.setLookAt(true) / setSpringBone(true) / setExpression("joy")  // re-enable a layer',
       '  await __poseComposer.capture({ file: "_pose/test.png" }) // PNG -> .probe_tmp/captures/, returns path',
       '  __poseComposer.resetBone("head") / resetAll()',
       '  __poseComposer.end()                                    // restore + hand back to the normal loop',
       '  __poseComposer.status() / dumpPose()',
+      'Drag the gizmo to rotate; orbit the camera with the mouse (suspended mid-drag). Ctrl+Z / Ctrl+Shift+Z undo/redo.',
       'Save to .pose.json and Motion keyframe insertion arrive in Stages 4/5.',
     ].join('\n');
   }

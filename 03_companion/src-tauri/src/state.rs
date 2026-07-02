@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Instant,
 };
@@ -13,6 +13,7 @@ pub struct AppState {
     pub state: WallpaperState,
     pub secrets: Secrets,
     pub data_dir: PathBuf,
+    pub api_token: String,
     pub http: reqwest::Client,
     /// Cached Spotify access token (token, expires_at). Not persisted.
     pub spotify_token: Option<(String, Instant)>,
@@ -48,6 +49,7 @@ impl AppState {
 
         let mut state = WallpaperState::default();
         let mut secrets = Secrets::default();
+        let api_token = load_or_create_api_token(&data_dir);
 
         let path = data_dir.join("companion-data.json");
         if let Ok(text) = std::fs::read_to_string(&path) {
@@ -79,6 +81,7 @@ impl AppState {
             state,
             secrets,
             data_dir,
+            api_token,
             http: reqwest::Client::builder()
                 .user_agent("tohoku-companion/0.1")
                 .build()
@@ -131,6 +134,29 @@ impl AppState {
     }
 }
 
+fn load_or_create_api_token(data_dir: &Path) -> String {
+    let path = data_dir.join("companion-api-token.txt");
+    if let Ok(text) = std::fs::read_to_string(&path) {
+        let token = text.trim();
+        if !token.is_empty() {
+            return token.to_string();
+        }
+    }
+
+    let token = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
+    let tmp_path = data_dir.join("companion-api-token.txt.tmp");
+    if std::fs::write(&tmp_path, &token).is_ok() {
+        let _ = std::fs::rename(&tmp_path, &path);
+    } else {
+        let _ = std::fs::write(&path, &token);
+    }
+    token
+}
+
 fn default_bookmarks() -> Vec<BookmarkItem> {
     let mk = |i: i32, title: &str, url: &str, cat: &str| BookmarkItem {
         id: uuid::Uuid::new_v4().to_string(),
@@ -157,7 +183,10 @@ mod tests {
 
     fn temp_dir(label: &str) -> PathBuf {
         let mut dir = std::env::temp_dir();
-        dir.push(format!("tohoku-companion-persist-test-{label}-{}", uuid::Uuid::new_v4()));
+        dir.push(format!(
+            "tohoku-companion-persist-test-{label}-{}",
+            uuid::Uuid::new_v4()
+        ));
         dir
     }
 
@@ -167,9 +196,18 @@ mod tests {
         let app = AppState::load_from(dir.clone());
         app.persist();
 
-        assert!(dir.join("companion-data.json").exists(), "main file written");
-        assert!(!dir.join("companion-data.json.bak").exists(), "no prior content to back up");
-        assert!(!dir.join("companion-data.json.tmp").exists(), "tmp file cleaned up (renamed away)");
+        assert!(
+            dir.join("companion-data.json").exists(),
+            "main file written"
+        );
+        assert!(
+            !dir.join("companion-data.json.bak").exists(),
+            "no prior content to back up"
+        );
+        assert!(
+            !dir.join("companion-data.json.tmp").exists(),
+            "tmp file cleaned up (renamed away)"
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -195,10 +233,22 @@ mod tests {
         let second_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
         let bak_text = std::fs::read_to_string(dir.join("companion-data.json.bak")).unwrap();
 
-        assert!(second_text.contains("second save"), "main file has the newest content");
-        assert!(bak_text.contains("first save"), ".bak has the previous content");
-        assert_eq!(bak_text, first_text, ".bak is byte-identical to what was on disk before this save");
-        assert!(!dir.join("companion-data.json.tmp").exists(), "no stray tmp file after a successful save");
+        assert!(
+            second_text.contains("second save"),
+            "main file has the newest content"
+        );
+        assert!(
+            bak_text.contains("first save"),
+            ".bak has the previous content"
+        );
+        assert_eq!(
+            bak_text, first_text,
+            ".bak is byte-identical to what was on disk before this save"
+        );
+        assert!(
+            !dir.join("companion-data.json.tmp").exists(),
+            "no stray tmp file after a successful save"
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -219,6 +269,19 @@ mod tests {
         let reloaded = AppState::load_from(dir.clone());
         assert_eq!(reloaded.state.memos.len(), 1);
         assert_eq!(reloaded.state.memos[0].text, "覚えておく");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn api_token_is_generated_once_and_reused() {
+        let dir = temp_dir("token");
+        let app = AppState::load_from(dir.clone());
+        assert_eq!(app.api_token.len(), 64);
+        assert!(dir.join("companion-api-token.txt").exists());
+
+        let reloaded = AppState::load_from(dir.clone());
+        assert_eq!(reloaded.api_token, app.api_token);
 
         let _ = std::fs::remove_dir_all(dir);
     }

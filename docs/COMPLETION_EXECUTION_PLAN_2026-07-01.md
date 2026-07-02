@@ -37,11 +37,11 @@
 
 ## 2. 完成までの残りステージ
 
-Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は2026-07-01に完了した（詳細は[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)）。Stage F（Companion運用品質）は優先度1-4（single instance / port競合エラー表示 / tray完全終了 / atomic save+backup）まで同日中に追加着手・完了した。残りは以下の順で実装する。
+Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は2026-07-01に完了した（詳細は[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)）。Stage F（Companion運用品質）は優先度1-6（single instance / port競合エラー表示 / tray完全終了 / atomic save+backup / localhost固定の試験固定化 / mutating API token）まで実装済み。残りは以下の順で実装する。
 
 ### Stage E: Wallpaper Engine実機package（本書§3）
 
-### Stage F: Companion運用品質（本書§4）— 優先度1-4は完了、5-10が残り
+### Stage F: Companion運用品質（本書§4）— 優先度1-6は完了、7-10が残り
 
 ### Stage G: 実背景アート or 据え置き判断 + 配布対象確定
 
@@ -64,7 +64,7 @@ Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は
 
 ## 4. Companion運用品質の計画
 
-各項目: 現状 / リスク / 対象ファイル / 実装方式 / 受け入れ条件 / 後方互換性 / migration要否。優先度1-4は2026-07-01実装済み（[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)参照）。
+各項目: 現状 / リスク / 対象ファイル / 実装方式 / 受け入れ条件 / 後方互換性 / migration要否。優先度1-6は実装済み（[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)参照）。
 
 ### 4.1 single instance（優先度1）— ✅ 完了(2026-07-01)
 
@@ -102,23 +102,23 @@ Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は
 - **受け入れ条件**: 保存直後に`.bak`が前回内容と一致すること、書き込み中に強制終了しても`.tmp`が残るだけで本体は無傷であることをテストで確認。→ **満たした**。単体テスト3件（初回保存で`.bak`が無いこと／2回目保存で`.bak`が直前の内容とbyte-identicalであること／save→reload往復）に加え、実際にコンパイル済みバイナリを起動してbackground pollerの自動保存で実際に`.bak`が生成されることを実データで確認。
 - **後方互換性**: 既存の`companion-data.json`はそのまま読み込み可能（フォーマット不変）。**migration不要**。
 
-### 4.5 localhost限定の維持確認（優先度5）
+### 4.5 localhost限定の維持確認（優先度5）— ✅ 完了(2026-07-02)
 
 - **現状**: `SocketAddr::from(([127, 0, 0, 1], API_PORT))`で既にloopback限定（06-23確認済み、変化なし）。
 - **リスク**: 現状で問題なし。将来設定でbindアドレスを変更可能にする場合のみ再検証が必要。
 - **対象ファイル**: `03_companion/src-tauri/src/api.rs`。
-- **実装方式**: 変更不要。回帰しないよう試験に固定化する（`127.0.0.1`以外へのbindを許す設定UIを作らない）。
-- **受け入れ条件**: 該当なし（現状維持）。
+- **実装方式**: `api_addr()`を追加し、`serve()`が必ず同じ関数を使うようにした。回帰しないよう、integration testで`ip().is_loopback()`とport 40313を固定化する（`127.0.0.1`以外へのbindを許す設定UIを作らない）。
+- **受け入れ条件**: `live_api_address_is_loopback_only`がPASSすること。→ **満たした**。
 - **後方互換性**: 該当なし。
 
-### 4.6 API tokenまたはOrigin制限（優先度6）
+### 4.6 API tokenまたはOrigin制限（優先度6）— ✅ 完了(2026-07-02)
 
 - **現状**: 認証なし。CORSは`http://localhost*` / `http://127.0.0.1*` / `null` originに対し全HTTPメソッドを許可（06-23で"RISK"評価）。
 - **リスク**: 同一マシン上の別の悪意あるローカルプロセス/ブラウザタブから状態を書き換えられる（loopback限定なのでLAN外部からは無理だが、同一PC内の他プロセスは無防備）。
-- **対象ファイル**: `03_companion/src-tauri/src/api.rs`（CORS設定・route定義）。
-- **実装方式**: 段階的に導入する。まず「GETは現状のCORSのまま許可、POST/PUT/PATCH/DELETEは`X-Companion-Token`ヘッダ必須」に分離する。tokenは起動時に生成し、壁紙/overlay/kiritanPosterへは同一マシン上のファイル（`%APPDATA%\tohoku-companion\.token`のような）経由で配布する。
-- **受け入れ条件**: tokenなしのPOSTが401になること、正しいtoken付きは通ること。既存のGET系ポーリング（overlay 5s poll）が無停止で動き続けること。
-- **後方互換性**: **破壊的変更**。壁紙側`kiritanPoster.ts`とoverlay側`companionClient.ts`の両方にtoken読み込みを追加する必要がある。migration要（両者を同時にデプロイしないと壁紙のPOSTが401で失敗し始める）。
+- **対象ファイル**: `03_companion/src-tauri/src/api.rs` / `state.rs`、`03_companion/src/api.ts`、`01_wallpaper/src/lib/motion/director/kiritanPoster.ts`、`02_ui-overlay/src/services/companionClient.ts`。
+- **実装方式**: 「GET/HEAD/OPTIONSは現状のCORSのまま許可、POST/PUT/PATCH/DELETEは`X-Companion-Token`ヘッダ必須」に分離した。tokenは初回起動時に`%APPDATA%\tohoku-companion\companion-api-token.txt`へ自動生成し、以後再利用する。Web/Tauri/Wallpaper Engineのorigin差でファイル直読みが壊れやすいため、in-repoのWebクライアントは`GET /api/auth/token`でtokenを取得・キャッシュしてmutating requestへヘッダ付与する。CORS origin判定は`localhost.evil`系を通さない明示関数にし、Tauri v2の`tauri.localhost`系originも許可する。
+- **受け入れ条件**: tokenなしのPOSTが401になること、誤tokenが401になること、正しいtoken付きは通ること。既存のGET系ポーリング（overlay 5s poll）が無停止で動き続けること。→ **満たした**（`mutating_routes_require_companion_token`、`allowed_origin_accepts_only_local_webviews`、既存CRUD/kiritan統合テスト更新、01/02/03 frontend build PASS）。
+- **後方互換性**: APIサーバー単体では破壊的変更だが、repo内の3クライアント（Companion UI / overlay / wallpaper kiritanPoster）は同時更新済み。外部スクリプトがPOST/PUT/PATCH/DELETEする場合は`GET /api/auth/token`→`X-Companion-Token`付与が必要。token fileは自動生成のためデータmigration不要。
 
 ### 4.7 secretsを通常JSONから分離（優先度7）
 

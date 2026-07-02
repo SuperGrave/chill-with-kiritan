@@ -2,12 +2,46 @@
 // wallpaper overlay both talk to the same backend (single source of truth).
 
 export const API_BASE = "http://127.0.0.1:40313/api";
+const TOKEN_HEADER = "X-Companion-Token";
+let tokenPromise: Promise<string | null> | null = null;
+
+async function companionToken(): Promise<string | null> {
+  if (tokenPromise) return tokenPromise;
+  tokenPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/token`, { cache: "no-store" });
+      if (!res.ok) return null;
+      const body = await res.json();
+      return typeof body.token === "string" && body.token.length > 0 ? body.token : null;
+    } catch {
+      return null;
+    }
+  })();
+  return tokenPromise;
+}
+
+function isMutating(method: string): boolean {
+  return !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  const method = (init?.method ?? "GET").toUpperCase();
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  if (isMutating(method)) {
+    const token = await companionToken();
+    if (token) headers.set(TOKEN_HEADER, token);
+  }
+
+  let res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  if (res.status === 401 && isMutating(method)) {
+    tokenPromise = null;
+    const token = await companionToken();
+    if (token) {
+      headers.set(TOKEN_HEADER, token);
+      res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+    }
+  }
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }

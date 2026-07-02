@@ -1,7 +1,9 @@
 use axum::{
+    body::Body,
     extract::{Path, State},
-    http::{HeaderValue, Method},
-    response::Json,
+    http::{HeaderValue, Method, Request, StatusCode},
+    middleware::{from_fn_with_state, Next},
+    response::{IntoResponse, Json, Response},
     routing::{get, patch, post, put},
     Router,
 };
@@ -14,24 +16,78 @@ use crate::services;
 use crate::state::Shared;
 
 pub const API_PORT: u16 = 40313;
+pub const API_TOKEN_HEADER: &str = "X-Companion-Token";
+
+pub fn api_addr() -> SocketAddr {
+    SocketAddr::from(([127, 0, 0, 1], API_PORT))
+}
+
+fn is_allowed_origin(origin: &str) -> bool {
+    if origin == "null" || origin == "tauri://localhost" {
+        return true; // Wallpaper Engine file:// and Tauri custom protocol.
+    }
+
+    for base in [
+        "http://localhost",
+        "https://localhost",
+        "http://127.0.0.1",
+        "https://127.0.0.1",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+    ] {
+        if let Some(rest) = origin.strip_prefix(base) {
+            return rest.is_empty() || rest.starts_with(':');
+        }
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_origin;
+
+    #[test]
+    fn allowed_origin_accepts_only_local_webviews() {
+        assert!(is_allowed_origin("null"));
+        assert!(is_allowed_origin("tauri://localhost"));
+        assert!(is_allowed_origin("http://localhost"));
+        assert!(is_allowed_origin("http://localhost:5173"));
+        assert!(is_allowed_origin("https://tauri.localhost"));
+        assert!(is_allowed_origin("https://tauri.localhost:443"));
+        assert!(is_allowed_origin("http://127.0.0.1:40313"));
+
+        assert!(!is_allowed_origin("https://example.com"));
+        assert!(!is_allowed_origin("http://localhost.evil.test"));
+        assert!(!is_allowed_origin("http://127.0.0.10:40313"));
+    }
+}
 
 /// Builds the full axum router (shared by the live server and integration tests).
 pub fn build_router(shared: Shared) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
             let s = origin.to_str().unwrap_or("");
-            s.starts_with("http://localhost")
-                || s.starts_with("http://127.0.0.1")
-                || s == "null" // Wallpaper Engine WebView uses null origin for file://
+            is_allowed_origin(s)
         }))
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
         .allow_headers(tower_http::cors::Any);
 
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/auth/token", get(auth_token))
         .route("/api/state", get(get_state))
         // ── Kiritan runtime state (Stage C) ──────────────────────────
-        .route("/api/kiritan/state", get(get_kiritan_state).post(post_kiritan_state))
+        .route(
+            "/api/kiritan/state",
+            get(get_kiritan_state).post(post_kiritan_state),
+        )
         // ── Display settings + presets ───────────────────────────────
         .route("/api/ui", get(get_ui).put(put_ui))
         .route("/api/presets", get(list_presets).post(create_preset))
@@ -49,7 +105,10 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/memos/:id", patch(update_memo).delete(delete_memo))
         // ── Bookmark ─────────────────────────────────────────────────
         .route("/api/bookmarks", get(list_bookmarks).post(create_bookmark))
-        .route("/api/bookmarks/:id", patch(update_bookmark).delete(delete_bookmark))
+        .route(
+            "/api/bookmarks/:id",
+            patch(update_bookmark).delete(delete_bookmark),
+        )
         // ── Chat ─────────────────────────────────────────────────────
         .route("/api/chat/send", post(chat_send))
         .route("/api/chat/history", get(chat_history))
@@ -61,6 +120,7 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/weather/refresh", post(weather_refresh))
         .route("/api/spotify/now-playing", get(spotify_now_playing))
         .route("/api/spotify/refresh", post(spotify_refresh))
+        .layer(from_fn_with_state(shared.clone(), require_mutation_token))
         .layer(cors)
         .with_state(shared)
 }
@@ -72,7 +132,7 @@ pub fn build_router(shared: Shared) -> Router {
 /// visible cause (see docs/COMPLETION_EXECUTION_PLAN_2026-07-01.md §4.2).
 pub async fn serve(shared: Shared) -> Result<(), String> {
     let app = build_router(shared);
-    let addr = SocketAddr::from(([127, 0, 0, 1], API_PORT));
+    let addr = api_addr();
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(|e| format!("Failed to bind {addr} — {e}"))?;
@@ -106,10 +166,46 @@ fn ok() -> Json<Value> {
     Json(json!({ "ok": true }))
 }
 
+async fn require_mutation_token(
+    State(shared): State<Shared>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    if matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
+        return next.run(req).await;
+    }
+
+    let expected = shared.lock().unwrap().api_token.clone();
+    let provided = req
+        .headers()
+        .get(API_TOKEN_HEADER)
+        .and_then(|h| h.to_str().ok());
+    if provided == Some(expected.as_str()) {
+        return next.run(req).await;
+    }
+
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({
+            "ok": false,
+            "error": "missing or invalid companion token",
+        })),
+    )
+        .into_response()
+}
+
 // ─── Core ─────────────────────────────────────────────────────────────────────
 
 async fn health() -> Json<Value> {
     Json(json!({ "ok": true, "app": "Tohoku Companion", "version": env!("CARGO_PKG_VERSION") }))
+}
+
+async fn auth_token(State(s): State<Shared>) -> Json<Value> {
+    let token = s.lock().unwrap().api_token.clone();
+    Json(json!({
+        "token": token,
+        "header": API_TOKEN_HEADER,
+    }))
 }
 
 async fn get_state(State(s): State<Shared>) -> Json<WallpaperState> {
@@ -189,7 +285,10 @@ async fn create_preset(State(s): State<Shared>, Json(body): Json<Value>) -> Json
         .unwrap_or("Untitled")
         .to_string();
     // snapshot current ui unless explicit layout/settings provided
-    let layout = body.get("layout").cloned().unwrap_or_else(|| g.state.ui.layout.clone());
+    let layout = body
+        .get("layout")
+        .cloned()
+        .unwrap_or_else(|| g.state.ui.layout.clone());
     let settings = body
         .get("settings")
         .cloned()
@@ -297,8 +396,14 @@ async fn put_secrets(State(s): State<Shared>, Json(body): Json<Value>) -> Json<V
     };
     set(&mut g.secrets.openai_key, body.get("openaiKey"));
     set(&mut g.secrets.google_key, body.get("googleKey"));
-    set(&mut g.secrets.spotify_client_secret, body.get("spotifyClientSecret"));
-    set(&mut g.secrets.spotify_refresh_token, body.get("spotifyRefreshToken"));
+    set(
+        &mut g.secrets.spotify_client_secret,
+        body.get("spotifyClientSecret"),
+    );
+    set(
+        &mut g.secrets.spotify_refresh_token,
+        body.get("spotifyRefreshToken"),
+    );
     g.spotify_token = None; // force re-auth on next poll
     touch(&mut g);
     ok()
@@ -314,9 +419,16 @@ async fn create_todo(State(s): State<Shared>, Json(body): Json<Value>) -> Json<T
     let mut g = s.lock().unwrap();
     let item = TodoItem {
         id: uuid::Uuid::new_v4().to_string(),
-        title: body.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        title: body
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         done: false,
-        priority: body.get("priority").and_then(|v| v.as_str()).map(String::from),
+        priority: body
+            .get("priority")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         due_at: body.get("dueAt").and_then(|v| v.as_str()).map(String::from),
         created_at: now_iso(),
         updated_at: now_iso(),
@@ -366,8 +478,15 @@ async fn create_memo(State(s): State<Shared>, Json(body): Json<Value>) -> Json<M
     let mut g = s.lock().unwrap();
     let item = MemoItem {
         id: uuid::Uuid::new_v4().to_string(),
-        text: body.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        pinned: body.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false),
+        text: body
+            .get("text")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        pinned: body
+            .get("pinned")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         created_at: now_iso(),
         updated_at: now_iso(),
     };
@@ -414,10 +533,21 @@ async fn create_bookmark(State(s): State<Shared>, Json(body): Json<Value>) -> Js
     let order = g.state.bookmarks.len() as i32;
     let item = BookmarkItem {
         id: uuid::Uuid::new_v4().to_string(),
-        title: body.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        url: body.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        title: body
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        url: body
+            .get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         icon: None,
-        category: body.get("category").and_then(|v| v.as_str()).map(String::from),
+        category: body
+            .get("category")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         order: Some(order),
         created_at: now_iso(),
         updated_at: now_iso(),
@@ -473,7 +603,12 @@ async fn chat_clear(State(s): State<Shared>) -> Json<Value> {
 }
 
 async fn chat_send(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
-    let text = body.get("text").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let text = body
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if text.is_empty() {
         return Json(json!({ "ok": false, "error": "empty" }));
     }
@@ -636,11 +771,13 @@ async fn spotify_refresh(State(s): State<Shared>) -> Json<Value> {
     let token = if let Some(t) = cached {
         t
     } else {
-        match services::spotify_refresh_token(&http, &client_id, &client_secret, &refresh_token).await
+        match services::spotify_refresh_token(&http, &client_id, &client_secret, &refresh_token)
+            .await
         {
             Ok((t, expires)) => {
                 let mut g = s.lock().unwrap();
-                let exp = Instant::now() + std::time::Duration::from_secs(expires.saturating_sub(60));
+                let exp =
+                    Instant::now() + std::time::Duration::from_secs(expires.saturating_sub(60));
                 g.spotify_token = Some((t.clone(), exp));
                 t
             }

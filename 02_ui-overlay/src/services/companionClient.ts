@@ -6,6 +6,8 @@
 import type { NewsItem, AiState, SpotifyState, MemoItem } from '../types/panels';
 
 const API_BASE = 'http://127.0.0.1:40313/api';
+const TOKEN_HEADER = 'X-Companion-Token';
+let tokenPromise: Promise<string | null> | null = null;
 
 export type CompanionState = {
   news: NewsItem[];
@@ -34,6 +36,19 @@ async function getJson<T>(path: string, timeoutMs = 2500): Promise<T> {
   }
 }
 
+async function companionToken(): Promise<string | null> {
+  if (tokenPromise) return tokenPromise;
+  tokenPromise = (async () => {
+    try {
+      const token = await getJson<{ token?: unknown }>('/auth/token', 2500);
+      return typeof token.token === 'string' && token.token.length > 0 ? token.token : null;
+    } catch {
+      return null;
+    }
+  })();
+  return tokenPromise;
+}
+
 export async function fetchCompanionState(): Promise<CompanionState | null> {
   try {
     const s = await getJson<any>('/state');
@@ -60,11 +75,16 @@ export async function fetchCompanionUi(): Promise<CompanionUi | null> {
 /** Persist the overlay's current layout+settings to the Companion (best effort). */
 export async function pushCompanionUi(layout: any, settings: any): Promise<boolean> {
   try {
+    const token = await companionToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers[TOKEN_HEADER] = token;
+
     const res = await fetch(`${API_BASE}/ui`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ layout, settings }),
     });
+    if (res.status === 401) tokenPromise = null;
     return res.ok;
   } catch {
     return false;

@@ -36,7 +36,43 @@ export interface KiritanPosterConfig {
 export type PostReason = 'transition' | 'heartbeat' | 'initial';
 
 const DEFAULT_URL = 'http://127.0.0.1:40313/api/kiritan/state';
+const TOKEN_HEADER = 'X-Companion-Token';
 const DEFAULT_HEARTBEAT_MS = 30_000;
+const tokenCache = new Map<string, Promise<string | null>>();
+
+function tokenUrlFor(postUrl: string): string {
+  try {
+    return new URL('/api/auth/token', postUrl).toString();
+  } catch {
+    return 'http://127.0.0.1:40313/api/auth/token';
+  }
+}
+
+async function getCompanionToken(tokenUrl: string, timeoutMs: number): Promise<string | null> {
+  const cached = tokenCache.get(tokenUrl);
+  if (cached) return cached;
+
+  const p = (async () => {
+    try {
+      const signal =
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(timeoutMs)
+          : undefined;
+      const res = await fetch(tokenUrl, {
+        method: 'GET',
+        cache: 'no-store',
+        ...(signal ? { signal } : {}),
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as { token?: unknown };
+      return typeof body.token === 'string' && body.token.length > 0 ? body.token : null;
+    } catch {
+      return null;
+    }
+  })();
+  tokenCache.set(tokenUrl, p);
+  return p;
+}
 
 /**
  * Default transport: POST JSON with a hard timeout so a hung receiver can never
@@ -49,14 +85,19 @@ export function makeFetchTransport(timeoutMs = 2000): KiritanPosterTransport {
       typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
         ? AbortSignal.timeout(timeoutMs)
         : undefined;
-    await fetch(url, {
+    const token = await getCompanionToken(tokenUrlFor(url), timeoutMs);
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (token) headers[TOKEN_HEADER] = token;
+
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
       // keepalive lets the final heartbeat survive a page unload.
       keepalive: true,
       ...(signal ? { signal } : {}),
     });
+    if (!res.ok) throw new Error(`kiritan state POST failed: ${res.status}`);
   };
 }
 

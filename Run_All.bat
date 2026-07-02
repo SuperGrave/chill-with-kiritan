@@ -1,5 +1,17 @@
 @echo off
-echo Starting Wallpaper (01) + UI Overlay (02) + Companion (03) in separate windows...
-start "01_wallpaper Dev Server" cmd /k "cd /d %~dp0\01_wallpaper && npm run dev"
-start "02_ui-overlay Dev Server" cmd /k "cd /d %~dp0\02_ui-overlay && npm run dev"
-start "03_companion (Tauri)" cmd /k "cd /d %~dp0\03_companion && npm run tauri dev"
+title Tohoku Wallpaper - Integrated Preview
+echo Starting the integrated wallpaper preview.
+echo.
+echo This opens:
+echo   01_wallpaper  = VRM + room + embedded 02_ui-overlay
+echo   03_companion  = local API / settings / live data
+echo.
+echo Open the wallpaper URL shown by 01_wallpaper:
+echo   http://localhost:5173/
+echo.
+echo Important:
+echo   Run_UI.bat is only the standalone overlay preview.
+echo   It is not the integrated wallpaper view.
+echo.
+start "03_companion (Tauri + API 40313)" cmd /k ""%~dp0Run_Companion.bat""
+start "01_wallpaper Integrated Preview (5173)" cmd /k ""%~dp0Run_Wallpaper.bat""

@@ -1,17 +1,41 @@
 # Chill with Kiritan
 
 東北きりたんの3Dモデルが、おしゃれなUIと一緒にデスクトップ背景として動く壁紙プロジェクト。
-開発は **3つの方向**に分かれており、それぞれ独立したフォルダ（`01_` / `02_` / `03_`）で進める。
+開発は **3つの方向**に分かれているが、最新版の壁紙プレビューは
+`01_wallpaper` の中に `02_ui-overlay` を埋め込んだ統合画面で見る。
+
+## 最新版を見る
+
+通常確認は `Run_All.bat`。
+
+これで以下の2つだけを起動する。
+
+- `03_companion`: Tauri Companion + localhost API
+- `01_wallpaper`: VRM / 部屋 / モーション / **埋め込み済みUI overlay**
+
+壁紙は `01_wallpaper` のVite URLをクエリなしで開く。
+
+```text
+http://localhost:5173/
+```
+
+この画面が「完成版に一番近い統合プレビュー」。画面上の `COMPANION: LIVE / OFFLINE`
+でCompanion接続を確認できる。
+
+`Run_UI.bat` は `02_ui-overlay` 単体の開発プレビュー専用で、VRMモデルとは重ならない。
+統合済みの壁紙確認には使わない。
 
 ## 3つの開発方向
 
 | # | フォルダ | 役割 | 種別 | 起動 |
 |---|----------|------|------|------|
-| ① | `01_wallpaper/`  | 壁紙本体。VRMキャラ表示＋モーション＋背景/小道具シーン | React + Vite + TS | `Run_Wallpaper.bat` |
-| ② | `02_ui-overlay/` | 壁紙に重ねるUI（時計・天気・右ドック・各パネル）。**見た目のみ** | React + Vite + TS | `Run_UI.bat` |
+| ① | `01_wallpaper/`  | 壁紙本体。VRMキャラ表示＋モーション＋背景/小道具シーン＋統合済みUI overlay | React + Vite + TS | `Run_Wallpaper.bat`（`5173`） |
+| ② | `02_ui-overlay/` | 壁紙に重ねるUIの単体開発面。**統合版では①に埋め込まれる** | React + Vite + TS | `Run_UI.bat`（`5174`、単体確認用） |
 | ③ | `03_companion/`  | 操作用の小型ウィンドウ。UIへ情報送信・キーボード入力・Spotify連携など | Tauri | `Run_Companion.bat` |
 
-①〜③をまとめて起動: `Run_All.bat`（別ウィンドウで3つ立ち上げ。③はTauriのため初回はRustコンパイルあり）
+統合確認: `Run_All.bat`（①+③だけを起動）。
+
+全開発面をまとめて起動: `Run_Dev_All.bat`（①+②+③を別ウィンドウで起動。②は単体確認用）。
 
 ## フォルダ構成
 

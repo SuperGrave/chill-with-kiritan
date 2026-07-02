@@ -6,6 +6,8 @@
 
 **完成ルート（最新）**: [COMPLETION_AUDIT_2026-07-01.md](COMPLETION_AUDIT_2026-07-01.md)（現状監査・完成イメージ）→ [COMPLETION_EXECUTION_PLAN_2026-07-01.md](COMPLETION_EXECUTION_PLAN_2026-07-01.md)（残り実装計画）→ [COMPLETION_PROGRESS_2026-07-01.md](COMPLETION_PROGRESS_2026-07-01.md)（実施記録）。前身は [SHORT_COMPLETION_AUDIT_2026-06-23.md](SHORT_COMPLETION_AUDIT_2026-06-23.md) / [RELEASE_0.9_PRODUCTION_SHELL_REPORT_2026-06-23.md](RELEASE_0.9_PRODUCTION_SHELL_REPORT_2026-06-23.md)。
 
+**最新版の見方**: ルートの `Run_All.bat` で `03_companion` と `01_wallpaper` を起動し、`http://localhost:5173/` をクエリなしで開く。`02_ui-overlay` は統合版では `01_wallpaper` に埋め込まれており、`Run_UI.bat` は単体プレビュー専用。
+
 | ファイル | 内容 |
 |----------|------|
 | [STATUS_REPORT_2026-06-10.md](STATUS_REPORT_2026-06-10.md) | プロジェクト全体の現状スナップショット |

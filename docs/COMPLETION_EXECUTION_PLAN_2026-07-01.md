@@ -37,11 +37,11 @@
 
 ## 2. 完成までの残りステージ
 
-Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は2026-07-01に完了した（詳細は[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)）。Stage F（Companion運用品質）は優先度1-6（single instance / port競合エラー表示 / tray完全終了 / atomic save+backup / localhost固定の試験固定化 / mutating API token）まで実装済み。残りは以下の順で実装する。
+Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は2026-07-01に完了した（詳細は[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)）。Stage F（Companion運用品質）は優先度1-7（single instance / port競合エラー表示 / tray完全終了 / atomic save+backup / localhost固定の試験固定化 / mutating API token / secrets分離）まで実装済み。残りは以下の順で実装する。
 
 ### Stage E: Wallpaper Engine実機package（本書§3）
 
-### Stage F: Companion運用品質（本書§4）— 優先度1-6は完了、7-10が残り
+### Stage F: Companion運用品質（本書§4）— 優先度1-7は完了、8-10が残り
 
 ### Stage G: 実背景アート or 据え置き判断 + 配布対象確定
 
@@ -64,7 +64,7 @@ Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は
 
 ## 4. Companion運用品質の計画
 
-各項目: 現状 / リスク / 対象ファイル / 実装方式 / 受け入れ条件 / 後方互換性 / migration要否。優先度1-6は実装済み（[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)参照）。
+各項目: 現状 / リスク / 対象ファイル / 実装方式 / 受け入れ条件 / 後方互換性 / migration要否。優先度1-7は実装済み（[進捗記録](COMPLETION_PROGRESS_2026-07-01.md)参照）。
 
 ### 4.1 single instance（優先度1）— ✅ 完了(2026-07-01)
 
@@ -120,14 +120,14 @@ Stage A（作業ツリー整理）〜Stage D（背景・昼夜最小基盤）は
 - **受け入れ条件**: tokenなしのPOSTが401になること、誤tokenが401になること、正しいtoken付きは通ること。既存のGET系ポーリング（overlay 5s poll）が無停止で動き続けること。→ **満たした**（`mutating_routes_require_companion_token`、`allowed_origin_accepts_only_local_webviews`、既存CRUD/kiritan統合テスト更新、01/02/03 frontend build PASS）。
 - **後方互換性**: APIサーバー単体では破壊的変更だが、repo内の3クライアント（Companion UI / overlay / wallpaper kiritanPoster）は同時更新済み。外部スクリプトがPOST/PUT/PATCH/DELETEする場合は`GET /api/auth/token`→`X-Companion-Token`付与が必要。token fileは自動生成のためデータmigration不要。
 
-### 4.7 secretsを通常JSONから分離（優先度7）
+### 4.7 secretsを通常JSONから分離（優先度7）— ✅ 完了(2026-07-02)
 
 - **現状**: `secrets.openai_key`等は平文で`companion-data.json`に同梱保存（`state.rs::Persist`構造体に含まれる）。`/api/state`からは除外されている（06-23確認済み、これは正しい）。
 - **リスク**: ディスク上のファイルを見れば誰でもAPIキーを読める。
 - **対象ファイル**: `03_companion/src-tauri/src/state.rs`。
-- **実装方式**: 短期的にはファイルを分離するだけでも効果がある（`secrets.json`を`companion-data.json`と別ファイルにし、パーミッションを絞る）。中期的にはOS credential store（Windows Credential Manager、`keyring`クレート）へ移行する。
-- **受け入れ条件**: secrets.jsonが分離され、既存のcompanion-data.json内のsecretsフィールドから自動移行されること。
-- **後方互換性**: 初回起動時に旧`companion-data.json`内の`secrets`を新ファイルへ一度だけmigrateするコードが必要。**migration要**。
+- **実装方式**: `Persist.secrets`は後方互換のdeserialize専用にし、新規保存では`companion-data.json`へ出さない。実体は`secrets.json`へatomic write + `.bak`で保存する。旧`companion-data.json`または`companion-data.json.bak`に残っている`secrets`は起動時に`secrets.json`へ移行し、旧ファイルからtop-level `secrets`を除去する。通常データ側の`.bak`作成時もlegacy secretsをsanitizeしてから退避する。
+- **受け入れ条件**: secrets.jsonが分離され、既存のcompanion-data.json内のsecretsフィールドから自動移行されること。→ **満たした**（`secrets_are_persisted_to_a_separate_file_only`、`legacy_embedded_secrets_are_migrated_and_sanitized`）。
+- **後方互換性**: 旧`companion-data.json`内`secrets`から自動migration済み。OS credential store化は未実装で、短期分離のみ完了。
 
 ### 4.8 connection status表示（優先度8）
 

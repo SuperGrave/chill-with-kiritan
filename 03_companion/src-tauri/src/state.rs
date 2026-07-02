@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -6,6 +7,9 @@ use std::{
 };
 
 use crate::models::*;
+
+const DATA_FILE: &str = "companion-data.json";
+const SECRETS_FILE: &str = "secrets.json";
 
 /// Everything the server owns. The public `state` is what `/api/state` serves;
 /// `secrets` and the Spotify token cache never leave the process.
@@ -28,6 +32,8 @@ pub type Shared = Arc<Mutex<AppState>>;
 struct Persist {
     ui: Option<UiState>,
     settings: Option<AppSettings>,
+    // Backward-compatible read path only. New writes go to secrets.json.
+    #[serde(skip_serializing)]
     secrets: Option<Secrets>,
     todos: Vec<TodoItem>,
     memos: Vec<MemoItem>,
@@ -48,10 +54,10 @@ impl AppState {
         let _ = std::fs::create_dir_all(&data_dir);
 
         let mut state = WallpaperState::default();
-        let mut secrets = Secrets::default();
         let api_token = load_or_create_api_token(&data_dir);
+        let mut legacy_secrets = None;
 
-        let path = data_dir.join("companion-data.json");
+        let path = data_dir.join(DATA_FILE);
         if let Ok(text) = std::fs::read_to_string(&path) {
             if let Ok(p) = serde_json::from_str::<Persist>(&text) {
                 if let Some(ui) = p.ui {
@@ -60,15 +66,14 @@ impl AppState {
                 if let Some(settings) = p.settings {
                     state.settings = settings;
                 }
-                if let Some(s) = p.secrets {
-                    secrets = s;
-                }
+                legacy_secrets = p.secrets;
                 state.todos = p.todos;
                 state.memos = p.memos;
                 state.bookmarks = p.bookmarks;
                 state.ai.messages = p.chat;
             }
         }
+        let secrets = load_or_migrate_secrets(&data_dir, legacy_secrets);
 
         // Seed default bookmarks on first run so the UI isn't empty.
         if state.bookmarks.is_empty() {
@@ -90,7 +95,9 @@ impl AppState {
         }
     }
 
-    /// Persist mutable user data + config + secrets to disk (best effort).
+    /// Persist mutable user data + config to disk (best effort). Secrets are
+    /// written separately to secrets.json so the normal data snapshot can be
+    /// shared/debugged without carrying API keys.
     ///
     /// Atomic write: serialize to a sibling `.tmp` file, back up whatever is
     /// currently on disk to `.bak`, then rename `.tmp` over the real path.
@@ -102,7 +109,7 @@ impl AppState {
         let p = Persist {
             ui: Some(self.state.ui.clone()),
             settings: Some(self.state.settings.clone()),
-            secrets: Some(self.secrets.clone()),
+            secrets: None,
             todos: self.state.todos.clone(),
             memos: self.state.memos.clone(),
             bookmarks: self.state.bookmarks.clone(),
@@ -111,27 +118,146 @@ impl AppState {
         let Ok(text) = serde_json::to_string_pretty(&p) else {
             return;
         };
-        let path = self.data_dir.join("companion-data.json");
-        let tmp_path = self.data_dir.join("companion-data.json.tmp");
-        let bak_path = self.data_dir.join("companion-data.json.bak");
-
-        if std::fs::write(&tmp_path, &text).is_err() {
-            return; // disk full / permissions — leave the existing file untouched
-        }
-        if path.exists() {
-            // Best-effort: a failed backup shouldn't block saving the new data.
-            let _ = std::fs::copy(&path, &bak_path);
-        }
-        if std::fs::rename(&tmp_path, &path).is_err() {
-            // Rename failed (e.g. cross-device on an unusual setup) — fall back
-            // to a direct write so a save attempt is never silently dropped.
-            let _ = std::fs::write(&path, &text);
-            let _ = std::fs::remove_file(&tmp_path);
-        }
+        write_atomic_with_backup(&self.data_dir.join(DATA_FILE), &text, BackupMode::SanitizeSecrets);
+        persist_secrets(&self.data_dir, &self.secrets);
         // touch updatedAt so pollers can detect change
         // (caller already mutated `state`; we just stamp time here is not ideal
         //  because we hold &self — callers stamp updated_at themselves.)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum BackupMode {
+    Raw,
+    SanitizeSecrets,
+}
+
+fn sibling_with_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+        return path.with_extension(suffix.trim_start_matches('.'));
+    };
+    path.with_file_name(format!("{name}{suffix}"))
+}
+
+fn write_atomic_no_backup(path: &Path, text: &str) -> bool {
+    let tmp_path = sibling_with_suffix(path, ".tmp");
+    if std::fs::write(&tmp_path, text).is_err() {
+        return false; // disk full / permissions — leave the existing file untouched
+    }
+    if std::fs::rename(&tmp_path, path).is_err() {
+        // Rename failed (e.g. cross-device on an unusual setup) — fall back
+        // to a direct write so a save attempt is never silently dropped.
+        if std::fs::write(path, text).is_err() {
+            let _ = std::fs::remove_file(&tmp_path);
+            return false;
+        }
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+    true
+}
+
+fn write_atomic_with_backup(path: &Path, text: &str, backup_mode: BackupMode) {
+    if path.exists() {
+        let bak_path = sibling_with_suffix(path, ".bak");
+        backup_existing_file(path, &bak_path, backup_mode);
+    }
+    let _ = write_atomic_no_backup(path, text);
+}
+
+fn backup_existing_file(path: &Path, bak_path: &Path, backup_mode: BackupMode) {
+    match backup_mode {
+        BackupMode::Raw => {
+            let _ = std::fs::copy(path, bak_path);
+        }
+        BackupMode::SanitizeSecrets => {
+            if !backup_sanitized_persist_file(path, bak_path) {
+                // If we cannot prove the backup is free of legacy secrets, do
+                // not create a new companion-data backup that may leak API keys.
+                let _ = std::fs::remove_file(bak_path);
+            }
+        }
+    }
+}
+
+fn backup_sanitized_persist_file(path: &Path, bak_path: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(mut value) = serde_json::from_str::<Value>(&text) else {
+        return false;
+    };
+    let mut had_secrets = false;
+    if let Some(obj) = value.as_object_mut() {
+        had_secrets = obj.remove("secrets").is_some();
+    }
+    if had_secrets {
+        let Ok(clean) = serde_json::to_string_pretty(&value) else {
+            return false;
+        };
+        write_atomic_no_backup(bak_path, &clean)
+    } else {
+        std::fs::copy(path, bak_path).is_ok()
+    }
+}
+
+fn load_or_migrate_secrets(data_dir: &Path, legacy_secrets: Option<Secrets>) -> Secrets {
+    let path = data_dir.join(SECRETS_FILE);
+    let secrets = read_secrets(&path)
+        .or_else(|| legacy_secrets.filter(secrets_has_any))
+        .unwrap_or_default();
+
+    if secrets_has_any(&secrets) || path.exists() {
+        persist_secrets(data_dir, &secrets);
+    }
+    sanitize_legacy_secret_fields(data_dir);
+    secrets
+}
+
+fn read_secrets(path: &Path) -> Option<Secrets> {
+    let text = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str::<Secrets>(&text).ok()
+}
+
+fn persist_secrets(data_dir: &Path, secrets: &Secrets) {
+    let path = data_dir.join(SECRETS_FILE);
+    if !secrets_has_any(secrets) && !path.exists() {
+        return;
+    }
+    let Ok(text) = serde_json::to_string_pretty(secrets) else {
+        return;
+    };
+    write_atomic_with_backup(&path, &text, BackupMode::Raw);
+}
+
+fn secrets_has_any(secrets: &Secrets) -> bool {
+    !secrets.openai_key.is_empty()
+        || !secrets.google_key.is_empty()
+        || !secrets.spotify_client_secret.is_empty()
+        || !secrets.spotify_refresh_token.is_empty()
+}
+
+fn sanitize_legacy_secret_fields(data_dir: &Path) {
+    sanitize_legacy_secret_field(&data_dir.join(DATA_FILE));
+    sanitize_legacy_secret_field(&data_dir.join(format!("{DATA_FILE}.bak")));
+}
+
+fn sanitize_legacy_secret_field(path: &Path) {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(mut value) = serde_json::from_str::<Value>(&text) else {
+        return;
+    };
+    let Some(obj) = value.as_object_mut() else {
+        return;
+    };
+    if obj.remove("secrets").is_none() {
+        return;
+    }
+    let Ok(clean) = serde_json::to_string_pretty(&value) else {
+        return;
+    };
+    let _ = write_atomic_no_backup(path, &clean);
 }
 
 fn load_or_create_api_token(data_dir: &Path) -> String {
@@ -269,6 +395,83 @@ mod tests {
         let reloaded = AppState::load_from(dir.clone());
         assert_eq!(reloaded.state.memos.len(), 1);
         assert_eq!(reloaded.state.memos[0].text, "覚えておく");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn secrets_are_persisted_to_a_separate_file_only() {
+        let dir = temp_dir("separate-secrets");
+        let mut app = AppState::load_from(dir.clone());
+        app.secrets.openai_key = "sk-separated".into();
+        app.secrets.spotify_refresh_token = "spotify-refresh".into();
+        app.persist();
+
+        let data_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
+        let secrets_text = std::fs::read_to_string(dir.join("secrets.json")).unwrap();
+        assert!(
+            !data_text.contains("sk-separated") && !data_text.contains("\"secrets\""),
+            "normal data file must not contain secrets"
+        );
+        assert!(secrets_text.contains("sk-separated"));
+        assert!(secrets_text.contains("spotify-refresh"));
+
+        let reloaded = AppState::load_from(dir.clone());
+        assert_eq!(reloaded.secrets.openai_key, "sk-separated");
+        assert_eq!(reloaded.secrets.spotify_refresh_token, "spotify-refresh");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn legacy_embedded_secrets_are_migrated_and_sanitized() {
+        let dir = temp_dir("legacy-secrets");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("companion-data.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "secrets": {
+                    "openaiKey": "sk-legacy",
+                    "googleKey": "",
+                    "spotifyClientSecret": "spotify-secret",
+                    "spotifyRefreshToken": ""
+                },
+                "memos": [{
+                    "id": "m1",
+                    "text": "legacy memo",
+                    "pinned": false,
+                    "createdAt": "2026-07-01T00:00:00Z",
+                    "updatedAt": "2026-07-01T00:00:00Z"
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("companion-data.json.bak"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "secrets": { "openaiKey": "sk-backup" },
+                "todos": []
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let app = AppState::load_from(dir.clone());
+        assert_eq!(app.secrets.openai_key, "sk-legacy");
+        assert_eq!(app.secrets.spotify_client_secret, "spotify-secret");
+        assert_eq!(app.state.memos[0].text, "legacy memo");
+
+        let secrets_text = std::fs::read_to_string(dir.join("secrets.json")).unwrap();
+        assert!(secrets_text.contains("sk-legacy"));
+        assert!(secrets_text.contains("spotify-secret"));
+
+        let data_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
+        let bak_text = std::fs::read_to_string(dir.join("companion-data.json.bak")).unwrap();
+        assert!(!data_text.contains("sk-legacy"));
+        assert!(!data_text.contains("\"secrets\""));
+        assert!(!bak_text.contains("sk-backup"));
+        assert!(!bak_text.contains("\"secrets\""));
 
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckIcon, CloudIcon, MusicIcon, ServerIcon, SparkIcon } from "../icons";
 import { api, type AppSettings, type SecretsStatus } from "../api";
+import TabDisplay from "./TabDisplay";
 
 export default function TabSettings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -14,6 +15,7 @@ export default function TabSettings() {
 
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [spotifyCheck, setSpotifyCheck] = useState<string>("");
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => setError("APIに接続できませんでした"));
@@ -52,11 +54,43 @@ export default function TabSettings() {
     }
   };
 
+  const checkSpotify = async () => {
+    setSpotifyCheck("確認中…");
+    try {
+      const res: any = await api.spotifyRefresh();
+      if (res?.ok) {
+        const track = res.spotify?.track;
+        setSpotifyCheck(track ? `接続OK: ${track.title} / ${track.artist}` : `接続OK: ${res.spotify?.status ?? "idle"}`);
+      } else {
+        setSpotifyCheck(`未接続: ${res?.error ?? res?.status ?? "設定を確認してください"}`);
+      }
+    } catch {
+      setSpotifyCheck("確認に失敗しました（Companion APIを確認）");
+    }
+  };
+
+  const connectSpotify = async () => {
+    setSpotifyCheck("認証URLを作成中…");
+    try {
+      const res: any = await api.spotifyAuthUrl();
+      if (res.ok && res.authUrl) {
+        window.open(res.authUrl, "_blank", "noopener,noreferrer");
+        setSpotifyCheck(`ブラウザでSpotify認証を開きました。Redirect URI: ${res.redirectUri}`);
+      } else {
+        setSpotifyCheck(`認証URLを作れません: ${res.error ?? "Client IDを確認してください"}`);
+      }
+    } catch {
+      setSpotifyCheck("認証URLの作成に失敗しました（Companion APIを確認）");
+    }
+  };
+
   if (!settings) {
     return (
       <section className="tab-panel">
         <header className="panel-head"><h2>設定</h2></header>
         {error ? <p className="error-banner">⚠ {error}</p> : <p className="note">読み込み中…</p>}
+        <div className="settings-divider" />
+        <TabDisplay embedded />
       </section>
     );
   }
@@ -126,6 +160,10 @@ export default function TabSettings() {
             onChange={(e) => setSpotifyRefresh(e.target.value)} placeholder="(変更時のみ入力)" />
         </label>
         <p className="hint">user-read-currently-playing スコープの refresh_token を取得して貼り付け</p>
+        <button type="button" className="secondary-btn" onClick={connectSpotify}>Spotify認証を開く</button>
+        <button type="button" className="secondary-btn" onClick={checkSpotify}>Spotify接続確認</button>
+        {spotifyCheck && <p className="hint">{spotifyCheck}</p>}
+        <p className="hint">Spotify Dashboard の Redirect URI には http://127.0.0.1:40313/spotify/callback を登録してください。</p>
       </div>
 
       <div className="settings-group">
@@ -181,6 +219,9 @@ export default function TabSettings() {
         </button>
       </div>
       <p className="note">※ APIキーは Companion 内のローカルファイルにのみ保存され、壁紙側へは送信されません</p>
+
+      <div className="settings-divider" />
+      <TabDisplay embedded />
     </section>
   );
 }

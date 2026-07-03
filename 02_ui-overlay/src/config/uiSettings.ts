@@ -24,7 +24,7 @@ export const newsPanelDefaults = {
   showDivider: true,
   showFooter: true,
   highlightLatest: true,
-  maxItems: 5,
+  maxItems: 3,
   maxTitleLines: 2,
   maxSummaryLines: 2,
 };
@@ -50,8 +50,25 @@ export const musicPanelDefaults = {
   showFooter: true,
 };
 
-export const aiPanelDefaults = {
+export const lyricsPanelDefaults = {
   show: true,
+  showHeader: true,
+  showBackground: true,
+  backgroundOpacity: 0.34,
+  showTrack: true,
+  showStatus: true,
+  align: 'center' as 'left' | 'center' | 'right',
+  currentSize: 30,
+  sideSize: 18,
+  metaSize: 12,
+  lineGap: 12,
+  sideOpacity: 0.45,
+  currentMaxLines: 2,
+  sideMaxLines: 1,
+};
+
+export const aiPanelDefaults = {
+  show: false,
   showHeader: true,
   showBackground: true,
   backgroundOpacity: 0.4,
@@ -84,8 +101,9 @@ export const memoPanelDefaults = {
 
 export const uiSettings = {
   debugMode: true,
-  baseResolution: '1920x1080',
+  baseResolution: '1920x1200',
   clock: {
+    showClock: true,
     showDate: true,
     showSeconds: true,
     showWeather: true,
@@ -98,7 +116,7 @@ export const uiSettings = {
   },
   weatherCompact: {
     showCompactWeather: true,
-    displayMode: 'compact' as 'compact' | 'detailed',
+    displayMode: 'detailed' as 'compact' | 'detailed',
     showLocation: true,
     showWeather: true,
     showTemperature: true,
@@ -135,6 +153,7 @@ export const uiSettings = {
   },
   newsPanel: newsPanelDefaults,
   musicPanel: musicPanelDefaults,
+  lyricsPanel: lyricsPanelDefaults,
   aiPanel: aiPanelDefaults,
   memoPanel: memoPanelDefaults,
   overlay: {

@@ -1,19 +1,20 @@
-// Rendered height of the dock's six buttons plus container padding at
-// gap 0; the dock's full height is DOCK_BASE_HEIGHT + 5 * gap. Used to keep
+// Rendered height of the dock's single settings button plus container padding at
+// gap 0; the dock's full height is DOCK_BASE_HEIGHT + DOCK_GAP_COUNT * gap. Used to keep
 // the dock (the only entry into Settings) fully inside the canvas.
-export const DOCK_BASE_HEIGHT = 380;
+export const DOCK_BASE_HEIGHT = 82;
+export const DOCK_GAP_COUNT = 0;
 
 export const overlayLayout = {
   canvas: {
     width: 1920,
-    height: 1080,
+    height: 1200,
   },
   clock: {
     x: 39,
     y: 39,
-    width: 479,
-    dateSize: 63,
-    timeSize: 105,
+    width: 642,
+    dateSize: 67,
+    timeSize: 107,
   },
   weatherCompact: {
     x: 39,
@@ -42,25 +43,31 @@ export const overlayLayout = {
     x: 1430,
     y: 55,
     width: 450,
-    height: 600,
+    height: 525,
   },
   musicPanel: {
     x: 1430,
-    y: 685,
+    y: 586,
     width: 450,
-    height: 340,
+    height: 327,
+  },
+  lyricsPanel: {
+    x: 1083,
+    y: 919,
+    width: 800,
+    height: 210,
   },
   aiPanel: {
-    x: 985,
-    y: 380,
-    width: 405,
-    height: 645,
+    x: 1432,
+    y: 56,
+    width: 448,
+    height: 857,
   },
   memoPanel: {
-    x: 55,
-    y: 560,
-    width: 450,
-    height: 465,
+    x: 481,
+    y: 918,
+    width: 596,
+    height: 210,
   },
   safeArea: {
     padding: 40,

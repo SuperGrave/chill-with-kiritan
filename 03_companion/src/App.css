@@ -165,6 +165,101 @@ input.mono, textarea.mono { font-family: Consolas, "Cascadia Mono", monospace; f
 .preset-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .preset-actions .secondary-btn { padding: 4px 9px; font-size: 11.5px; }
 
+.display-panel { gap: 14px; }
+.display-panel.embedded {
+  margin-top: 2px;
+}
+.display-toolbar {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px;
+  align-items: end;
+}
+.display-save-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.display-editor { display: flex; flex-direction: column; gap: 9px; }
+.display-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.display-section summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 10px 13px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+.display-section[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+.display-section-body { padding: 12px; }
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.display-control,
+.display-check {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+.display-control input,
+.display-control select {
+  max-width: 145px;
+  padding: 7px 9px;
+}
+.display-number-control {
+  width: min(100%, 210px);
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) 70px;
+  gap: 8px;
+  align-items: center;
+}
+.display-number-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-strong);
+}
+.display-number-control input[type="number"] {
+  max-width: none;
+  padding: 7px 8px;
+  text-align: right;
+}
+.display-check input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.display-sync-pill {
+  height: 35px;
+  align-self: end;
+  white-space: nowrap;
+}
+
+.settings-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0 4px;
+}
+
+@media (max-width: 560px) {
+  .display-toolbar { grid-template-columns: 1fr; }
+  .control-grid { grid-template-columns: 1fr; }
+  .display-number-control { width: 100%; }
+}
+
 /* ── Buttons ──────────────────────────────────────────────────── */
 button {
   display: inline-flex;

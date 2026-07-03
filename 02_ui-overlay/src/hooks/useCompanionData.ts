@@ -9,6 +9,13 @@ export function useCompanionData() {
   const [data, setData] = useState<CompanionState | null>(null);
   const [online, setOnline] = useState(false);
 
+  const refresh = async (): Promise<CompanionState | null> => {
+    const s = await fetchCompanionState();
+    setData(s);
+    setOnline(s !== null);
+    return s;
+  };
+
   useEffect(() => {
     let alive = true;
     const tick = async () => {
@@ -22,5 +29,5 @@ export function useCompanionData() {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  return { data, online };
+  return { data, online, refresh };
 }

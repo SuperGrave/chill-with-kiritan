@@ -2,10 +2,11 @@ import React from 'react';
 import {
   newsPanelDefaults,
   musicPanelDefaults,
+  lyricsPanelDefaults,
   aiPanelDefaults,
   memoPanelDefaults,
 } from '../../config/uiSettings';
-import { DOCK_BASE_HEIGHT } from '../../config/layout';
+import { DOCK_BASE_HEIGHT, DOCK_GAP_COUNT } from '../../config/layout';
 
 interface SettingsPanelProps {
   layout: any;
@@ -156,12 +157,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
   // so their position sliders must not be able to push them off-canvas.
   const [canvasW, canvasH] = (settings.baseResolution || '1920x1080').split('x').map(Number);
   const dockMaxX = canvasW - (layout.rightDock.width ?? 110);
-  const dockMaxY = canvasH - (DOCK_BASE_HEIGHT + 5 * (layout.rightDock.gap ?? 16));
+  const dockMaxY = canvasH - (DOCK_BASE_HEIGHT + DOCK_GAP_COUNT * (layout.rightDock.gap ?? 16));
 
   // Merged views: saved values over defaults, so controls always show a value
   // even when the section is missing from an older localStorage snapshot.
   const np = { ...newsPanelDefaults, ...settings.newsPanel };
   const mp = { ...musicPanelDefaults, ...settings.musicPanel };
+  const lp = { ...lyricsPanelDefaults, ...settings.lyricsPanel };
   const ap = { ...aiPanelDefaults, ...settings.aiPanel };
   const mm = { ...memoPanelDefaults, ...settings.memoPanel };
 
@@ -364,7 +366,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
       <Accordion title="Right Dock" defaultOpen={false}>
         <SliderInput label="X Position" value={layout.rightDock.x} onChange={(v: number) => updateLayout('rightDock', 'x', v)} max={dockMaxX} />
         <SliderInput label="Y Position" value={layout.rightDock.y} onChange={(v: number) => updateLayout('rightDock', 'y', v)} max={dockMaxY} />
-        <SliderInput label="Button Gap" value={layout.rightDock.gap} onChange={(v: number) => updateLayout('rightDock', 'gap', v)} max={100} />
       </Accordion>
 
       <Accordion title="Settings Overlay" defaultOpen={false}>
@@ -423,6 +424,29 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <SliderInput label="Time Size" value={mp.timeSize} onChange={(v: number) => updateSection('musicPanel', 'timeSize', v)} min={8} max={32} />
         <SliderInput label="Bar Height" value={mp.barHeight} onChange={(v: number) => updateSection('musicPanel', 'barHeight', v)} min={4} max={50} />
         <SliderInput label="Control Size" value={mp.controlSize} onChange={(v: number) => updateSection('musicPanel', 'controlSize', v)} min={12} max={60} />
+      </Accordion>
+
+      <Accordion title="Lyrics Panel" defaultOpen={false}>
+        {renderPlacement('lyricsPanel', lp)}
+        <SectionDivider label="DISPLAY" />
+        <CheckRow label="Show Track Row" checked={lp.showTrack} onChange={(v: boolean) => updateSection('lyricsPanel', 'showTrack', v)} />
+        <CheckRow label="Show Status Badge" checked={lp.showStatus} onChange={(v: boolean) => updateSection('lyricsPanel', 'showStatus', v)} />
+        <SelectRow
+          label="Text Align"
+          value={lp.align}
+          onChange={(v: string) => updateSection('lyricsPanel', 'align', v)}
+          options={[
+            { value: 'left', label: 'Left' },
+            { value: 'center', label: 'Center' },
+            { value: 'right', label: 'Right' },
+          ]}
+        />
+        <SectionDivider label="SIZES" />
+        <SliderInput label="Current Line Size" value={lp.currentSize} onChange={(v: number) => updateSection('lyricsPanel', 'currentSize', v)} min={14} max={72} />
+        <SliderInput label="Side Line Size" value={lp.sideSize} onChange={(v: number) => updateSection('lyricsPanel', 'sideSize', v)} min={10} max={48} />
+        <SliderInput label="Meta Size" value={lp.metaSize} onChange={(v: number) => updateSection('lyricsPanel', 'metaSize', v)} min={8} max={28} />
+        <SliderInput label="Line Gap" value={lp.lineGap} onChange={(v: number) => updateSection('lyricsPanel', 'lineGap', v)} max={60} />
+        <SliderInput label="Side Opacity" value={lp.sideOpacity} onChange={(v: number) => updateSection('lyricsPanel', 'sideOpacity', v)} max={1} step={0.05} />
       </Accordion>
 
       <Accordion title="AI Panel" defaultOpen={false}>

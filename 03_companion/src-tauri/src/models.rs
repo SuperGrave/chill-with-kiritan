@@ -297,6 +297,7 @@ pub struct SpotifyState {
     pub connected: bool,
     pub status: String, // "idle" | "playing" | "paused" | "error" | "unconfigured"
     pub track: Option<SpotifyTrack>,
+    pub lyrics: SpotifyLyricsState,
     pub error: Option<String>,
 }
 
@@ -306,6 +307,7 @@ impl Default for SpotifyState {
             connected: false,
             status: "unconfigured".to_string(),
             track: None,
+            lyrics: SpotifyLyricsState::default(),
             error: None,
         }
     }
@@ -313,7 +315,39 @@ impl Default for SpotifyState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SpotifyLyricsState {
+    pub track_id: Option<String>,
+    pub source: Option<String>,
+    pub status: String, // "idle" | "synced" | "plain" | "empty" | "error"
+    pub synced: bool,
+    pub lines: Vec<LyricLine>,
+    pub error: Option<String>,
+}
+
+impl Default for SpotifyLyricsState {
+    fn default() -> Self {
+        Self {
+            track_id: None,
+            source: None,
+            status: "idle".to_string(),
+            synced: false,
+            lines: vec![],
+            error: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricLine {
+    pub time: Option<f64>,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SpotifyTrack {
+    pub id: Option<String>,
     pub title: String,
     pub artist: String,
     pub album: Option<String>,

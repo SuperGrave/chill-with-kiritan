@@ -132,5 +132,7 @@ export const api = {
   // Real data refresh
   newsRefresh: () => post("/news/refresh"),
   weatherRefresh: () => post("/weather/refresh"),
+  spotifyAuthUrl: () => req<{ ok: boolean; authUrl?: string; redirectUri?: string; scope?: string; error?: string }>("/spotify/auth-url"),
   spotifyRefresh: () => post("/spotify/refresh"),
+  spotifyControl: (action: string) => post("/spotify/control", { action }),
 };

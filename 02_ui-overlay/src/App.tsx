@@ -1,21 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
-import { overlayLayout as defaultLayout, DOCK_BASE_HEIGHT } from './config/layout';
+import { overlayLayout as defaultLayout, DOCK_BASE_HEIGHT, DOCK_GAP_COUNT } from './config/layout';
 import { uiSettings as defaultUiSettings } from './config/uiSettings';
 import ClockWidget from './components/ClockWidget';
 import WeatherCompact from './components/WeatherCompact';
 import WeatherDetailPanel from './components/panels/WeatherDetailPanel';
 import RightDock from './components/RightDock';
-import type { PanelId } from './components/RightDock';
 import DetailPanel from './components/DetailPanel';
 import FloatingPanel from './components/FloatingPanel';
 import NewsPanel from './components/panels/NewsPanel';
 import MusicPanel from './components/panels/MusicPanel';
+import LyricsPanel from './components/panels/LyricsPanel';
 import AiPanel from './components/panels/AiPanel';
 import MemoPanel from './components/panels/MemoPanel';
 import DebugGuide from './components/DebugGuide';
 import { useWeatherData } from './hooks/useWeatherData';
 import { useCompanionData } from './hooks/useCompanionData';
-import { fetchCompanionUi, pushCompanionUi } from './services/companionClient';
+import { fetchCompanionUi, pushCompanionUi, sendCompanionChat, sendSpotifyControl } from './services/companionClient';
 import type { AiState, SpotifyState } from './types/panels';
 import './styles/base.css';
 import './styles/overlay.css';
@@ -24,6 +24,8 @@ import './styles/weather.css';
 interface OverlayAppProps {
   productionMode?: boolean;
 }
+
+export type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'AI' | 'NEWS' | 'MEMO';
 
 const OFFLINE_AI: AiState = {
   provider: 'none',
@@ -66,8 +68,6 @@ function App({ productionMode = false }: OverlayAppProps) {
     ? {
         ...settings,
         debugMode: false,
-        musicPanel: { ...settings.musicPanel, showControls: false },
-        aiPanel: { ...settings.aiPanel, showInput: false },
       }
     : settings;
 
@@ -86,8 +86,8 @@ function App({ productionMode = false }: OverlayAppProps) {
   // pushed back so the Companion can snapshot them as presets. Everything
   // degrades gracefully: when the Companion is offline, localStorage is used.
   const [companionConnected, setCompanionConnected] = useState(false);
-  const companionSync = useRef<{ adopted: boolean; lastPresetId?: string | null; skipPush: boolean }>(
-    { adopted: false, lastPresetId: undefined, skipPush: false }
+  const companionSync = useRef<{ adopted: boolean; lastSignature?: string; skipPush: boolean }>(
+    { adopted: false, lastSignature: undefined, skipPush: false }
   );
 
   useEffect(() => {
@@ -99,8 +99,13 @@ function App({ productionMode = false }: OverlayAppProps) {
       setCompanionConnected(true);
       const hasSettings = ui.settings && Object.keys(ui.settings).length > 0;
       const first = !companionSync.current.adopted;
-      const presetChanged = (ui.activePresetId ?? null) !== (companionSync.current.lastPresetId ?? null);
-      if (hasSettings && (first || presetChanged)) {
+      const signature = JSON.stringify({
+        activePresetId: ui.activePresetId ?? null,
+        layout: ui.layout ?? {},
+        settings: ui.settings ?? {},
+      });
+      const remoteChanged = signature !== companionSync.current.lastSignature;
+      if (hasSettings && (first || remoteChanged)) {
         companionSync.current.skipPush = true; // don't echo an adopted value back
         if (ui.layout && Object.keys(ui.layout).length) {
           setLayout({ ...defaultLayout, ...ui.layout });
@@ -108,10 +113,10 @@ function App({ productionMode = false }: OverlayAppProps) {
         setSettings({ ...defaultUiSettings, ...ui.settings });
       }
       companionSync.current.adopted = true;
-      companionSync.current.lastPresetId = ui.activePresetId ?? null;
+      companionSync.current.lastSignature = signature;
     };
     tick();
-    const id = setInterval(tick, 3000);
+    const id = setInterval(tick, 700);
     return () => { alive = false; clearInterval(id); };
   }, []);
 
@@ -158,7 +163,7 @@ function App({ productionMode = false }: OverlayAppProps) {
   };
   const dock = { ...defaultLayout.rightDock, ...layout.rightDock };
   const safeRightDock = pullIn(layout.rightDock, defaultLayout.rightDock,
-    baseWidth - dock.width, baseHeight - (DOCK_BASE_HEIGHT + 5 * dock.gap));
+    baseWidth - dock.width, baseHeight - (DOCK_BASE_HEIGHT + DOCK_GAP_COUNT * dock.gap));
   const safeDetailPanel = pullIn(layout.detailPanel, defaultLayout.detailPanel,
     baseWidth - 100, baseHeight - 100);
   if (safeRightDock !== layout.rightDock || safeDetailPanel !== layout.detailPanel) {
@@ -172,12 +177,13 @@ function App({ productionMode = false }: OverlayAppProps) {
     localStorage.removeItem('tohoku_ui_settings');
   };
 
-  // Each dock button maps to a settings flag. WEATHER reuses the existing left
-  // module's flag; the rest use their panel's own `show`. `!== false` keeps an
-  // older saved object (missing the key) visible by default.
+  // Panel visibility shortcuts map to settings flags. WEATHER reuses the
+  // existing left module's flag; the rest use their panel's own `show`.
+  // `!== false` keeps older saved objects (missing the key) visible by default.
   const PANEL_FLAG: Record<PanelId, [string, string]> = {
     WEATHER: ['weatherCompact', 'showCompactWeather'],
     MUSIC: ['musicPanel', 'show'],
+    LYRICS: ['lyricsPanel', 'show'],
     AI: ['aiPanel', 'show'],
     NEWS: ['newsPanel', 'show'],
     MEMO: ['memoPanel', 'show'],
@@ -200,6 +206,7 @@ function App({ productionMode = false }: OverlayAppProps) {
   const panelVisibility = {
     WEATHER: isPanelVisible('WEATHER'),
     MUSIC: isPanelVisible('MUSIC'),
+    LYRICS: isPanelVisible('LYRICS'),
     AI: isPanelVisible('AI'),
     NEWS: isPanelVisible('NEWS'),
     MEMO: isPanelVisible('MEMO'),
@@ -214,7 +221,7 @@ function App({ productionMode = false }: OverlayAppProps) {
 
   // In production, null means OFFLINE and [] means a real connected empty
   // state. Mock data remains available only to the standalone overlay preview.
-  const { data: companion, online: companionOnline } = useCompanionData();
+  const { data: companion, online: companionOnline, refresh: refreshCompanion } = useCompanionData();
   const connected = companionOnline;
   const liveNews = companion ? companion.news : productionMode ? [] : undefined;
   const liveAi = companion?.ai ?? (productionMode ? OFFLINE_AI : undefined);
@@ -269,7 +276,9 @@ function App({ productionMode = false }: OverlayAppProps) {
       >
         {effectiveSettings.debugMode && <DebugGuide layout={{...layout, canvas: {width: baseWidth, height: baseHeight}}} />}
 
-        <ClockWidget layout={layout.clock} settings={effectiveSettings.clock} debugMode={effectiveSettings.debugMode} />
+        {effectiveSettings.clock?.showClock !== false && (
+          <ClockWidget layout={layout.clock} settings={effectiveSettings.clock} debugMode={effectiveSettings.debugMode} />
+        )}
         {layout.weatherCompact && effectiveSettings.weatherCompact?.showCompactWeather && (
           <div style={{
           position: 'absolute',
@@ -329,7 +338,29 @@ function App({ productionMode = false }: OverlayAppProps) {
             showBackground={effectiveSettings.musicPanel?.showBackground !== false}
             backgroundOpacity={effectiveSettings.musicPanel?.backgroundOpacity ?? 0.4}
           >
-            <MusicPanel settings={effectiveSettings.musicPanel} spotify={liveSpotify} offline={productionMode && !connected} />
+            <MusicPanel
+              settings={effectiveSettings.musicPanel}
+              spotify={liveSpotify}
+              offline={productionMode && !connected}
+              onControl={async (action) => {
+                const ok = await sendSpotifyControl(action);
+                await refreshCompanion();
+                return ok;
+              }}
+            />
+          </FloatingPanel>
+        )}
+        {layout.lyricsPanel && (
+          <FloatingPanel
+            title="LYRICS"
+            layout={layout.lyricsPanel}
+            visible={panelVisibility.LYRICS}
+            debugMode={effectiveSettings.debugMode}
+            showHeader={effectiveSettings.lyricsPanel?.showHeader !== false}
+            showBackground={effectiveSettings.lyricsPanel?.showBackground !== false}
+            backgroundOpacity={effectiveSettings.lyricsPanel?.backgroundOpacity ?? 0.34}
+          >
+            <LyricsPanel settings={effectiveSettings.lyricsPanel} spotify={liveSpotify} offline={productionMode && !connected} />
           </FloatingPanel>
         )}
         {layout.aiPanel && (
@@ -342,7 +373,16 @@ function App({ productionMode = false }: OverlayAppProps) {
             showBackground={effectiveSettings.aiPanel?.showBackground !== false}
             backgroundOpacity={effectiveSettings.aiPanel?.backgroundOpacity ?? 0.4}
           >
-            <AiPanel settings={effectiveSettings.aiPanel} ai={liveAi} offline={productionMode && !connected} />
+            <AiPanel
+              settings={effectiveSettings.aiPanel}
+              ai={liveAi}
+              offline={productionMode && !connected}
+              onSend={async (text) => {
+                const ok = await sendCompanionChat(text);
+                await refreshCompanion();
+                return ok;
+              }}
+            />
           </FloatingPanel>
         )}
         {layout.memoPanel && (
@@ -362,8 +402,6 @@ function App({ productionMode = false }: OverlayAppProps) {
         <RightDock
           layout={layout.rightDock}
           debugMode={effectiveSettings.debugMode}
-          visibility={panelVisibility}
-          onTogglePanel={togglePanel}
           settingsOpen={settingsOpen}
           onToggleSettings={() => setSettingsOpen(o => !o)}
           showSettings={!productionMode}
@@ -377,6 +415,8 @@ function App({ productionMode = false }: OverlayAppProps) {
           appSettings={settings}
           setLayout={setLayout}
           setSettings={setSettings}
+          panelVisibility={panelVisibility}
+          onTogglePanel={togglePanel}
           onReset={handleReset}
         />}
 

@@ -1,12 +1,13 @@
 use axum::{
     body::Body,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderValue, Method, Request, StatusCode},
     middleware::{from_fn_with_state, Next},
-    response::{IntoResponse, Json, Response},
+    response::{Html, IntoResponse, Json, Response},
     routing::{get, patch, post, put},
     Router,
 };
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{net::SocketAddr, time::Instant};
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -118,8 +119,11 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/news/refresh", post(news_refresh))
         .route("/api/weather/current", get(weather_current))
         .route("/api/weather/refresh", post(weather_refresh))
+        .route("/api/spotify/auth-url", get(spotify_auth_url))
         .route("/api/spotify/now-playing", get(spotify_now_playing))
         .route("/api/spotify/refresh", post(spotify_refresh))
+        .route("/api/spotify/control", post(spotify_control))
+        .route("/spotify/callback", get(spotify_callback))
         .layer(from_fn_with_state(shared.clone(), require_mutation_token))
         .layer(cors)
         .with_state(shared)
@@ -729,22 +733,144 @@ async fn weather_refresh(State(s): State<Shared>) -> Json<Value> {
 
 // ─── Spotify ────────────────────────────────────────────────────────────────────────
 
+#[derive(Debug, Deserialize)]
+struct SpotifyCallback {
+    code: Option<String>,
+    error: Option<String>,
+}
+
 async fn spotify_now_playing(State(s): State<Shared>) -> Json<SpotifyState> {
     Json(s.lock().unwrap().state.spotify.clone())
+}
+
+async fn spotify_auth_url(State(s): State<Shared>) -> Json<Value> {
+    let client_id = s.lock().unwrap().state.settings.spotify.client_id.clone();
+    if client_id.trim().is_empty() {
+        return Json(json!({ "ok": false, "error": "spotify client_id is empty" }));
+    }
+    let state = uuid::Uuid::new_v4().to_string();
+    match services::spotify_authorize_url(&client_id, &state) {
+        Ok(url) => Json(json!({
+            "ok": true,
+            "authUrl": url,
+            "redirectUri": services::SPOTIFY_REDIRECT_URI,
+            "scope": services::SPOTIFY_SCOPES,
+        })),
+        Err(e) => Json(json!({ "ok": false, "error": e })),
+    }
+}
+
+async fn spotify_callback(
+    State(s): State<Shared>,
+    Query(query): Query<SpotifyCallback>,
+) -> impl IntoResponse {
+    if let Some(e) = query.error {
+        return Html(format!(
+            "<html><body><h1>Spotify authorization failed</h1><p>{}</p></body></html>",
+            html_escape(&e)
+        ));
+    }
+    let Some(code) = query.code else {
+        return Html("<html><body><h1>Spotify authorization failed</h1><p>No code.</p></body></html>".to_string());
+    };
+    let (client_id, client_secret, http) = {
+        let g = s.lock().unwrap();
+        (
+            g.state.settings.spotify.client_id.clone(),
+            g.secrets.spotify_client_secret.clone(),
+            g.http.clone(),
+        )
+    };
+    if client_id.is_empty() || client_secret.is_empty() {
+        return Html("<html><body><h1>Spotify is not configured</h1><p>Set Client ID and Client Secret in Companion first.</p></body></html>".to_string());
+    }
+
+    match services::spotify_exchange_code(&http, &client_id, &client_secret, &code).await {
+        Ok((token, refresh, expires)) => {
+            let mut g = s.lock().unwrap();
+            if let Some(refresh) = refresh {
+                g.secrets.spotify_refresh_token = refresh;
+            }
+            let exp = Instant::now() + std::time::Duration::from_secs(expires.saturating_sub(60));
+            g.spotify_token = Some((token, exp));
+            g.state.spotify.connected = true;
+            g.state.spotify.status = "idle".to_string();
+            g.state.spotify.error = None;
+            touch(&mut g);
+            Html("<html><body><h1>Spotify connected</h1><p>You can close this tab and return to Companion.</p></body></html>".to_string())
+        }
+        Err(e) => Html(format!(
+            "<html><body><h1>Spotify authorization failed</h1><p>{}</p></body></html>",
+            html_escape(&e)
+        )),
+    }
 }
 
 /// Ensures a valid access token (refreshing via refresh_token if needed),
 /// then polls currently-playing and writes it into state.
 async fn spotify_refresh(State(s): State<Shared>) -> Json<Value> {
-    // Snapshot creds + cached token.
+    let (token, http) = match ensure_spotify_token(&s).await {
+        Ok(x) => x,
+        Err(e) if e == "unconfigured" => {
+            let mut g = s.lock().unwrap();
+            g.state.spotify = SpotifyState {
+                connected: false,
+                status: "unconfigured".to_string(),
+                track: None,
+                lyrics: SpotifyLyricsState::default(),
+                error: None,
+            };
+            touch(&mut g);
+            return Json(json!({ "ok": false, "status": "unconfigured" }));
+        }
+        Err(e) => return Json(json!({ "ok": false, "error": e })),
+    };
+
+    match write_spotify_state(&s, &http, &token).await {
+        Ok(spotify) => Json(json!({ "ok": true, "spotify": spotify })),
+        Err(e) => Json(json!({ "ok": false, "error": e })),
+    }
+}
+
+async fn spotify_control(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    let requested = body
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let (token, http) = match ensure_spotify_token(&s).await {
+        Ok(x) => x,
+        Err(e) => return Json(json!({ "ok": false, "error": e })),
+    };
+    let action = if requested == "toggle" {
+        let playing = s.lock().unwrap().state.spotify.status == "playing";
+        if playing { "pause" } else { "play" }.to_string()
+    } else {
+        requested
+    };
+    if !matches!(action.as_str(), "play" | "pause" | "next" | "previous") {
+        return Json(json!({ "ok": false, "error": "unknown spotify action" }));
+    }
+    match services::spotify_playback_action(&http, &token, &action).await {
+        Ok(()) => match write_spotify_state(&s, &http, &token).await {
+            Ok(spotify) => Json(json!({ "ok": true, "spotify": spotify })),
+            Err(e) => Json(json!({ "ok": true, "warning": e })),
+        },
+        Err(e) => {
+            let mut g = s.lock().unwrap();
+            g.state.spotify.status = "error".to_string();
+            g.state.spotify.error = Some(e.clone());
+            touch(&mut g);
+            Json(json!({ "ok": false, "error": e }))
+        }
+    }
+}
+
+async fn ensure_spotify_token(s: &Shared) -> Result<(String, reqwest::Client), String> {
     let (client_id, client_secret, refresh_token, cached, http) = {
         let g = s.lock().unwrap();
         let cached = g.spotify_token.as_ref().and_then(|(t, exp)| {
-            if *exp > Instant::now() {
-                Some(t.clone())
-            } else {
-                None
-            }
+            (*exp > Instant::now()).then(|| t.clone())
         });
         (
             g.state.settings.spotify.client_id.clone(),
@@ -754,45 +880,43 @@ async fn spotify_refresh(State(s): State<Shared>) -> Json<Value> {
             g.http.clone(),
         )
     };
-
     if client_id.is_empty() || client_secret.is_empty() || refresh_token.is_empty() {
-        let mut g = s.lock().unwrap();
-        g.state.spotify = SpotifyState {
-            connected: false,
-            status: "unconfigured".to_string(),
-            track: None,
-            error: None,
-        };
-        touch(&mut g);
-        return Json(json!({ "ok": false, "status": "unconfigured" }));
+        return Err("unconfigured".to_string());
     }
-
-    // Get a token: cached, else refresh.
-    let token = if let Some(t) = cached {
-        t
-    } else {
-        match services::spotify_refresh_token(&http, &client_id, &client_secret, &refresh_token)
-            .await
-        {
-            Ok((t, expires)) => {
-                let mut g = s.lock().unwrap();
-                let exp =
-                    Instant::now() + std::time::Duration::from_secs(expires.saturating_sub(60));
-                g.spotify_token = Some((t.clone(), exp));
-                t
-            }
-            Err(e) => {
-                let mut g = s.lock().unwrap();
-                g.state.spotify.status = "error".to_string();
-                g.state.spotify.error = Some(e.clone());
-                touch(&mut g);
-                return Json(json!({ "ok": false, "error": e }));
-            }
+    if let Some(token) = cached {
+        return Ok((token, http));
+    }
+    match services::spotify_refresh_token(&http, &client_id, &client_secret, &refresh_token).await {
+        Ok((token, expires)) => {
+            let mut g = s.lock().unwrap();
+            let exp = Instant::now() + std::time::Duration::from_secs(expires.saturating_sub(60));
+            g.spotify_token = Some((token.clone(), exp));
+            Ok((token, http))
         }
-    };
+        Err(e) => {
+            let mut g = s.lock().unwrap();
+            g.state.spotify.status = "error".to_string();
+            g.state.spotify.error = Some(e.clone());
+            touch(&mut g);
+            Err(e)
+        }
+    }
+}
 
-    match services::spotify_now_playing(&http, &token).await {
+async fn write_spotify_state(
+    s: &Shared,
+    http: &reqwest::Client,
+    token: &str,
+) -> Result<SpotifyState, String> {
+    match services::spotify_now_playing(http, token).await {
         Ok(track) => {
+            let lyrics = match &track {
+                Some(t) => {
+                    let previous = s.lock().unwrap().state.spotify.lyrics.clone();
+                    services::lyrics_for_track(http, Some(previous), t).await
+                }
+                None => SpotifyLyricsState::default(),
+            };
             let mut g = s.lock().unwrap();
             let status = match &track {
                 Some(t) if t.is_playing => "playing",
@@ -803,17 +927,26 @@ async fn spotify_refresh(State(s): State<Shared>) -> Json<Value> {
                 connected: true,
                 status: status.to_string(),
                 track,
+                lyrics,
                 error: None,
             };
             touch(&mut g);
-            Json(json!({ "ok": true, "spotify": g.state.spotify.clone() }))
+            Ok(g.state.spotify.clone())
         }
         Err(e) => {
             let mut g = s.lock().unwrap();
             g.state.spotify.status = "error".to_string();
             g.state.spotify.error = Some(e.clone());
             touch(&mut g);
-            Json(json!({ "ok": false, "error": e }))
+            Err(e)
         }
     }
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }

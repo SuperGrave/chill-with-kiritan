@@ -3,6 +3,24 @@ import { RefreshIcon } from "../icons";
 import { api } from "../api";
 
 type Pill = { tone: "ok" | "err" | "warn"; text: string };
+type KiritanStatus = {
+  mode?: string;
+  modeLabel?: string;
+  receivedAt?: string;
+  presence?: "present" | "away";
+};
+
+const WALLPAPER_STALE_MS = 90_000;
+
+function formatAge(ms: number | null): string {
+  if (ms == null || ms < 0) return "不明";
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec}秒`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}分`;
+  const hr = Math.round(min / 60);
+  return `${hr}時間`;
+}
 
 function StatusRow({ label, pill, value }: { label: string; pill?: Pill; value?: string }) {
   return (
@@ -53,6 +71,10 @@ export default function TabStatus() {
   const ai = state?.ai;
   const weather = state?.weather;
   const news = state?.news ?? [];
+  const ui = state?.ui;
+  const kiritan = state?.kiritan as KiritanStatus | undefined;
+  const kiritanReceivedMs = kiritan?.receivedAt ? Date.parse(kiritan.receivedAt) : NaN;
+  const kiritanAgeMs = Number.isFinite(kiritanReceivedMs) ? Date.now() - kiritanReceivedMs : null;
 
   const spotifyPill: Pill =
     spotify?.status === "playing" ? { tone: "ok", text: "再生中" }
@@ -69,6 +91,22 @@ export default function TabStatus() {
   const weatherPill: Pill =
     weather?.source === "live" ? { tone: "ok", text: "live" } : { tone: "warn", text: "mock" };
 
+  const hasLiveUi = !!ui?.settings && Object.keys(ui.settings).length > 0;
+  const overlayPill: Pill = hasLiveUi
+    ? { tone: "ok", text: "同期中" }
+    : { tone: "warn", text: "未同期" };
+
+  const wallpaperPill: Pill =
+    kiritanAgeMs != null && kiritanAgeMs <= WALLPAPER_STALE_MS ? { tone: "ok", text: "接続中" }
+    : kiritan ? { tone: "warn", text: "受信停止" }
+    : { tone: "warn", text: "未報告" };
+
+  const kiritanMode = kiritan?.modeLabel ?? kiritan?.mode ?? "—";
+  const kiritanPresence = kiritan?.presence === "away" ? "離席" : "在席";
+  const kiritanReceivedAt = kiritan?.receivedAt
+    ? new Date(kiritan.receivedAt).toLocaleTimeString("ja-JP")
+    : "—";
+
   return (
     <section className="tab-panel">
       <header className="panel-head">
@@ -80,6 +118,10 @@ export default function TabStatus() {
         <StatusRow label="HTTP API"
           pill={health?.ok ? { tone: "ok", text: "稼働中" } : { tone: "err", text: "オフライン" }} />
         <StatusRow label="Version" value={health?.version} />
+        <StatusRow label="Wallpaper" pill={wallpaperPill} />
+        {kiritan && <StatusRow label="きりたん" value={`${kiritanMode} / ${kiritanPresence}`} />}
+        {kiritan && <StatusRow label="最終受信" value={`${kiritanReceivedAt} (${formatAge(kiritanAgeMs)}前)`} />}
+        <StatusRow label="Overlay UI" pill={overlayPill} />
         <StatusRow label="Spotify" pill={spotifyPill} />
         {spotify?.track && <StatusRow label="再生中" value={`${spotify.track.title} / ${spotify.track.artist}`} />}
         <StatusRow label="AI Provider" pill={aiPill} />

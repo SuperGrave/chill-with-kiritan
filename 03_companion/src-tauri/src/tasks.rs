@@ -102,6 +102,13 @@ async fn spotify_loop(shared: Shared) {
 
             if let Some(token) = token {
                 if let Ok(track) = services::spotify_now_playing(&http, &token).await {
+                    let lyrics = match &track {
+                        Some(t) => {
+                            let previous = shared.lock().unwrap().state.spotify.lyrics.clone();
+                            services::lyrics_for_track(&http, Some(previous), t).await
+                        }
+                        None => SpotifyLyricsState::default(),
+                    };
                     let mut g = shared.lock().unwrap();
                     let status = match &track {
                         Some(t) if t.is_playing => "playing",
@@ -112,6 +119,7 @@ async fn spotify_loop(shared: Shared) {
                         connected: true,
                         status: status.to_string(),
                         track,
+                        lyrics,
                         error: None,
                     };
                     g.state.updated_at = now_iso();

@@ -1,31 +1,20 @@
-import { Cloud, Music, Bot, Newspaper, NotebookPen, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import '../styles/dock.css';
-
-export type PanelId = 'WEATHER' | 'MUSIC' | 'AI' | 'NEWS' | 'MEMO';
 
 interface RightDockProps {
   layout: { x: number; y: number; width: number; gap: number };
   debugMode: boolean;
-  visibility: Record<PanelId, boolean>;
-  onTogglePanel: (id: PanelId) => void;
   settingsOpen: boolean;
   onToggleSettings: () => void;
   showSettings?: boolean;
 }
 
-// The dock no longer swaps a shared panel — each button toggles the show/hide
-// of its standalone floating panel (active = currently visible). The gear opens
-// the Settings overlay.
+// The dock is now only the entry into Settings. Panel visibility shortcuts live
+// at the top of the Settings surface so accidental wallpaper clicks don't hide UI.
 const RightDock: React.FC<RightDockProps> = ({
-  layout, debugMode, visibility, onTogglePanel, settingsOpen, onToggleSettings, showSettings = true,
+  layout, debugMode, settingsOpen, onToggleSettings, showSettings = true,
 }) => {
-  const buttons: { id: PanelId; label: string; icon: React.ReactNode }[] = [
-    { id: 'WEATHER', label: 'WEATHER', icon: <Cloud size={20} strokeWidth={1.5} /> },
-    { id: 'MUSIC', label: 'MUSIC', icon: <Music size={20} strokeWidth={1.5} /> },
-    { id: 'AI', label: 'AI', icon: <Bot size={20} strokeWidth={1.5} /> },
-    { id: 'NEWS', label: 'NEWS', icon: <Newspaper size={20} strokeWidth={1.5} /> },
-    { id: 'MEMO', label: 'MEMO', icon: <NotebookPen size={20} strokeWidth={1.5} /> },
-  ];
+  if (!showSettings) return null;
 
   return (
     <div
@@ -37,25 +26,14 @@ const RightDock: React.FC<RightDockProps> = ({
         gap: layout.gap,
       }}
     >
-      {buttons.map(btn => (
-        <button
-          key={btn.id}
-          className={`dock-button ${visibility[btn.id] ? 'active' : ''}`}
-          onClick={() => onTogglePanel(btn.id)}
-          title={`Toggle ${btn.label}`}
-        >
-          {btn.icon}
-          <span>{btn.label}</span>
-        </button>
-      ))}
-      {showSettings && <button
+      <button
         className={`dock-button ${settingsOpen ? 'active' : ''}`}
         onClick={onToggleSettings}
         title="Settings"
       >
         <Settings size={20} strokeWidth={1.5} />
         <span>SETTINGS</span>
-      </button>}
+      </button>
     </div>
   );
 };

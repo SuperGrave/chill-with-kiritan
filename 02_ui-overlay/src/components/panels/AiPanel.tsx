@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Send } from 'lucide-react';
 import type { AiState } from '../../types/panels';
 import { mockAi } from '../../data/mockPanels';
@@ -9,10 +9,14 @@ interface AiPanelProps {
   ai?: AiState;
   settings?: any;
   offline?: boolean;
+  onSend?: (text: string) => Promise<boolean>;
 }
 
-const AiPanel: React.FC<AiPanelProps> = ({ ai = mockAi, settings, offline = false }) => {
+const AiPanel: React.FC<AiPanelProps> = ({ ai = mockAi, settings, offline = false, onSend }) => {
   const s = { ...aiPanelDefaults, ...settings };
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const statusTone =
     ai.status === 'error' ? 'error'
@@ -118,10 +122,26 @@ const AiPanel: React.FC<AiPanelProps> = ({ ai = mockAi, settings, offline = fals
       </div>
 
       {s.showInput && (
-        <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexShrink: 0 }}>
+        <form
+          style={{ display: 'flex', gap: '8px', marginTop: '16px', flexShrink: 0 }}
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const text = input.trim();
+            if (!text || !onSend || sending) return;
+            setSending(true);
+            setSendError(null);
+            const ok = await onSend(text);
+            if (ok) setInput('');
+            else setSendError('SEND FAILED');
+            setSending(false);
+          }}
+        >
           <input
             type="text"
             placeholder="MESSAGE TO KIRITAN..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={offline || sending || !onSend}
             style={{
               flexGrow: 1,
               background: 'rgba(0,0,0,0.3)',
@@ -135,7 +155,11 @@ const AiPanel: React.FC<AiPanelProps> = ({ ai = mockAi, settings, offline = fals
               letterSpacing: '0.05em',
             }}
           />
-          <button style={{
+          <button
+            type="submit"
+            disabled={offline || sending || !input.trim() || !onSend}
+            title={sendError ?? undefined}
+            style={{
             background: 'rgba(255,255,255,0.12)',
             border: '1px solid rgba(255,255,255,0.2)',
             borderRadius: '8px',
@@ -145,11 +169,12 @@ const AiPanel: React.FC<AiPanelProps> = ({ ai = mockAi, settings, offline = fals
             alignItems: 'center',
             justifyContent: 'center',
             color: '#fff',
-            cursor: 'pointer',
+            cursor: offline || sending || !input.trim() || !onSend ? 'not-allowed' : 'pointer',
+            opacity: offline || sending || !input.trim() || !onSend ? 0.45 : 1,
           }}>
             <Send size={18} strokeWidth={1.5} />
           </button>
-        </div>
+        </form>
       )}
     </div>
   );

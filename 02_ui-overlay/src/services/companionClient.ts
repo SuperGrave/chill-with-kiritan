@@ -90,3 +90,43 @@ export async function pushCompanionUi(layout: any, settings: any): Promise<boole
     return false;
   }
 }
+
+export async function sendCompanionChat(text: string): Promise<boolean> {
+  try {
+    const token = await companionToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers[TOKEN_HEADER] = token;
+
+    const res = await fetch(`${API_BASE}/chat/send`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ text }),
+    });
+    if (res.status === 401) tokenPromise = null;
+    if (!res.ok) return false;
+    const body = await res.json();
+    return body?.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function sendSpotifyControl(action: 'toggle' | 'next' | 'previous' | 'play' | 'pause'): Promise<boolean> {
+  try {
+    const token = await companionToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers[TOKEN_HEADER] = token;
+
+    const res = await fetch(`${API_BASE}/spotify/control`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action }),
+    });
+    if (res.status === 401) tokenPromise = null;
+    if (!res.ok) return false;
+    const body = await res.json();
+    return body?.ok === true;
+  } catch {
+    return false;
+  }
+}

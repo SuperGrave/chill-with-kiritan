@@ -10,6 +10,7 @@ interface MusicPanelProps {
   spotify?: SpotifyState;
   settings?: any;
   offline?: boolean;
+  onControl?: (action: 'toggle' | 'next' | 'previous') => Promise<boolean>;
 }
 
 const formatMs = (ms?: number): string => {
@@ -20,7 +21,8 @@ const formatMs = (ms?: number): string => {
   return `${m}:${sec}`;
 };
 
-const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings, offline = false }) => {
+const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings, offline = false, onControl }) => {
+  const [busyAction, setBusyAction] = React.useState<string | null>(null);
   const s = { ...musicPanelDefaults, ...settings };
   const track = spotify.track;
 
@@ -33,6 +35,31 @@ const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings
     spotify.status === 'playing' ? 'ok'
     : spotify.status === 'error' ? 'error'
     : 'neutral';
+
+  const controlsDisabled = offline || !spotify.connected || !onControl || busyAction !== null;
+  const runControl = async (action: 'toggle' | 'next' | 'previous') => {
+    if (controlsDisabled) return;
+    setBusyAction(action);
+    try {
+      await onControl?.(action);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const controlButtonStyle: React.CSSProperties = {
+    width: `${s.controlSize * 1.8}px`,
+    height: `${s.controlSize * 1.8}px`,
+    display: 'grid',
+    placeItems: 'center',
+    border: '1px solid rgba(255,255,255,0.16)',
+    borderRadius: '999px',
+    background: 'rgba(255,255,255,0.04)',
+    color: '#fff',
+    cursor: controlsDisabled ? 'not-allowed' : 'pointer',
+    opacity: controlsDisabled ? 0.35 : 0.78,
+    padding: 0,
+  };
 
   return (
     <div style={{
@@ -128,13 +155,19 @@ const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings
           gap: '32px',
           marginTop: '4px',
         }}>
-          <SkipBack size={s.controlSize} strokeWidth={1.5} style={{ cursor: 'pointer', opacity: 0.7 }} />
-          {spotify.status === 'playing' ? (
-            <Pause size={s.controlSize * 1.2} strokeWidth={1.5} style={{ cursor: 'pointer' }} />
-          ) : (
-            <Play size={s.controlSize * 1.2} strokeWidth={1.5} style={{ cursor: 'pointer' }} />
-          )}
-          <SkipForward size={s.controlSize} strokeWidth={1.5} style={{ cursor: 'pointer', opacity: 0.7 }} />
+          <button type="button" aria-label="Previous track" title="Previous track" style={controlButtonStyle} disabled={controlsDisabled} onClick={() => runControl('previous')}>
+            <SkipBack size={s.controlSize} strokeWidth={1.5} />
+          </button>
+          <button type="button" aria-label="Play or pause" title="Play or pause" style={{ ...controlButtonStyle, width: `${s.controlSize * 2.2}px`, height: `${s.controlSize * 2.2}px`, opacity: controlsDisabled ? 0.35 : 1 }} disabled={controlsDisabled} onClick={() => runControl('toggle')}>
+            {spotify.status === 'playing' ? (
+              <Pause size={s.controlSize * 1.2} strokeWidth={1.5} />
+            ) : (
+              <Play size={s.controlSize * 1.2} strokeWidth={1.5} />
+            )}
+          </button>
+          <button type="button" aria-label="Next track" title="Next track" style={controlButtonStyle} disabled={controlsDisabled} onClick={() => runControl('next')}>
+            <SkipForward size={s.controlSize} strokeWidth={1.5} />
+          </button>
         </div>
       )}
 

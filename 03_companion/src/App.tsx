@@ -6,7 +6,6 @@ import TabMemo from "./tabs/TabMemo";
 import TabBookmark from "./tabs/TabBookmark";
 import TabSettings from "./tabs/TabSettings";
 import TabStatus from "./tabs/TabStatus";
-import TabDisplay from "./tabs/TabDisplay";
 import {
   ChatIcon,
   TodoIcon,
@@ -14,17 +13,15 @@ import {
   BookmarkIcon,
   SettingsIcon,
   StatusIcon,
-  DisplayIcon,
 } from "./icons";
 
-type Tab = "chat" | "todo" | "memo" | "bookmark" | "display" | "settings" | "status";
+type Tab = "chat" | "todo" | "memo" | "bookmark" | "settings" | "status";
 
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: "chat",     label: "チャット", icon: <ChatIcon /> },
   { id: "todo",     label: "TODO",     icon: <TodoIcon /> },
   { id: "memo",     label: "メモ",     icon: <MemoIcon /> },
   { id: "bookmark", label: "リンク",   icon: <BookmarkIcon /> },
-  { id: "display",  label: "表示",     icon: <DisplayIcon /> },
   { id: "settings", label: "設定",     icon: <SettingsIcon /> },
   { id: "status",   label: "状態",     icon: <StatusIcon /> },
 ];
@@ -36,7 +33,6 @@ const PAGES: { id: Tab; fill?: boolean; node: ReactNode }[] = [
   { id: "todo",     node: <TabTodo /> },
   { id: "memo",     node: <TabMemo /> },
   { id: "bookmark", node: <TabBookmark /> },
-  { id: "display",  node: <TabDisplay /> },
   { id: "settings", node: <TabSettings /> },
   { id: "status",   node: <TabStatus /> },
 ];

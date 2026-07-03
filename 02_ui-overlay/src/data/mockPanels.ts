@@ -52,12 +52,26 @@ export const mockSpotify: SpotifyState = {
   connected: true,
   status: 'playing',
   track: {
+    id: 'mock-track',
     title: 'Chill Vibes Vol. 1',
     artist: 'Lofi Kiritan',
     album: 'Tohoku Tapes',
     albumArtUrl: undefined,
     durationMs: 225_000,
     progressMs: 83_000,
+    isPlaying: true,
+  },
+  lyrics: {
+    trackId: 'mock-track',
+    source: 'LRCLIB',
+    status: 'synced',
+    synced: true,
+    lines: [
+      { time: 72, text: 'Soft keys glow in the evening light' },
+      { time: 83, text: 'Kiritan hums along beside the screen' },
+      { time: 94, text: 'Tiny words drift with the melody' },
+    ],
+    error: null,
   },
 };
 

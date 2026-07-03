@@ -28,18 +28,35 @@ export type AiState = {
 };
 
 export type SpotifyTrack = {
+  id?: string;
   title: string;
   artist: string;
   album?: string;
   albumArtUrl?: string;
   durationMs?: number;
   progressMs?: number;
+  isPlaying?: boolean;
+};
+
+export type LyricLine = {
+  time?: number | null;
+  text: string;
+};
+
+export type SpotifyLyricsState = {
+  trackId?: string | null;
+  source?: string | null;
+  status: 'idle' | 'synced' | 'plain' | 'empty' | 'error';
+  synced: boolean;
+  lines: LyricLine[];
+  error?: string | null;
 };
 
 export type SpotifyState = {
   connected: boolean;
-  status: 'idle' | 'playing' | 'paused' | 'error';
+  status: 'idle' | 'playing' | 'paused' | 'error' | 'unconfigured';
   track?: SpotifyTrack;
+  lyrics?: SpotifyLyricsState;
   error?: string;
 };
 

@@ -173,6 +173,18 @@ export class ExternalMotionController {
   }
 
   /**
+   * Seamless clip-to-clip handover: restart the envelope at 0 so the incoming
+   * clip sweeps in over its fadeIn. The viewer pairs this with a pose snapshot
+   * of the outgoing clip as the blend BASE, so weight 0 shows the captured
+   * pose (not the standing idle) and the swap never dips through rest.
+   * Call after the swap + play().
+   */
+  beginSeamlessHandover(): void {
+    this.blend = 0;
+    this.blendTarget = 1;
+  }
+
+  /**
    * The AnimationAction reached the end of a oneshot (mixer 'finished' event):
    * fade back to idle. Without this the controller kept reporting playing=true
    * and the envelope sat at 1 forever, so the next replay swapped clips at full

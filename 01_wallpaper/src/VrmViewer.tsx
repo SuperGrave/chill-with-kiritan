@@ -389,13 +389,51 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     extControllerRef.current.setClipInfo({ loaded: true, name: clip.name, source, hasExpressionTracks });
   };
 
-  // Clip-swap queue (0.7.2 replay-glitch fix). switchClip() hard-resets the
-  // outgoing bones, which is only invisible while the external weight is 0 —
-  // swapping mid-blend teleported the pose and sent the spring bones (hair /
-  // sleeves) flailing. So: requests fade the current clip out first and the
-  // rAF loop executes the swap on the frame the envelope reaches 0. A newer
-  // request simply replaces the pending one (last selection wins).
-  const pendingSwapRef = useRef<ClipSwapRequest | null>(null);
+  // Clip-swap queue (0.7.2 replay-glitch fix, reworked 0.8.1). switchClip()
+  // hard-resets the outgoing bones, which is only invisible while the external
+  // weight is 0 — swapping mid-blend teleported the pose and sent the spring
+  // bones (hair / sleeves) flailing. Two queue flavors now:
+  //   * seamless=false: fade the current clip out first; the rAF loop executes
+  //     the swap on the frame the envelope reaches 0 (plain return-to-idle arm).
+  //   * seamless=true (autoPlay requests while a clip is visible): the rAF loop
+  //     executes the swap on the NEXT frame — it snapshots the composed pose
+  //     into transitionHoldRef, swaps immediately, and restarts the envelope at
+  //     0 so the new clip sweeps in FROM the snapshot. The pose crossfades
+  //     clip→clip and never dips through the standing idle (the "stands up
+  //     between motions" bug). Queued rather than executed inline because
+  //     'finished'-driven requests arrive mid mixer.update(), where rebuilding
+  //     the AnimationAction is unsafe.
+  // A newer request simply replaces the pending one (last selection wins).
+  const pendingSwapRef = useRef<{ req: ClipSwapRequest; seamless: boolean } | null>(null);
+  // Seamless-handover pose snapshot: while non-null, the compose step blends
+  // FROM these captured rotations (and hips offset) toward the incoming clip as
+  // its envelope sweeps 0→1, instead of from the standing rest pose. Cleared
+  // once the sweep completes (or on a plain fade-to-idle).
+  const transitionHoldRef = useRef<{ bones: Map<string, THREE.Quaternion>; hips: THREE.Vector3 | null } | null>(null);
+
+  // Snapshot the currently VISIBLE composed pose (post idle-offset) of every
+  // bone either the outgoing or incoming clip touches, plus the currently
+  // applied hips offset. Read BEFORE switchClip's hard reset.
+  const captureTransitionHold = (
+    incomingBoneNames: string[],
+  ): { bones: Map<string, THREE.Quaternion>; hips: THREE.Vector3 | null } | null => {
+    const vrm = vrmRef.current;
+    if (!vrm?.humanoid) return null;
+    const names = new Set<string>([
+      ...IDLE_APPLY_BONES,
+      ...clipBoneNamesRef.current,
+      ...incomingBoneNames,
+    ]);
+    const bones = new Map<string, THREE.Quaternion>();
+    for (const name of names) {
+      const node = vrm.humanoid.getNormalizedBoneNode(name as never);
+      if (node) bones.set(name, node.quaternion.clone());
+    }
+    const hipsNode = vrm.humanoid.getNormalizedBoneNode('hips' as never);
+    const hipsRest = initialHipsPosRef.current;
+    const hips = hipsNode && hipsRest ? hipsNode.position.clone().sub(hipsRest) : null;
+    return { bones, hips };
+  };
   // Lab context-loop settle (issue #1): a loop the host swaps to when the
   // current standalone one-shot finishes, instead of fading to the standing
   // idle. Armed/cleared by the Lab via setPendingSettle; consumed once on finish.
@@ -451,6 +489,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   };
 
   const executeClipSwap = (req: ClipSwapRequest) => {
+    // A plain swap invalidates any handover snapshot (the seamless path in the
+    // rAF loop re-arms it right after this call).
+    transitionHoldRef.current = null;
     // Return any prop the OUTGOING clip still holds before swapping (no float).
     cleanupAttachedProps();
     switchClip(req.clip, req.boneNames, req.source, req.hasExpressionTracks);
@@ -479,8 +520,13 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     if (!actionRef.current || ext.getDebug().blend <= 1e-4) {
       pendingSwapRef.current = null;
       executeClipSwap(req); // nothing visible to fade — swap on the spot
+    } else if (req.autoPlay) {
+      // A clip is visible and the new one starts right away → seamless
+      // handover (see pendingSwapRef). No returnToIdle: the envelope keeps
+      // its value until the rAF loop lands the swap next frame.
+      pendingSwapRef.current = { req, seamless: true };
     } else {
-      pendingSwapRef.current = req;
+      pendingSwapRef.current = { req, seamless: false };
       ext.returnToIdle(); // fade out with the OUTGOING motion's declared fadeOut
     }
   };
@@ -1385,6 +1431,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     const _ikDeltaQ = new THREE.Quaternion();
     const _ikNewWorldQ = new THREE.Quaternion();
     const _ikIdentityQ = new THREE.Quaternion();
+    const _ikPreUpperQ = new THREE.Quaternion();
+    const _ikPreLowerQ = new THREE.Quaternion();
+    const _ikPostQ = new THREE.Quaternion();
 
     const clearWorkHandPins = () => {
       workHandPinGroup = null;
@@ -1464,11 +1513,16 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       humanoid: NonNullable<VRM['humanoid']>,
       side: 'left' | 'right',
       target: THREE.Vector3,
+      strength: number,
     ) => {
+      if (strength <= 0) return;
       const upperArm = humanoid.getNormalizedBoneNode(`${side}UpperArm` as never);
       const lowerArm = humanoid.getNormalizedBoneNode(`${side}LowerArm` as never);
       const hand = humanoid.getNormalizedBoneNode(`${side}Hand` as never);
       if (!upperArm || !lowerArm || !hand) return;
+
+      _ikPreUpperQ.copy(upperArm.quaternion);
+      _ikPreLowerQ.copy(lowerArm.quaternion);
 
       // CCD order: wrist-side joint first, then shoulder-side joint.
       for (let i = 0; i < 4; i++) {
@@ -1476,6 +1530,16 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         rotateArmJointToward(lowerArm, hand, target);
         vrmRef.current?.scene.updateMatrixWorld(true);
         rotateArmJointToward(upperArm, hand, target);
+      }
+
+      // Partial strength (a work clip fading out to idle): blend the corrected
+      // joints back toward their pre-IK rotations so the pin releases with the
+      // envelope instead of snapping off at weight 0.
+      if (strength < 1) {
+        _ikPostQ.copy(upperArm.quaternion);
+        upperArm.quaternion.slerpQuaternions(_ikPreUpperQ, _ikPostQ, strength);
+        _ikPostQ.copy(lowerArm.quaternion);
+        lowerArm.quaternion.slerpQuaternions(_ikPreLowerQ, _ikPostQ, strength);
       }
     };
 
@@ -1486,6 +1550,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       clipName: string | undefined,
       clipTime: number,
       delta: number,
+      strength: number,
     ) => {
       const humanoid = vrm.humanoid;
       if (!humanoid || !policy) {
@@ -1535,14 +1600,14 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         if (hasKeyboardSlideAxis) {
           _ikWorldTarget.addScaledVector(keyboardSlideAxis, leftKeyboardSlide);
         }
-        pinArmToTarget(humanoid, 'left', _ikWorldTarget);
+        pinArmToTarget(humanoid, 'left', _ikWorldTarget, strength);
       }
       if (policy.right && hasRightHandTarget) {
         _ikWorldTarget.copy(rightHandTarget);
         if (hasKeyboardSlideAxis) {
           _ikWorldTarget.addScaledVector(keyboardSlideAxis, rightKeyboardSlide);
         }
-        pinArmToTarget(humanoid, 'right', _ikWorldTarget);
+        pinArmToTarget(humanoid, 'right', _ikWorldTarget, strength);
       }
       vrm.scene.updateMatrixWorld(true);
     };
@@ -1702,16 +1767,27 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         const machine = idleMachineRef.current;
         const idleOut = machine.update(updateDelta);
         const extCtrl = extControllerRef.current;
-        const ext = extCtrl.update(updateDelta);
+        let ext = extCtrl.update(updateDelta);
         const presetOut = exprOverlayRef.current.update(updateDelta);
 
-        // 1a'. Deferred clip swap (0.7.2): land the pending swap on the frame
-        //      the envelope reaches 0 — the hard bone reset inside switchClip
-        //      is invisible at weight 0 and the spring bones see no teleport.
-        if (pendingSwapRef.current && ext.blend <= 1e-4) {
-          const req = pendingSwapRef.current;
+        // 1a'. Deferred clip swap. seamless=false lands on the frame the
+        //      envelope reaches 0 (hard reset invisible at weight 0, 0.7.2).
+        //      seamless=true lands immediately: snapshot the visible pose,
+        //      swap, restart the envelope at 0 — the compose step below blends
+        //      snapshot→new clip, so the swap frame shows the exact held pose
+        //      and the spring bones still see no teleport (0.8.1).
+        if (pendingSwapRef.current && (pendingSwapRef.current.seamless || ext.blend <= 1e-4)) {
+          const { req, seamless } = pendingSwapRef.current;
           pendingSwapRef.current = null;
-          executeClipSwap(req);
+          if (seamless) {
+            const hold = captureTransitionHold(req.boneNames);
+            executeClipSwap(req);
+            transitionHoldRef.current = hold;
+            extCtrl.beginSeamlessHandover();
+            ext = extCtrl.getDebug(); // envelope restarted — re-read for this frame
+          } else {
+            executeClipSwap(req);
+          }
         }
 
         // 1a-dir. Director (INF-5): advance the FSM + ambient scheduler in real
@@ -1778,8 +1854,12 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
             action.paused = true;
           }
         }
+        // Pin policy follows the ACTIVE-or-INCOMING clip: extCtrl.isPlaying()
+        // keeps it alive through the one-frame weight dip of a seamless
+        // handover, so keyboard-group pin targets survive in-group swaps and
+        // the wrists stay planted through the crossfade.
         const workHandPinPolicy = getWorkHandPinPolicy(
-          clipActive ? action?.getClip().name : undefined,
+          clipActive || extCtrl.isPlaying() ? action?.getClip().name : undefined,
         );
 
         // 1a''. Motion face channel (0.2): sample the DSL clip's exprCues /
@@ -1810,14 +1890,25 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           const clipSet = clipBoneSetRef.current;
           const w = ext.weight;
 
+          // Seamless handover: drop the snapshot once the incoming clip is
+          // fully in, or when the envelope is falling toward the standing idle
+          // (a real stop) — the snapshot must never become the resting pose.
+          if (transitionHoldRef.current && (w >= 0.999 || !extCtrl.isPlaying())) {
+            transitionHoldRef.current = null;
+          }
+          const hold = transitionHoldRef.current;
+
           for (const boneName of IDLE_APPLY_BONES) {
             const initQ = cache.get(boneName);
             const node = vrm.humanoid.getNormalizedBoneNode(boneName as never);
             if (!initQ || !node) continue;
+            const holdQ = hold?.bones.get(boneName);
             const pure = clipActive && clipSet.has(boneName) ? clipPoseRef.current.get(boneName) : undefined;
             if (pure) {
               _extClipQ.copy(pure.q); // PURE clip rotation (cache invariant — never our own write)
-              _extBaseQ.copy(initQ).slerp(_extClipQ, w);
+              _extBaseQ.copy(holdQ ?? initQ).slerp(_extClipQ, w);
+            } else if (holdQ) {
+              _extBaseQ.copy(holdQ).slerp(initQ, w);
             } else {
               _extBaseQ.copy(initQ);
             }
@@ -1826,10 +1917,12 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
               // Work clips retain a subtle living motion, but suppress the
               // large global idle sway that otherwise moves both shoulders and
               // hands through the torso hierarchy. The IK below removes the
-              // remaining end-effector drift.
-              const workIdleScale = workHandPinPolicy
+              // remaining end-effector drift. A handover snapshot already
+              // embeds the offset it was captured with, so while it holds, the
+              // live offset fades in with the envelope (no double-counting).
+              const workIdleScale = (workHandPinPolicy
                 ? (boneName === 'head' || boneName === 'neck' ? 0.38 : 0.28)
-                : 1;
+                : 1) * (holdQ ? w : 1);
               _extOffsetQ.setFromEuler(_extEuler.set(
                 e.x * workIdleScale,
                 e.y * workIdleScale,
@@ -1842,26 +1935,46 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           }
 
           // Clip-only bones (outside the idle set; e.g. a .vrma's arms/hips/legs):
-          // slerp rest->clip by weight, or hold the cached rest when not active
-          // (so arms return to the drop pose, never a T-pose).
+          // slerp rest->clip by weight (from the handover snapshot when one is
+          // held), or hold the cached rest when not active (so arms return to
+          // the drop pose, never a T-pose).
           for (const boneName of clipBoneNamesRef.current) {
             if (IDLE_BONE_SET.has(boneName)) continue;
             const initQ = cache.get(boneName);
             const node = vrm.humanoid.getNormalizedBoneNode(boneName as never);
             if (!initQ || !node) continue;
+            const holdQ = hold?.bones.get(boneName);
             const pure = clipActive ? clipPoseRef.current.get(boneName) : undefined;
             if (pure) {
               _extClipQ.copy(pure.q); // PURE clip rotation (cache invariant)
-              node.quaternion.copy(initQ).slerp(_extClipQ, w);
+              node.quaternion.copy(holdQ ?? initQ).slerp(_extClipQ, w);
+            } else if (holdQ) {
+              node.quaternion.copy(holdQ);
             } else {
               node.quaternion.copy(initQ);
+            }
+          }
+
+          // Bones only the OUTGOING clip drove (in the snapshot, absent from
+          // the incoming clip): ease them back to rest as the new clip sweeps
+          // in, so switchClip's hard reset never shows as a snap.
+          if (hold) {
+            for (const [boneName, holdQ] of hold.bones) {
+              if (IDLE_BONE_SET.has(boneName) || clipSet.has(boneName)) continue;
+              const initQ = cache.get(boneName);
+              const node = vrm.humanoid.getNormalizedBoneNode(boneName as never);
+              if (!initQ || !node) continue;
+              node.quaternion.copy(holdQ).slerp(initQ, w);
             }
           }
 
           // Hips POSITION for a seated DSL posture (試験B). A rotations-only
           // clip never writes hips.position, so this is the sole writer:
           // hips = rest + offset * weight, fading in/out exactly with the clip
-          // bone blend. When no seated offset is active, hold the rest position.
+          // bone blend. During a seamless handover the captured offset fills
+          // the (1-w) remainder, so a seated hip never pops up to the standing
+          // rest height between two seated clips. When no offset is active,
+          // hold the rest position.
           const hipsNode = vrm.humanoid.getNormalizedBoneNode('hips' as never);
           const hipsRest = initialHipsPosRef.current;
           if (hipsNode && hipsRest) {
@@ -1872,8 +1985,14 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
               const curve = clipHipsCurveRef.current;
               ho = curve && action ? sampleHipsCurve(curve, action.time) : clipHipsOffsetRef.current;
             }
-            if (ho) {
-              _hipsPos.set(hipsRest.x + ho[0] * w, hipsRest.y + ho[1] * w, hipsRest.z + ho[2] * w);
+            const holdHips = hold?.hips ?? null;
+            if (ho || holdHips) {
+              const hw = holdHips ? 1 - w : 0;
+              _hipsPos.set(
+                hipsRest.x + (holdHips ? holdHips.x * hw : 0) + (ho ? ho[0] * w : 0),
+                hipsRest.y + (holdHips ? holdHips.y * hw : 0) + (ho ? ho[1] * w : 0),
+                hipsRest.z + (holdHips ? holdHips.z * hw : 0) + (ho ? ho[2] * w : 0),
+              );
               hipsNode.position.copy(_hipsPos);
             } else {
               hipsNode.position.copy(hipsRest);
@@ -1930,6 +2049,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           action?.getClip().name,
           action?.time ?? 0,
           updateDelta,
+          // Full pin while the clip is in/holding; while a work clip fades out
+          // to idle, release with the envelope (no snap-off at weight 0).
+          extCtrl.isPlaying() ? 1 : ext.weight,
         );
 
         // 2. Apply NormalizedBone rotations to RawBones

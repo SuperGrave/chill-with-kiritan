@@ -48,7 +48,7 @@ import { installPoseComposerPanel } from './lib/lab/poseComposer/poseComposerPan
 import { DirectorRunner } from './lib/motion/director/directorRunner';
 import { KiritanPoster } from './lib/motion/director/kiritanPoster';
 import { resolveTransitionChain } from './lib/motion/director/modeTable';
-import { PHASE1_MODE_LOOP } from './lib/motion/director/motionContext';
+import { PHASE1_MODE_LOOP, contextReturnLoop } from './lib/motion/director/motionContext';
 import {
   LEAVE_SEQ, RETURN_SEQ, AWAY_MOTIONS, seqAt, seqDuration, leaveRoot, returnRoot,
 } from './lib/motion/director/awayWalk';
@@ -144,6 +144,11 @@ const DIRECTOR_TRANSITIONS: string[] = [
   'tr_lean_back',    // work → video (recline)
   'tr_lean_forward', // video → work (sit up)
 ];
+
+function sittingFallbackLoop(posture: string | null | undefined, currentMode: ModeId | null): string | null {
+  if (!posture?.startsWith('sit_')) return null;
+  return (currentMode ? DIRECTOR_LOOPS[currentMode] : null) ?? DIRECTOR_LOOPS.work_normal ?? null;
+}
 
 export interface VrmViewerProps {
   cameraMode: CameraMode;
@@ -460,9 +465,36 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     }
   };
 
+  const loadDslSwapRequest = async (motionId: string, autoPlay: boolean): Promise<ClipSwapRequest | null> => {
+    const vrm = vrmRef.current;
+    if (!vrm) return null;
+    const result = await loadMotionDoc(motionId);
+    if (!result.ok) {
+      console.warn(`[EXT] DSL settle load failed: ${motionId}`, result.errors);
+      return null;
+    }
+    const compiled = compileDslClip(result.evaluator, vrm);
+    return {
+      clip: compiled.clip,
+      boneNames: compiled.boneNames,
+      source: 'dsl',
+      hasExpressionTracks: false,
+      autoPlay,
+      loop: result.evaluator.loop,
+      fadeIn: result.doc.motion.fadeIn,
+      fadeOut: result.doc.motion.fadeOut,
+      faceTimeline: result.evaluator.faceTimeline,
+      hipsOffset: compiled.hipsOffset,
+      hipsCurve: compiled.hipsCurve,
+      rootCurve: compiled.rootCurve,
+      microEvents: result.doc.motion.microEvents ?? null,
+    };
+  };
+
   const activateBuiltinClip = (autoPlay = false) => {
     const vrm = vrmRef.current;
     if (!vrm) return;
+    pendingSettleRef.current = null;
     const built = buildProceduralClip(vrm);
     requestClipSwap({
       clip: built.clip,
@@ -478,6 +510,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   const loadVrmaFrom = (url: string, opts?: { label?: string; autoPlay?: boolean }) => {
     const vrm = vrmRef.current;
     if (!vrm) return;
+    pendingSettleRef.current = null;
     propsRef.current.onStatusUpdate(`Loading .vrma ${opts?.label ?? url} ...`);
     loadVrmaClip(url, vrm)
       .then((loaded) => {
@@ -528,7 +561,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     }
     propsRef.current.onStatusUpdate(`Loading motion "${req.ref}" ...`);
     loadMotionDoc(req.ref)
-      .then((result) => {
+      .then(async (result) => {
         if (!result.ok) {
           const first = result.errors[0];
           console.warn('[EXT] DSL motion load failed:', result.errors);
@@ -536,7 +569,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           return;
         }
         const compiled = compileDslClip(result.evaluator, vrm);
-        requestClipSwap({
+        const swapReq: ClipSwapRequest = {
           clip: compiled.clip,
           boneNames: compiled.boneNames,
           source: 'dsl',
@@ -550,13 +583,27 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           hipsCurve: compiled.hipsCurve,
           rootCurve: compiled.rootCurve,
           microEvents: result.doc.motion.microEvents ?? null,
-        });
+        };
+        pendingSettleRef.current = null;
+        let settleLoop: string | null = null;
+        if (req.play && !result.evaluator.loop) {
+          const currentMode = directorRef.current?.status().mode ?? null;
+          settleLoop = contextReturnLoop(req.ref) ?? sittingFallbackLoop(result.doc.motion.posture, currentMode);
+          if (settleLoop) {
+            pendingSettleRef.current =
+              directorClipsRef.current.get(settleLoop) ?? (await loadDslSwapRequest(settleLoop, true));
+          }
+        }
+        requestClipSwap(swapReq);
         const label = req.label ?? result.doc.motion.label ?? req.ref;
         console.log(
           `[EXT] DSL motion "${req.ref}" compiled: ${compiled.boneNames.length} bones, ${result.evaluator.duration}s` +
             (compiled.missingBones.length ? ` (model lacks: ${compiled.missingBones.join(',')})` : ''),
         );
-        propsRef.current.onStatusUpdate(`External clip: ${label} (DSL, ${result.evaluator.duration}s)`);
+        propsRef.current.onStatusUpdate(
+          `External clip: ${label} (DSL, ${result.evaluator.duration}s)` +
+            (pendingSettleRef.current ? ` → ${settleLoop}` : ''),
+        );
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);

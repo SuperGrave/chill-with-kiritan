@@ -104,6 +104,26 @@ const VRMA_SAMPLE_PATH = '/motions/sample_idle.vrma';
 const IDLE_APPLY_BONES: IdleBoneName[] = ['chest', 'spine', 'neck', 'head', 'leftShoulder', 'rightShoulder'];
 const IDLE_BONE_SET = new Set<string>(IDLE_APPLY_BONES);
 
+type WorkHandPinPolicy = {
+  group: 'keyboard';
+  left: boolean;
+  right: boolean;
+};
+
+// Keyboard-work clips keep the hand origins planted while the torso breathes.
+// The sip animation releases the cup hand, but retains the other hand's target
+// and rejoins the same pin group when the base typing loop resumes.
+const WORK_HAND_PIN_POLICIES: Record<string, WorkHandPinPolicy> = {
+  dsl_loop_work_normal: { group: 'keyboard', left: true, right: true },
+  dsl_amb_work_neck_roll: { group: 'keyboard', left: true, right: true },
+  dsl_amb_work_screen_scan: { group: 'keyboard', left: true, right: true },
+  dsl_amb_work_posture_reset: { group: 'keyboard', left: true, right: true },
+  dsl_amb_work_sip: { group: 'keyboard', left: false, right: true },
+};
+
+const getWorkHandPinPolicy = (clipName: string | undefined): WorkHandPinPolicy | null =>
+  clipName ? WORK_HAND_PIN_POLICIES[clipName] ?? null : null;
+
 // Camera presets, extracted to module scope (0.7) so the animate loop and the
 // Motion Lab share ONE table. Values are unchanged from 0.1/0.6.
 const CAMERA_PRESETS: Record<Exclude<CameraMode, 'free'>, { pos: [number, number, number]; look: [number, number, number] }> = {
@@ -1342,6 +1362,191 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     const _extEuler = new THREE.Euler();
     const _hipsPos = new THREE.Vector3();
 
+    // Runtime end-effector pinning for keyboard work. Targets live in world
+    // space because the keyboard is a scene prop, not part of the character
+    // hierarchy. Only upper/lower arms are corrected; hand/finger rotations
+    // remain authored by the motion clip.
+    let workHandPinGroup: WorkHandPinPolicy['group'] | null = null;
+    let hasLeftHandTarget = false;
+    let hasRightHandTarget = false;
+    const leftHandTarget = new THREE.Vector3();
+    const rightHandTarget = new THREE.Vector3();
+    const keyboardSlideAxis = new THREE.Vector3();
+    let hasKeyboardSlideAxis = false;
+    let leftKeyboardSlide = 0;
+    let rightKeyboardSlide = 0;
+    const _ikEffectorPos = new THREE.Vector3();
+    const _ikJointPos = new THREE.Vector3();
+    const _ikCurrentDir = new THREE.Vector3();
+    const _ikTargetDir = new THREE.Vector3();
+    const _ikWorldTarget = new THREE.Vector3();
+    const _ikJointWorldQ = new THREE.Quaternion();
+    const _ikParentWorldQ = new THREE.Quaternion();
+    const _ikDeltaQ = new THREE.Quaternion();
+    const _ikNewWorldQ = new THREE.Quaternion();
+    const _ikIdentityQ = new THREE.Quaternion();
+
+    const clearWorkHandPins = () => {
+      workHandPinGroup = null;
+      hasLeftHandTarget = false;
+      hasRightHandTarget = false;
+      hasKeyboardSlideAxis = false;
+      leftKeyboardSlide = 0;
+      rightKeyboardSlide = 0;
+    };
+
+    const smoothStep01 = (v: number) => {
+      const t = THREE.MathUtils.clamp(v, 0, 1);
+      return t * t * (3 - 2 * t);
+    };
+
+    const heldPulse = (
+      t: number,
+      start: number,
+      arrive: number,
+      leave: number,
+      end: number,
+    ) => {
+      if (t <= start || t >= end) return 0;
+      if (t < arrive) return smoothStep01((t - start) / (arrive - start));
+      if (t <= leave) return 1;
+      return 1 - smoothStep01((t - leave) / (end - leave));
+    };
+
+    const sampleKeyboardSlide = (
+      clipName: string | undefined,
+      clipTime: number,
+      side: 'left' | 'right',
+    ) => {
+      if (clipName !== 'dsl_loop_work_normal') return 0;
+      // Two restrained key-region changes per 16 s loop. The asymmetric
+      // distances keep the hands from reading as a rigid pair translation.
+      const towardRight = heldPulse(clipTime, 3.2, 4.0, 5.2, 6.0);
+      const towardLeft = heldPulse(clipTime, 10.0, 10.8, 12.2, 13.1);
+      if (side === 'left') return towardRight * 0.045 - towardLeft * 0.034;
+      return towardRight * 0.034 - towardLeft * 0.05;
+    };
+
+    const rotateArmJointToward = (
+      joint: THREE.Object3D,
+      effector: THREE.Object3D,
+      target: THREE.Vector3,
+    ) => {
+      effector.getWorldPosition(_ikEffectorPos);
+      joint.getWorldPosition(_ikJointPos);
+      _ikCurrentDir.copy(_ikEffectorPos).sub(_ikJointPos);
+      _ikTargetDir.copy(target).sub(_ikJointPos);
+      if (_ikCurrentDir.lengthSq() < 1e-10 || _ikTargetDir.lengthSq() < 1e-10) return;
+
+      _ikCurrentDir.normalize();
+      _ikTargetDir.normalize();
+      _ikDeltaQ.setFromUnitVectors(_ikCurrentDir, _ikTargetDir);
+
+      // Bound one CCD correction so a bad/temporarily unreachable target can
+      // never snap the arm. Four small iterations are ample for breathing drift.
+      const angle = 2 * Math.acos(THREE.MathUtils.clamp(_ikDeltaQ.w, -1, 1));
+      const maxStep = 0.12;
+      if (angle > maxStep) {
+        _ikDeltaQ.slerpQuaternions(_ikIdentityQ, _ikDeltaQ, maxStep / angle);
+      }
+
+      joint.getWorldQuaternion(_ikJointWorldQ);
+      _ikNewWorldQ.copy(_ikDeltaQ).multiply(_ikJointWorldQ);
+      if (joint.parent) {
+        joint.parent.getWorldQuaternion(_ikParentWorldQ).invert();
+        joint.quaternion.copy(_ikParentWorldQ).multiply(_ikNewWorldQ).normalize();
+      } else {
+        joint.quaternion.copy(_ikNewWorldQ).normalize();
+      }
+    };
+
+    const pinArmToTarget = (
+      humanoid: NonNullable<VRM['humanoid']>,
+      side: 'left' | 'right',
+      target: THREE.Vector3,
+    ) => {
+      const upperArm = humanoid.getNormalizedBoneNode(`${side}UpperArm` as never);
+      const lowerArm = humanoid.getNormalizedBoneNode(`${side}LowerArm` as never);
+      const hand = humanoid.getNormalizedBoneNode(`${side}Hand` as never);
+      if (!upperArm || !lowerArm || !hand) return;
+
+      // CCD order: wrist-side joint first, then shoulder-side joint.
+      for (let i = 0; i < 4; i++) {
+        vrmRef.current?.scene.updateMatrixWorld(true);
+        rotateArmJointToward(lowerArm, hand, target);
+        vrmRef.current?.scene.updateMatrixWorld(true);
+        rotateArmJointToward(upperArm, hand, target);
+      }
+    };
+
+    const applyWorkHandPins = (
+      vrm: VRM,
+      policy: WorkHandPinPolicy | null,
+      weight: number,
+      clipName: string | undefined,
+      clipTime: number,
+      delta: number,
+    ) => {
+      const humanoid = vrm.humanoid;
+      if (!humanoid || !policy) {
+        clearWorkHandPins();
+        return;
+      }
+
+      // Capture only after the work clip has essentially reached its authored
+      // contact pose. Targets survive swaps within the keyboard-work group.
+      if (workHandPinGroup !== policy.group) {
+        clearWorkHandPins();
+        if (weight < 0.98) return;
+        workHandPinGroup = policy.group;
+      }
+
+      vrm.scene.updateMatrixWorld(true);
+      const leftHand = humanoid.getNormalizedBoneNode('leftHand' as never);
+      const rightHand = humanoid.getNormalizedBoneNode('rightHand' as never);
+      if (policy.left && !hasLeftHandTarget && leftHand) {
+        leftHand.getWorldPosition(leftHandTarget);
+        hasLeftHandTarget = true;
+      }
+      if (policy.right && !hasRightHandTarget && rightHand) {
+        rightHand.getWorldPosition(rightHandTarget);
+        hasRightHandTarget = true;
+      }
+      if (!hasKeyboardSlideAxis && hasLeftHandTarget && hasRightHandTarget) {
+        keyboardSlideAxis.copy(rightHandTarget).sub(leftHandTarget);
+        if (keyboardSlideAxis.lengthSq() > 1e-8) {
+          keyboardSlideAxis.normalize();
+          hasKeyboardSlideAxis = true;
+        }
+      }
+
+      // Ease the authored key-region targets so clip swaps never jerk the
+      // wrists back to center. Ambient clips naturally settle the slide to 0.
+      const slideK = 1 - Math.exp(-7 * Math.max(0, delta));
+      leftKeyboardSlide += (
+        sampleKeyboardSlide(clipName, clipTime, 'left') - leftKeyboardSlide
+      ) * slideK;
+      rightKeyboardSlide += (
+        sampleKeyboardSlide(clipName, clipTime, 'right') - rightKeyboardSlide
+      ) * slideK;
+
+      if (policy.left && hasLeftHandTarget) {
+        _ikWorldTarget.copy(leftHandTarget);
+        if (hasKeyboardSlideAxis) {
+          _ikWorldTarget.addScaledVector(keyboardSlideAxis, leftKeyboardSlide);
+        }
+        pinArmToTarget(humanoid, 'left', _ikWorldTarget);
+      }
+      if (policy.right && hasRightHandTarget) {
+        _ikWorldTarget.copy(rightHandTarget);
+        if (hasKeyboardSlideAxis) {
+          _ikWorldTarget.addScaledVector(keyboardSlideAxis, rightKeyboardSlide);
+        }
+        pinArmToTarget(humanoid, 'right', _ikWorldTarget);
+      }
+      vrm.scene.updateMatrixWorld(true);
+    };
+
     // Sample an animated hips trajectory (INF-3) at clip-local time. The source
     // curve is dense (SAMPLE_FPS) and already eased, so linear interpolation
     // between samples is faithful. Oneshot transitions clamp at the ends.
@@ -1573,6 +1778,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
             action.paused = true;
           }
         }
+        const workHandPinPolicy = getWorkHandPinPolicy(
+          clipActive ? action?.getClip().name : undefined,
+        );
 
         // 1a''. Motion face channel (0.2): sample the DSL clip's exprCues /
         //       expressions / gaze at clip-local time. Applied below scaled by
@@ -1615,7 +1823,18 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
             }
             if (currentProps.idleMotion) {
               const e = idleOut.bones[boneName];
-              _extOffsetQ.setFromEuler(_extEuler.set(e.x, e.y, e.z));
+              // Work clips retain a subtle living motion, but suppress the
+              // large global idle sway that otherwise moves both shoulders and
+              // hands through the torso hierarchy. The IK below removes the
+              // remaining end-effector drift.
+              const workIdleScale = workHandPinPolicy
+                ? (boneName === 'head' || boneName === 'neck' ? 0.38 : 0.28)
+                : 1;
+              _extOffsetQ.setFromEuler(_extEuler.set(
+                e.x * workIdleScale,
+                e.y * workIdleScale,
+                e.z * workIdleScale,
+              ));
               node.quaternion.copy(_extBaseQ).multiply(_extOffsetQ);
             } else {
               node.quaternion.copy(_extBaseQ);
@@ -1700,6 +1919,18 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
             fov: camera.fov,
           });
         }
+
+        // 1c. Keep keyboard hand positions fixed in world space. This runs
+        // after torso/root composition and before normalized -> raw transfer,
+        // allowing the elbows and upper arms to absorb the residual breathing.
+        applyWorkHandPins(
+          vrm,
+          workHandPinPolicy,
+          ext.weight,
+          action?.getClip().name,
+          action?.time ?? 0,
+          updateDelta,
+        );
 
         // 2. Apply NormalizedBone rotations to RawBones
         vrm.humanoid?.update();

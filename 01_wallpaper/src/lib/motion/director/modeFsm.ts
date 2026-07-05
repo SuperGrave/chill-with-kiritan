@@ -47,13 +47,20 @@ export interface TransitionLogEntry {
   to: ModeId;
 }
 
-/** Resolve one mode's outgoing candidates after daypart + sleepiness weighting. */
+/**
+ * Resolve one mode's outgoing candidates after daypart + sleepiness weighting.
+ * When `allowedModes` is supplied, edges whose target isn't authored/enabled are
+ * dropped (the host gates the FSM to the modes it actually has content for — an
+ * unauthored target would otherwise leave the character on the wrong loop). The
+ * design table (MODE_TABLE) is never edited for this; the gate is host-supplied.
+ */
 export function resolveTransitionWeights(
   mode: ModeId,
   hour: number,
   sleepiness: number,
   prevMode: ModeId | null,
   weightGain = DEFAULT_SLEEPINESS.weightGain,
+  allowedModes?: ReadonlySet<ModeId>,
 ): { to: ModeId; weight: number }[] {
   const spec = MODE_TABLE[mode];
   const daypart = daypartForHour(hour);
@@ -64,6 +71,7 @@ export function resolveTransitionWeights(
     if ((to as string) === PREV_SENTINEL) {
       to = prevMode && prevMode !== 'away_room' ? prevMode : 'work_normal';
     }
+    if (allowedModes && !allowedModes.has(to)) continue;
     const destDaypart = MODE_TABLE[to].daypart[daypart];
     let w = e.weight * destDaypart;
     if (to === 'work_sleepy' || to === 'sleep_desk') w *= 1 + sleepiness * weightGain;
@@ -80,10 +88,18 @@ export class ModeFsm {
   private sleepiness = 0;
   private readonly rng: Rng;
   private readonly cfg: SleepinessConfig;
+  /** When set, the FSM only ever transitions into these modes (host content gate). */
+  private readonly allowedModes: ReadonlySet<ModeId> | null;
 
-  constructor(rng: Rng, initial: ModeId = 'work_normal', cfg: Partial<SleepinessConfig> = {}) {
+  constructor(
+    rng: Rng,
+    initial: ModeId = 'work_normal',
+    cfg: Partial<SleepinessConfig> = {},
+    allowedModes?: ReadonlySet<ModeId>,
+  ) {
     this.rng = rng;
     this.cfg = { ...DEFAULT_SLEEPINESS, ...cfg };
+    this.allowedModes = allowedModes && allowedModes.size > 0 ? allowedModes : null;
     this.mode = initial;
     this.dwellTarget = this.sampleDwell(initial);
   }
@@ -140,7 +156,10 @@ export class ModeFsm {
       this.sleepiness,
       this.prevMode,
       this.cfg.weightGain,
+      this.allowedModes ?? undefined,
     );
+    // Gated to empty (no authored target reachable) → stay on a safe, always-
+    // authored sink rather than deadlocking. work_normal is the Phase-1 base.
     if (cand.length === 0) return 'work_normal'; // safety net; should never hit
     const idx = this.rng.weighted(cand.map((c) => c.weight));
     return cand[idx].to;

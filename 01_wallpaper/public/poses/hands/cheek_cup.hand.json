@@ -1,0 +1,24 @@
+{
+  "schema": "hand/1",
+  "id": "cheek_cup",
+  "label": "頬を包む手",
+  "notes": "頬杖(ぶりっ子型)用: 掌を頬下ライン(顎ライン)に添わせ、指を開いて頬に沿わせる。2026-07-05 マスターFB反映: カール浅め＋指を扇状にスプレッド(proximal y)して『開いた手が頬にぴったり』に。スプレッド符号は左手実測で確定(掌を頬に向けて指上向きの姿勢で index は +y が鼻側=前、little は -y が耳側=後ろに開く)。人差し指・中指は頬の張り出しに接地する浅カール、薬指・小指は頬面が耳側へ後退する(半幅55→17mm)ため深カール＋スプレッド控えめで面に追従させる(スプレッド過多だと耳側で30-50mm浮く、実測済み)。side=both: 左手値そのまま、右手 [x,-y,-z] ミラー。左手は z+ がカール方向。",
+  "side": "both",
+  "bones": {
+    "thumbMetacarpal": [0, 0.18, 0],
+    "thumbProximal": [0, 0.22, 0],
+    "thumbDistal": [0, 0.10, 0],
+    "indexProximal": [0, 0.14, 0.05],
+    "indexIntermediate": [0, 0, 0.08],
+    "indexDistal": [0, 0, 0.06],
+    "middleProximal": [0, 0.04, 0.07],
+    "middleIntermediate": [0, 0, 0.10],
+    "middleDistal": [0, 0, 0.07],
+    "ringProximal": [0, -0.04, 0.19],
+    "ringIntermediate": [0, 0, 0.24],
+    "ringDistal": [0, 0, 0.14],
+    "littleProximal": [0, -0.06, 0.30],
+    "littleIntermediate": [0, 0, 0.38],
+    "littleDistal": [0, 0, 0.24]
+  }
+}

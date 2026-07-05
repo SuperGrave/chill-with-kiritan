@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { VRM, VRMLoaderPlugin } from '@pixiv/three-vrm';
+import { VRM, VRMLoaderPlugin, VRMSpringBoneCollider, VRMSpringBoneColliderShapePlane } from '@pixiv/three-vrm';
 import { IdleStateMachine } from './lib/motion/idleStateMachine';
 import type { IdleState, IdleDebug, IdleBoneName } from './lib/motion/idleStateMachine';
 import { ExternalMotionController } from './lib/motion/externalMotionController';
@@ -105,24 +105,85 @@ const IDLE_APPLY_BONES: IdleBoneName[] = ['chest', 'spine', 'neck', 'head', 'lef
 const IDLE_BONE_SET = new Set<string>(IDLE_APPLY_BONES);
 
 type WorkHandPinPolicy = {
-  group: 'keyboard';
+  group: 'keyboard' | 'chinrest' | 'sleeparms';
+  /**
+   * Frame the captured targets live in. 'world': fixed scene points (keyboard
+   * keys). 'head': the head bone's local frame — a chin-rest palm must FOLLOW
+   * the chin through nods/idle sway, not hold a world point the chin drifts
+   * off of (which reopens the very palm↔chin gap the pin exists to close).
+   */
+  anchor: 'world' | 'head';
   left: boolean;
   right: boolean;
 };
 
-// Keyboard-work clips keep the hand origins planted while the torso breathes.
-// The sip animation releases the cup hand, but retains the other hand's target
-// and rejoins the same pin group when the base typing loop resumes.
+// Contact clips keep the hand origins planted while the torso breathes.
+// keyboard group: wrists on the laptop keys (typing loop + its ambients; sip
+// releases the cup hand and rejoins the group when the loop resumes).
+// chinrest group: palms under the chin for the 頬杖 video pose — targets are
+// head-anchored so the palms ride every nod/chuckle. Elbows stay clip-authored
+// (planted on the desk top; the desk plane collider keeps the sleeves out).
 const WORK_HAND_PIN_POLICIES: Record<string, WorkHandPinPolicy> = {
-  dsl_loop_work_normal: { group: 'keyboard', left: true, right: true },
-  dsl_amb_work_neck_roll: { group: 'keyboard', left: true, right: true },
-  dsl_amb_work_screen_scan: { group: 'keyboard', left: true, right: true },
-  dsl_amb_work_posture_reset: { group: 'keyboard', left: true, right: true },
-  dsl_amb_work_sip: { group: 'keyboard', left: false, right: true },
+  dsl_loop_work_normal: { group: 'keyboard', anchor: 'world', left: true, right: true },
+  dsl_amb_work_neck_roll: { group: 'keyboard', anchor: 'world', left: true, right: true },
+  dsl_amb_work_screen_scan: { group: 'keyboard', anchor: 'world', left: true, right: true },
+  dsl_amb_work_posture_reset: { group: 'keyboard', anchor: 'world', left: true, right: true },
+  dsl_amb_work_sip: { group: 'keyboard', anchor: 'world', left: false, right: true },
+  dsl_loop_video_relax: { group: 'chinrest', anchor: 'head', left: true, right: true },
+  dsl_loop_video_relax_chinfit_a: { group: 'chinrest', anchor: 'head', left: true, right: true },
+  dsl_loop_video_relax_chinfit_b: { group: 'chinrest', anchor: 'head', left: true, right: true },
+  dsl_loop_video_relax_chinfit_c: { group: 'chinrest', anchor: 'head', left: true, right: true },
+  dsl_amb_vid_chuckle: { group: 'chinrest', anchor: 'head', left: true, right: true },
+  dsl_amb_vid_nod_watch: { group: 'chinrest', anchor: 'head', left: true, right: true },
+  dsl_amb_vid_eyes_widen: { group: 'chinrest', anchor: 'head', left: true, right: true },
+  // sleeparms: the 腕枕 sleep pose — the crossed forearms are the pillow, so the
+  // wrists hold their world plant on the laptop deck against sleep breathing
+  // (the head rides the breath ON the arms; the arms must not ride with it).
+  dsl_loop_sleep_desk: { group: 'sleeparms', anchor: 'world', left: true, right: true },
+  dsl_amb_slp_head_shift: { group: 'sleeparms', anchor: 'world', left: true, right: true },
+  dsl_amb_slp_dream_smile: { group: 'sleeparms', anchor: 'world', left: true, right: true },
 };
 
 const getWorkHandPinPolicy = (clipName: string | undefined): WorkHandPinPolicy | null =>
   clipName ? WORK_HAND_PIN_POLICIES[clipName] ?? null : null;
+
+// Frames of pre-IK wrist samples averaged into a fresh pin target (~4 s at
+// 30 fps). One breathing period is enough to cancel the sway phase the old
+// single-frame capture baked in (~±5 mm of plant-height variance per session).
+const PIN_TARGET_SETTLE_FRAMES = 120;
+
+// Desk top surface height (metal_office_desk mesh, world Y — measured
+// 2026-07-04, matches the y0.73 the seated motions are authored against).
+const DESK_TOP_Y = 0.73;
+// Laptop deck top (LapTop_Cube002-Mesh). The 腕枕 sleep pose rests the folded
+// arms ON the laptop, so the sleeve plane rises to the deck for that posture.
+const LAPTOP_DECK_Y = 0.75;
+// Where the sleeve-cloth desk plane parks while she is NOT seated at the desk
+// (an infinite plane at desk height would shelve the sleeve tips of a standing
+// arms-down pose). Anything this deep never touches a joint.
+const SLEEVE_PLANE_PARK_Y = -10;
+
+// Key-region change patterns for the typing loop: where the wrists migrate
+// during one slide window. lat = along keyboardSlideAxis (+ = her right),
+// depth = along keyboardDepthAxis (+ = away from the body, deeper key rows).
+// Amplitudes stay asymmetric so the hands never read as a rigid pair
+// translation.
+type KeyboardSlidePattern = {
+  weight: number;
+  lLat: number;
+  lDepth: number;
+  rLat: number;
+  rDepth: number;
+};
+const KEYBOARD_SLIDE_PATTERNS: KeyboardSlidePattern[] = [
+  { weight: 3, lLat: 0.045, lDepth: 0, rLat: 0.034, rDepth: 0 }, // both toward her right
+  { weight: 3, lLat: -0.034, lDepth: 0, rLat: -0.05, rDepth: 0 }, // both toward her left
+  // Reach to the far/center key area. The seated pose leaves the arms nearly
+  // straight, so pure depth saturates at ~8 mm (reach-sphere limit; the IK
+  // settles slightly up-forward) — the inward lat keeps the gesture readable.
+  { weight: 2, lLat: 0.016, lDepth: 0.036, rLat: -0.014, rDepth: 0.042 },
+  { weight: 2, lLat: -0.034, lDepth: 0, rLat: 0.038, rDepth: 0 }, // spread to own sides
+];
 
 // Camera presets, extracted to module scope (0.7) so the animate loop and the
 // Motion Lab share ONE table. Values are unchanged from 0.1/0.6.
@@ -148,7 +209,9 @@ const CAMERA_PRESETS: Record<Exclude<CameraMode, 'free'>, { pos: [number, number
 // (shared with the Lab's context-loop settle and the Node test harness, issue #1).
 const DIRECTOR_LOOPS: Partial<Record<ModeId, string>> = PHASE1_MODE_LOOP;
 const DIRECTOR_AMBIENTS: Partial<Record<ModeId, string[]>> = {
-  work_normal: ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_screen_scan', 'amb_work_sip'],
+  // amb_work_sip (cup) is intentionally omitted for the release — re-add it here
+  // (it stays prop-gated by DIRECTOR_PROP_AMBIENTS) once the drinking motion is ready.
+  work_normal: ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_screen_scan', 'amb_work_stretch'],
   work_sleepy: ['amb_slpy_head_bob', 'amb_slpy_slow_blink', 'amb_slpy_tilt_drift'],
   video_relax: ['amb_vid_chuckle', 'amb_vid_nod_watch', 'amb_vid_eyes_widen'],
   sleep_desk: ['amb_slp_head_shift', 'amb_slp_dream_smile'],
@@ -244,6 +307,9 @@ export interface VrmViewerProps {
   // derives this from the local clock (see lib/scene/daypart.ts); changing it
   // relights the current scene without a reload.
   daypart: Daypart;
+  // Display setting multiplier for the model/prop lights. 1 keeps scene-authored
+  // lighting, 0 darkens, values above 1 brighten without touching materials.
+  lightScale: number;
 }
 
 const VrmViewer: React.FC<VrmViewerProps> = (props) => {
@@ -303,6 +369,10 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   // the desk; without it the body sits ~0.2 m too high. null = no seated offset.
   const initialHipsPosRef = useRef<THREE.Vector3 | null>(null);
   const clipHipsOffsetRef = useRef<[number, number, number] | null>(null);
+  // Active DSL clip's posture id (sit_pc_neutral / sit_desk_slump / stand …).
+  // Gates desk-contact helpers: the sleeve desk-plane collider only lives at
+  // the desk surface while a seated clip is in. null = no DSL clip.
+  const clipPostureRef = useRef<string | null>(null);
   // Animated hips trajectory (INF-3): when set, sampled at clip-local time
   // instead of the constant offset — drives stand/sit/step over the motion.
   const clipHipsCurveRef = useRef<{ times: number[]; values: [number, number, number][] } | null>(null);
@@ -507,6 +577,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       clipHipsOffsetRef.current = ho && (ho[0] !== 0 || ho[1] !== 0 || ho[2] !== 0) ? ho : null;
       clipHipsCurveRef.current = req.source === 'dsl' ? (req.hipsCurve ?? null) : null;
       clipRootCurveRef.current = req.source === 'dsl' ? (req.rootCurve ?? null) : null;
+      clipPostureRef.current = req.source === 'dsl' ? (req.posture ?? null) : null;
     }
     const ext = extControllerRef.current;
     ext.setFadeDurations(req.fadeIn, req.fadeOut);
@@ -554,6 +625,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       hipsCurve: compiled.hipsCurve,
       rootCurve: compiled.rootCurve,
       microEvents: result.doc.motion.microEvents ?? null,
+      posture: result.doc.motion.posture ?? null,
     };
   };
 
@@ -649,6 +721,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           hipsCurve: compiled.hipsCurve,
           rootCurve: compiled.rootCurve,
           microEvents: result.doc.motion.microEvents ?? null,
+          posture: result.doc.motion.posture ?? null,
         };
         pendingSettleRef.current = null;
         let settleLoop: string | null = null;
@@ -704,6 +777,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       hipsCurve: compiled.hipsCurve,
       rootCurve: compiled.rootCurve,
       microEvents: result.doc.motion.microEvents ?? null,
+      posture: result.doc.motion.posture ?? null,
     });
     return true;
   };
@@ -740,11 +814,22 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     // If the cup isn't present, drop the prop-gated ambients from the authored
     // pool too (belt-and-braces with the scheduler's requiresProp gate).
     if (!availableProps.has('cup')) for (const id of DIRECTOR_PROP_AMBIENTS) authoredAmbients.delete(id);
+    // Mode gate: only let the FSM transition into modes whose base loop actually
+    // loaded (+ away_room, which is locomotion content with no base loop). Keeps
+    // her off unauthored modes (集中/ゲーム/読書/スマホ/電話/おやつ/音楽) whose null
+    // loop would otherwise strand her on the previous clip. Always non-empty:
+    // work_normal's loop is required for the director to start at all.
+    const authoredModes = new Set<ModeId>();
+    for (const [mode, loopId] of Object.entries(DIRECTOR_LOOPS) as [ModeId, string | undefined][]) {
+      if (loopId && directorClipsRef.current.has(loopId)) authoredModes.add(mode);
+    }
+    if (AWAY_MOTIONS.every((id) => directorClipsRef.current.has(id))) authoredModes.add('away_room');
     const runner = new DirectorRunner({
       seed: opts?.seed,
       initialMode: opts?.initialMode ?? 'work_normal',
       availableMotions: authoredAmbients,
       availableProps,
+      allowedModes: authoredModes,
       loopMotionFor: (mode) => DIRECTOR_LOOPS[mode] ?? null,
       // Resolve a (from→to) bridge from the design table, but only commit to it
       // when EVERY motion in the chain actually preloaded (else swap straight to
@@ -760,6 +845,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     if (first) playDirectorMotion(first.motionId);
     propsRef.current.onStatusUpdate(
       `[DIRECTOR] running — ${first?.motionId ?? 'no loop'} + ${authoredAmbients.size} ambients` +
+        ` + modes[${[...authoredModes].join(',')}]` +
         `${availableProps.size ? ` + props[${[...availableProps].join(',')}]` : ''}`,
     );
     return { ok: true, loaded };
@@ -925,10 +1011,15 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     const amb = ambientLightRef.current;
     const dir = directionalLightRef.current;
     const night = daypart === 'night' ? lighting?.night : undefined;
-    if (lighting && amb) amb.intensity = night?.ambientStrength ?? lighting.ambientStrength;
-    if (lighting && dir) {
-      dir.intensity = night?.mainLightStrength ?? lighting.mainLightStrength;
-      dir.color.set(night?.mainLightColor ?? lighting.mainLightColor);
+    const lightScale = THREE.MathUtils.clamp(Number(propsRef.current.lightScale ?? 1), 0, 3);
+    if (amb) {
+      const ambientBase = lighting ? (night?.ambientStrength ?? lighting.ambientStrength) : 1.0;
+      amb.intensity = ambientBase * lightScale;
+    }
+    if (dir) {
+      const mainBase = lighting ? (night?.mainLightStrength ?? lighting.mainLightStrength) : 1.5;
+      dir.intensity = mainBase * lightScale;
+      if (lighting) dir.color.set(night?.mainLightColor ?? lighting.mainLightColor);
     }
   };
 
@@ -937,7 +1028,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   // reload needed, day<->night is just a relight of the existing lights.
   useEffect(() => {
     applySceneLighting(currentSceneLightingRef.current, props.daypart);
-  }, [props.daypart]);
+  }, [props.daypart, props.lightScale]);
 
   // Scene loads are SERIALIZED through this chain: loadSceneProps clears then
   // appends into the shared propsRoot, so two overlapping loads (StrictMode's
@@ -1225,6 +1316,30 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         // Ensure arm rotation is propagated to raw bones immediately
         vrm.humanoid?.update();
 
+        // Sleeve ⇄ desk cloth collision (2026-07-04): the sleeve spring chains
+        // know nothing about scene props, so a planted forearm (typing loop /
+        // 頬杖) let the cuff fabric sink through the desk top. One world-space
+        // plane collider at the desk surface, attached to ONLY the sleeve
+        // joints — hair must dangle below desk level and the skirt/legs live
+        // under the desk. It parks underground unless a seated clip is in
+        // (gate in the render loop): an infinite desk-height plane would
+        // shelve the sleeve tips of a standing arms-down pose.
+        if (vrm.springBoneManager) {
+          const plane = new VRMSpringBoneCollider(
+            new VRMSpringBoneColliderShapePlane({ normal: new THREE.Vector3(0, 1, 0) }),
+          );
+          plane.position.set(0, SLEEVE_PLANE_PARK_Y, 0);
+          scene.add(plane);
+          plane.updateWorldMatrix(true, false); // refresh colliderMatrix (only moves on the gate toggle)
+          const deskGroup = { colliders: [plane] };
+          for (const joint of vrm.springBoneManager.joints) {
+            // Fresh array per joint: sibling joints share colliderGroups
+            // array instances, so pushing in place would double-register.
+            if (joint.bone.name.includes('Sleeve')) joint.colliderGroups = [...joint.colliderGroups, deskGroup];
+          }
+          sleeveDeskCollider = plane;
+        }
+
         // --- Custom Expression Bridge setup ---
         // This MMD-derived VRM 0.x model breaks the standard expression path on
         // two counts, so vrm.expressionManager renders nothing:
@@ -1415,12 +1530,31 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     let workHandPinGroup: WorkHandPinPolicy['group'] | null = null;
     let hasLeftHandTarget = false;
     let hasRightHandTarget = false;
+    // Desk-surface plane for the sleeve spring chains (created with the VRM,
+    // toggled by the seated-posture gate in the render loop).
+    let sleeveDeskCollider: VRMSpringBoneCollider | null = null;
     const leftHandTarget = new THREE.Vector3();
     const rightHandTarget = new THREE.Vector3();
     const keyboardSlideAxis = new THREE.Vector3();
+    const keyboardDepthAxis = new THREE.Vector3();
     let hasKeyboardSlideAxis = false;
-    let leftKeyboardSlide = 0;
-    let rightKeyboardSlide = 0;
+    // Per-hand pin engagement (0..1). A pin that re-joins mid-crossfade — the
+    // cup hand returning from amb_work_sip — rides the envelope up instead of
+    // yanking the wrist onto its target in one frame while the finger pose is
+    // still blending (which sank the fingertips through the key tops).
+    let leftPinEngage = 0;
+    let rightPinEngage = 0;
+    // Running-mean sample counts for target settling (see PIN_TARGET_SETTLE_FRAMES).
+    let leftTargetSamples = 0;
+    let rightTargetSamples = 0;
+    const _pinSamplePos = new THREE.Vector3();
+    const leftKeyboardSlide = new THREE.Vector2(); // x: lat, y: depth (smoothed)
+    const rightKeyboardSlide = new THREE.Vector2();
+    const _slideSampleL = new THREE.Vector2();
+    const _slideSampleR = new THREE.Vector2();
+    let slidePattern1 = KEYBOARD_SLIDE_PATTERNS[0];
+    let slidePattern2 = KEYBOARD_SLIDE_PATTERNS[1];
+    let lastSlideClipTime = Number.POSITIVE_INFINITY;
     const _ikEffectorPos = new THREE.Vector3();
     const _ikJointPos = new THREE.Vector3();
     const _ikCurrentDir = new THREE.Vector3();
@@ -1440,8 +1574,30 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       hasLeftHandTarget = false;
       hasRightHandTarget = false;
       hasKeyboardSlideAxis = false;
-      leftKeyboardSlide = 0;
-      rightKeyboardSlide = 0;
+      leftKeyboardSlide.set(0, 0);
+      rightKeyboardSlide.set(0, 0);
+      lastSlideClipTime = Number.POSITIVE_INFINITY;
+      leftPinEngage = 0;
+      rightPinEngage = 0;
+      leftTargetSamples = 0;
+      rightTargetSamples = 0;
+    };
+
+    // Weighted pick, excluding the previous window's pattern so two adjacent
+    // slide windows always migrate differently.
+    const pickSlidePattern = (exclude: KeyboardSlidePattern): KeyboardSlidePattern => {
+      const pool = KEYBOARD_SLIDE_PATTERNS.filter((p) => p !== exclude);
+      let r = Math.random() * pool.reduce((sum, p) => sum + p.weight, 0);
+      for (const p of pool) {
+        r -= p.weight;
+        if (r <= 0) return p;
+      }
+      return pool[pool.length - 1];
+    };
+
+    const rollSlidePatterns = () => {
+      slidePattern1 = pickSlidePattern(slidePattern2);
+      slidePattern2 = pickSlidePattern(slidePattern1);
     };
 
     const smoothStep01 = (v: number) => {
@@ -1462,18 +1618,30 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       return 1 - smoothStep01((t - leave) / (end - leave));
     };
 
+    // (lat, depth) key-region offset for one hand at clip-local time. Two
+    // restrained key-region changes per 16 s loop; the pattern pair re-rolls
+    // on every loop wrap, so consecutive passes migrate differently.
     const sampleKeyboardSlide = (
       clipName: string | undefined,
       clipTime: number,
       side: 'left' | 'right',
+      out: THREE.Vector2,
     ) => {
-      if (clipName !== 'dsl_loop_work_normal') return 0;
-      // Two restrained key-region changes per 16 s loop. The asymmetric
-      // distances keep the hands from reading as a rigid pair translation.
-      const towardRight = heldPulse(clipTime, 3.2, 4.0, 5.2, 6.0);
-      const towardLeft = heldPulse(clipTime, 10.0, 10.8, 12.2, 13.1);
-      if (side === 'left') return towardRight * 0.045 - towardLeft * 0.034;
-      return towardRight * 0.034 - towardLeft * 0.05;
+      out.set(0, 0);
+      if (clipName !== 'dsl_loop_work_normal') return;
+      const p1 = heldPulse(clipTime, 3.2, 4.0, 5.2, 6.0);
+      const p2 = heldPulse(clipTime, 10.0, 10.8, 12.2, 13.1);
+      if (side === 'left') {
+        out.set(
+          p1 * slidePattern1.lLat + p2 * slidePattern2.lLat,
+          p1 * slidePattern1.lDepth + p2 * slidePattern2.lDepth,
+        );
+      } else {
+        out.set(
+          p1 * slidePattern1.rLat + p2 * slidePattern2.rLat,
+          p1 * slidePattern1.rDepth + p2 * slidePattern2.rDepth,
+        );
+      }
     };
 
     const rotateArmJointToward = (
@@ -1492,11 +1660,13 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       _ikDeltaQ.setFromUnitVectors(_ikCurrentDir, _ikTargetDir);
 
       // Bound one CCD correction so a bad/temporarily unreachable target can
-      // never snap the arm. Four small iterations are ample for breathing drift.
+      // never snap the arm; the pass loop in pinArmToTarget supplies retries.
       const angle = 2 * Math.acos(THREE.MathUtils.clamp(_ikDeltaQ.w, -1, 1));
       const maxStep = 0.12;
       if (angle > maxStep) {
-        _ikDeltaQ.slerpQuaternions(_ikIdentityQ, _ikDeltaQ, maxStep / angle);
+        // NOT slerpQuaternions(identity, this, k): it self-aliases (copy(qa)
+        // destroys `this` before it is read) and zeroes the whole step.
+        _ikDeltaQ.slerp(_ikIdentityQ, 1 - maxStep / angle);
       }
 
       joint.getWorldQuaternion(_ikJointWorldQ);
@@ -1524,9 +1694,14 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       _ikPreUpperQ.copy(upperArm.quaternion);
       _ikPreLowerQ.copy(lowerArm.quaternion);
 
-      // CCD order: wrist-side joint first, then shoulder-side joint.
-      for (let i = 0; i < 4; i++) {
+      // CCD order: wrist-side joint first, then shoulder-side joint. Break as
+      // soon as the wrist is within 2 mm: breathing drift converges in 1–2
+      // passes, while a depth reach (target nearly along a near-straight arm,
+      // ill-conditioned for CCD) needs the extra passes to make progress.
+      for (let i = 0; i < 8; i++) {
         vrmRef.current?.scene.updateMatrixWorld(true);
+        hand.getWorldPosition(_ikEffectorPos);
+        if (_ikEffectorPos.distanceToSquared(target) < 4e-6) break;
         rotateArmJointToward(lowerArm, hand, target);
         vrmRef.current?.scene.updateMatrixWorld(true);
         rotateArmJointToward(upperArm, hand, target);
@@ -1559,7 +1734,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       }
 
       // Capture only after the work clip has essentially reached its authored
-      // contact pose. Targets survive swaps within the keyboard-work group.
+      // contact pose (the artist calibrated contact against the COMPOSED
+      // runtime, idle baseline included, so the composed pose is the reference).
+      // Targets survive swaps within the keyboard-work group.
       if (workHandPinGroup !== policy.group) {
         clearWorkHandPins();
         if (weight < 0.98) return;
@@ -1569,45 +1746,97 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       vrm.scene.updateMatrixWorld(true);
       const leftHand = humanoid.getNormalizedBoneNode('leftHand' as never);
       const rightHand = humanoid.getNormalizedBoneNode('rightHand' as never);
-      if (policy.left && !hasLeftHandTarget && leftHand) {
-        leftHand.getWorldPosition(leftHandTarget);
-        hasLeftHandTarget = true;
+      // Head-anchored groups (chinrest) store targets in the head bone's local
+      // frame, so the same running-mean capture + CCD makes the palms FOLLOW
+      // the chin through nods and idle sway instead of holding a world point.
+      const anchorNode = policy.anchor === 'head' ? humanoid.getNormalizedBoneNode('head' as never) : null;
+      if (policy.anchor === 'head' && !anchorNode) {
+        clearWorkHandPins();
+        return;
       }
-      if (policy.right && !hasRightHandTarget && rightHand) {
-        rightHand.getWorldPosition(rightHandTarget);
-        hasRightHandTarget = true;
+      // First capture seeds the target; the pre-IK wrist (compose rewrites the
+      // arms from the clip every frame, so at this point in the frame the pose
+      // is IK-free) then refines it as a running mean while the clip is fully
+      // in, so a single breath phase never bakes into the plant height. With a
+      // head anchor both the sample and the mean live in head-local space.
+      if (policy.left && leftHand && weight >= 0.98 && leftTargetSamples < PIN_TARGET_SETTLE_FRAMES) {
+        leftHand.getWorldPosition(_pinSamplePos);
+        if (anchorNode) anchorNode.worldToLocal(_pinSamplePos);
+        if (!hasLeftHandTarget) {
+          leftHandTarget.copy(_pinSamplePos);
+          hasLeftHandTarget = true;
+          leftTargetSamples = 1;
+        } else {
+          leftTargetSamples++;
+          leftHandTarget.lerp(_pinSamplePos, 1 / leftTargetSamples);
+        }
       }
-      if (!hasKeyboardSlideAxis && hasLeftHandTarget && hasRightHandTarget) {
+      if (policy.right && rightHand && weight >= 0.98 && rightTargetSamples < PIN_TARGET_SETTLE_FRAMES) {
+        rightHand.getWorldPosition(_pinSamplePos);
+        if (anchorNode) anchorNode.worldToLocal(_pinSamplePos);
+        if (!hasRightHandTarget) {
+          rightHandTarget.copy(_pinSamplePos);
+          hasRightHandTarget = true;
+          rightTargetSamples = 1;
+        } else {
+          rightTargetSamples++;
+          rightHandTarget.lerp(_pinSamplePos, 1 / rightTargetSamples);
+        }
+      }
+      if (policy.group === 'keyboard' && !hasKeyboardSlideAxis && hasLeftHandTarget && hasRightHandTarget) {
         keyboardSlideAxis.copy(rightHandTarget).sub(leftHandTarget);
         if (keyboardSlideAxis.lengthSq() > 1e-8) {
           keyboardSlideAxis.normalize();
+          // up × slide axis: horizontal, pointing from the body into the
+          // keyboard (the direction of the deeper key rows).
+          keyboardDepthAxis.set(keyboardSlideAxis.z, 0, -keyboardSlideAxis.x).normalize();
           hasKeyboardSlideAxis = true;
         }
+      }
+
+      // Re-roll the pattern pair whenever the typing loop wraps (or resumes
+      // after an ambient) — both slide windows are back at zero offset there,
+      // so a pattern change never moves a held target.
+      if (clipName === 'dsl_loop_work_normal') {
+        if (clipTime < lastSlideClipTime) rollSlidePatterns();
+        lastSlideClipTime = clipTime;
+      } else {
+        lastSlideClipTime = Number.POSITIVE_INFINITY;
       }
 
       // Ease the authored key-region targets so clip swaps never jerk the
       // wrists back to center. Ambient clips naturally settle the slide to 0.
       const slideK = 1 - Math.exp(-7 * Math.max(0, delta));
-      leftKeyboardSlide += (
-        sampleKeyboardSlide(clipName, clipTime, 'left') - leftKeyboardSlide
-      ) * slideK;
-      rightKeyboardSlide += (
-        sampleKeyboardSlide(clipName, clipTime, 'right') - rightKeyboardSlide
-      ) * slideK;
+      sampleKeyboardSlide(clipName, clipTime, 'left', _slideSampleL);
+      sampleKeyboardSlide(clipName, clipTime, 'right', _slideSampleR);
+      leftKeyboardSlide.lerp(_slideSampleL, slideK);
+      rightKeyboardSlide.lerp(_slideSampleR, slideK);
+
+      // Engagement rides the (already smoothstepped) envelope on a re-join and
+      // latches at its high-water mark, so an in-group swap under a fully
+      // engaged pin (loop ⇄ neck_roll etc.) never softens back to 0.
+      leftPinEngage = policy.left && hasLeftHandTarget ? Math.max(leftPinEngage, weight) : 0;
+      rightPinEngage = policy.right && hasRightHandTarget ? Math.max(rightPinEngage, weight) : 0;
 
       if (policy.left && hasLeftHandTarget) {
         _ikWorldTarget.copy(leftHandTarget);
-        if (hasKeyboardSlideAxis) {
-          _ikWorldTarget.addScaledVector(keyboardSlideAxis, leftKeyboardSlide);
+        if (anchorNode) {
+          anchorNode.localToWorld(_ikWorldTarget);
+        } else if (hasKeyboardSlideAxis) {
+          _ikWorldTarget.addScaledVector(keyboardSlideAxis, leftKeyboardSlide.x);
+          _ikWorldTarget.addScaledVector(keyboardDepthAxis, leftKeyboardSlide.y);
         }
-        pinArmToTarget(humanoid, 'left', _ikWorldTarget, strength);
+        pinArmToTarget(humanoid, 'left', _ikWorldTarget, strength * leftPinEngage);
       }
       if (policy.right && hasRightHandTarget) {
         _ikWorldTarget.copy(rightHandTarget);
-        if (hasKeyboardSlideAxis) {
-          _ikWorldTarget.addScaledVector(keyboardSlideAxis, rightKeyboardSlide);
+        if (anchorNode) {
+          anchorNode.localToWorld(_ikWorldTarget);
+        } else if (hasKeyboardSlideAxis) {
+          _ikWorldTarget.addScaledVector(keyboardSlideAxis, rightKeyboardSlide.x);
+          _ikWorldTarget.addScaledVector(keyboardDepthAxis, rightKeyboardSlide.y);
         }
-        pinArmToTarget(humanoid, 'right', _ikWorldTarget, strength);
+        pinArmToTarget(humanoid, 'right', _ikWorldTarget, strength * rightPinEngage);
       }
       vrm.scene.updateMatrixWorld(true);
     };
@@ -2037,6 +2266,20 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
             target: [rc(camLook.x), rc(camLook.y), rc(camLook.z)],
             fov: camera.fov,
           });
+        }
+
+        // Sleeve desk plane follows the posture: at the desk surface while a
+        // seated clip is in (typing / 頬杖 / sleep_desk — everywhere arms or
+        // cuffs can rest on the desk), parked underground otherwise so a
+        // standing or walking pose never rides an invisible desk.
+        if (sleeveDeskCollider) {
+          const planeY = clipPostureRef.current?.startsWith('sit_')
+            ? (clipPostureRef.current === 'sit_desk_slump' ? LAPTOP_DECK_Y : DESK_TOP_Y)
+            : SLEEVE_PLANE_PARK_Y;
+          if (sleeveDeskCollider.position.y !== planeY) {
+            sleeveDeskCollider.position.y = planeY;
+            sleeveDeskCollider.updateWorldMatrix(true, false); // colliderMatrix refresh (see load-time note)
+          }
         }
 
         // 1c. Keep keyboard hand positions fixed in world space. This runs

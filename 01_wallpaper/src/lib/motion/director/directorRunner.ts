@@ -42,6 +42,12 @@ export interface DirectorRunnerConfig {
   availableProps?: Set<string>;
   /** Authored ambient ids — restricts the scheduler pool to what can actually play. */
   availableMotions?: Set<string>;
+  /**
+   * Modes the FSM is allowed to transition into (host content gate). When set,
+   * edges to any other mode are dropped so the character never lands on an
+   * unauthored loop. Omit/empty = full design-table cycle (all 12 modes).
+   */
+  allowedModes?: Set<ModeId>;
   /** mode → base-loop motion id (null = no loop authored; the host keeps the current clip). */
   loopMotionFor: (mode: ModeId) => string | null;
   /** ambient id → motion id (default: identity — the file is named after the id). */
@@ -90,7 +96,7 @@ export class DirectorRunner {
     this.cfg = cfg;
     const rng = makeRng(cfg.seed ?? (Date.now() & 0xffffffff) >>> 0);
     this.mode = cfg.initialMode ?? 'work_normal';
-    this.fsm = new ModeFsm(rng, this.mode, cfg.sleepiness);
+    this.fsm = new ModeFsm(rng, this.mode, cfg.sleepiness, cfg.allowedModes);
     this.sched = new AmbientScheduler(rng, this.mode, {
       ...cfg.scheduler,
       availableProps: cfg.availableProps ?? new Set(),

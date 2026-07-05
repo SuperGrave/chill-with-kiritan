@@ -2,7 +2,7 @@
   "schema": "motion/1",
   "id": "loop_work_normal",
   "label": "ループ: 通常作業（座り・タイピング）",
-  "notes": "work_normal の基本ループ。posture=sit_pc_neutral の上に両腕をノートPCの実キー面まで伸ばし、画面を見ながら『打鍵→停止→画面確認→再開』のリズムでタイプする。腕値は最終variant/layoutを使った実AnimationMixer再生を正面・斜め・上面から確認して校正（2026-06-24）。打鍵は指proximalのzカール(window付きサイン)を2バースト、間に小休止。手首は leftHand/rightHand offset x=-1.04 で回内しpalm-down。実行時の手先IKは1周期に2回、キーボード左右へ非対称にスライドして別のキー列へ移る。duration16=周期4/8の整数倍、打鍵windowは端で0=シーム安全。",
+  "notes": "work_normal の基本ループ。posture=sit_pc_neutral の上に両腕をノートPCの実キー面まで伸ばし、画面を見ながら『打鍵→停止→画面確認→再開』のリズムでタイプする。腕値は最終variant/layoutを使った実AnimationMixer再生を正面・斜め・上面から確認して校正（2026-06-24）。打鍵は指proximalのzカール(window付きサイン)を2バースト、間に小休止。手首は leftHand/rightHand offset x=-1.04 で回内しpalm-down。実行時の手先IKは1周期に2回、別のキー領域へスライドする（パターンは周回ごとに抽選: 右寄せ/左寄せ/両手とも奥の列へ/両手を各自の外側へ。KEYBOARD_SLIDE_PATTERNS参照）。duration16=周期4/8の整数倍、打鍵windowは端で0=シーム安全。",
   "category": "loop",
   "tags": ["mode:work_normal", "family:A"],
   "posture": "sit_pc_neutral",

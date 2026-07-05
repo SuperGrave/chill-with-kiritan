@@ -84,6 +84,12 @@ export interface ClipSwapRequest {
    * force-returned to its rest. null/undefined = none.
    */
   microEvents?: MicroEvent[] | null;
+  /**
+   * DSL posture id (sit_pc_neutral / sit_desk_slump / stand …). Gates
+   * desk-contact helpers in the viewer: the sleeve desk-plane collider lives
+   * at the desk surface only while a seated (sit_*) clip is in. null = none.
+   */
+  posture?: string | null;
 }
 
 export interface LabHandles {
@@ -828,6 +834,7 @@ export class MotionLab {
       hipsCurve: compiled.hipsCurve,
       rootCurve: compiled.rootCurve,
       microEvents: entry.doc.motion.microEvents ?? null,
+      posture: entry.doc.motion.posture ?? null,
     };
     return { req, compiled };
   }

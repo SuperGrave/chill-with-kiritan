@@ -2,36 +2,47 @@
   "schema": "motion/1",
   "id": "amb_vid_eyes_widen",
   "label": "Ambient: おっ（展開に反応・視線先行）",
-  "notes": "video_relax の『おっ』。issue #9: ①視線が画面内の対象へ先行(t0.25 gaze, 体の反応t0.6より先) ②目を見開く(surprised_light) ③頭/上体を僅かに前へ craning ④口を o で開く ⑤一瞬保持→小overshoot→ゆっくりloop_video_relaxへ。視線→頭→上体の時間差。oneshot。posture=sit_pc_slouch。",
+  "notes": "video_relax の『おっ』。issue #9: ①視線が画面内の対象へ先行(t0.25 gaze, 体の反応t0.6より先) ②目を見開く(surprised_light) ③頭/上体を僅かに前へ craning ④口を o で開く ⑤一瞬保持→小overshoot→ゆっくりloop_video_relaxへ。視線→頭→上体の時間差。oneshot。2026-07-04: posture を loop_video_relax と同じ sit_pc_neutral に統一し、頬杖の基底（spine -0.62 / chest -0.20 / neck 0.26 / head 0.28 ＋腕4トラック）をキーに埋め込み。craning は基底からのデルタとして保持（頭が前へ出る分は chinrest ピンが掌ごと追従）。",
   "category": "ambient",
   "tags": ["mode:video_relax", "family:A'"],
-  "posture": "sit_pc_slouch",
+  "posture": "sit_pc_neutral",
   "duration": 2.8,
   "loop": false,
   "fadeIn": 0.3,
   "fadeOut": 0.5,
+  "hands": { "left": "cheek_cup", "right": "cheek_cup" },
   "tracks": {
+    "spine": { "keys": [
+      { "t": 0.0, "e": [-0.62, 0, 0] },
+      { "t": 2.8, "e": [-0.62, 0, 0] }
+    ] },
     "chest": { "keys": [
-      { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 0.3, "e": [-0.03, 0, 0], "ease": "easeIn" },
-      { "t": 0.7, "e": [0.10, 0, 0], "ease": "easeOut" },
-      { "t": 1.1, "e": [0.06, 0, 0], "ease": "sineInOut" },
-      { "t": 1.8, "e": [0.05, 0, 0] },
-      { "t": 2.8, "e": [0, 0, 0], "ease": "easeOut" }
+      { "t": 0.0, "e": [-0.20, 0, 0] },
+      { "t": 0.3, "e": [-0.23, 0, 0], "ease": "easeIn" },
+      { "t": 0.7, "e": [-0.10, 0, 0], "ease": "easeOut" },
+      { "t": 1.1, "e": [-0.14, 0, 0], "ease": "sineInOut" },
+      { "t": 1.8, "e": [-0.15, 0, 0] },
+      { "t": 2.8, "e": [-0.20, 0, 0], "ease": "easeOut" }
     ] },
     "neck": { "keys": [
-      { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 0.45, "e": [-0.02, 0.03, 0], "ease": "easeOut" },
-      { "t": 1.6, "e": [-0.01, 0.01, 0] },
-      { "t": 2.8, "e": [0, 0, 0], "ease": "easeOut" }
+      { "t": 0.0, "e": [0.26, 0, 0] },
+      { "t": 0.45, "e": [0.24, 0.03, 0], "ease": "easeOut" },
+      { "t": 1.6, "e": [0.25, 0.01, 0] },
+      { "t": 2.8, "e": [0.26, 0, 0], "ease": "easeOut" }
     ] },
     "head": { "keys": [
-      { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 0.3, "e": [0.02, 0, 0], "ease": "easeIn" },
-      { "t": 0.7, "e": [-0.07, 0.05, 0], "ease": "easeOut" },
-      { "t": 1.6, "e": [-0.035, 0.02, 0] },
-      { "t": 2.8, "e": [0, 0, 0], "ease": "easeOut" }
-    ] }
+      { "t": 0.0, "e": [0.28, 0, 0] },
+      { "t": 0.3, "e": [0.30, 0, 0], "ease": "easeIn" },
+      { "t": 0.7, "e": [0.21, 0.05, 0], "ease": "easeOut" },
+      { "t": 1.6, "e": [0.245, 0.02, 0] },
+      { "t": 2.8, "e": [0.28, 0, 0], "ease": "easeOut" }
+    ] },
+    "leftUpperArm": { "keys": [ { "t": 0, "e": [0.77, -1.32, 1.05] }, { "t": 2.8, "e": [0.77, -1.32, 1.05] } ] },
+    "rightUpperArm": { "keys": [ { "t": 0, "e": [0.54, 1.46, -0.89] }, { "t": 2.8, "e": [0.54, 1.46, -0.89] } ] },
+    "leftLowerArm": { "keys": [ { "t": 0, "e": [0.17, -2.49, -0.38] }, { "t": 2.8, "e": [0.17, -2.49, -0.38] } ] },
+    "rightLowerArm": { "keys": [ { "t": 0, "e": [0.35, 2.46, 0.38] }, { "t": 2.8, "e": [0.35, 2.46, 0.38] } ] },
+    "leftHand": { "keys": [ { "t": 0, "e": [-0.33, -0.41, -0.48] }, { "t": 2.8, "e": [-0.33, -0.41, -0.48] } ] },
+    "rightHand": { "keys": [ { "t": 0, "e": [-0.33, 0.41, 0.48] }, { "t": 2.8, "e": [-0.33, 0.41, 0.48] } ] }
   },
   "exprCues": [
     { "preset": "surprised_light", "at": 0.55, "intensity": 0.8, "fadeIn": 0.12, "hold": 0.7, "fadeOut": 0.7 },

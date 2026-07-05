@@ -2,7 +2,7 @@
   "schema": "motion/1",
   "id": "amb_slp_dream_smile",
   "label": "Ambient: 夢を見て薄く笑う",
-  "notes": "sleep_desk Ambient（12原則準拠 2026-06-13）。良い夢か、寝顔にふっと薄い笑みが浮かんで消える。寝顔の微細表情なので過剰演出は避け、表情(fun)＋寝息(胸のゆっくりした上下=生命感)と頭の僅かな安らぎの動きのみ。目は閉じたまま。④副次=呼吸。oneshot。posture=sit_desk_slump。",
+  "notes": "sleep_desk Ambient（12原則準拠 2026-06-13、腕枕ベース統合 2026-07-05）。良い夢か、寝顔にふっと薄い笑みが浮かんで消える。寝顔の微細表情なので過剰演出は避け、表情(fun)＋寝息＋頭の僅かな安らぎの動きのみ。目は閉じたまま。④副次=呼吸。oneshot。腕枕基底（spine 0.16 / chest 0.10 / head [0,0.7,0.16] ＋腕4トラック＋hands relax）をキーに埋め込み＝loop_sleep_desk と境界シームレス。chest の緩みも基底(0.10)からのデルタ。dsl_amb_slp_dream_smile は WORK_HAND_PIN_POLICIES の sleeparms グループ（worldアンカー）。",
   "category": "ambient",
   "tags": ["mode:sleep_desk", "family:special"],
   "posture": "sit_desk_slump",
@@ -10,17 +10,26 @@
   "loop": false,
   "fadeIn": 0.6,
   "fadeOut": 0.8,
+  "hands": { "left": "relax", "right": "relax" },
   "tracks": {
-    "head": { "keys": [
-      { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 1.8, "e": [-0.02, 0.035, 0.015], "ease": "sineInOut" },
-      { "t": 4.2, "e": [0, 0, 0], "ease": "sineInOut" }
+    "spine": { "keys": [
+      { "t": 0.0, "e": [0.16, 0, 0] },
+      { "t": 4.2, "e": [0.16, 0, 0] }
     ] },
     "chest": { "keys": [
-      { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 2.1, "e": [-0.02, 0, 0], "ease": "sineInOut" },
-      { "t": 4.2, "e": [0, 0, 0], "ease": "sineInOut" }
-    ] }
+      { "t": 0.0, "e": [0.10, 0, 0] },
+      { "t": 2.1, "e": [0.08, 0, 0], "ease": "sineInOut" },
+      { "t": 4.2, "e": [0.10, 0, 0], "ease": "sineInOut" }
+    ] },
+    "head": { "keys": [
+      { "t": 0.0, "e": [0, 0.7, 0.16] },
+      { "t": 1.8, "e": [-0.02, 0.735, 0.175], "ease": "sineInOut" },
+      { "t": 4.2, "e": [0, 0.7, 0.16], "ease": "sineInOut" }
+    ] },
+    "leftUpperArm": { "keys": [ { "t": 0, "e": [1.29, -0.78, 0.67] }, { "t": 4.2, "e": [1.29, -0.78, 0.67] } ] },
+    "rightUpperArm": { "keys": [ { "t": 0, "e": [1.26, 0.82, -0.65] }, { "t": 4.2, "e": [1.26, 0.82, -0.65] } ] },
+    "leftLowerArm": { "keys": [ { "t": 0, "e": [-0.70, -2.33, -0.30] }, { "t": 4.2, "e": [-0.70, -2.33, -0.30] } ] },
+    "rightLowerArm": { "keys": [ { "t": 0, "e": [-0.50, 2.20, -0.05] }, { "t": 4.2, "e": [-0.50, 2.20, -0.05] } ] }
   },
   "expressions": { "keys": [
     { "t": 0.0, "set": { "blink": 1.0 }, "fade": 0.5 },

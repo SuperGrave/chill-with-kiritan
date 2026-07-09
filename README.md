@@ -10,6 +10,10 @@
 `v0.8.0` として扱い、以後の小さな更新は `v0.8.1`, `v0.8.2` のように
 v0.8 系で進める。`v2` / `v3` など過去の版名はレガシー版としてそのまま残す。
 
+Git上の現役開発ラインは `main`。節目は `v0.8.0`, `v0.8.1` のようなtagで残し、
+閉じた過去ブランチは `archive/closed/` にまとめる。詳しくは
+`docs/GIT_TREE_POLICY.md`。
+
 Companion の表示バージョンは `03_companion/src-tauri/Cargo.toml` の
 `package.version` を `/api/health` 経由で表示する。npm/Tauri/Cargo の
 バージョンは同じ値にそろえる。

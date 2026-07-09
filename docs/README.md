@@ -8,7 +8,8 @@
 `v0.8.1`, `v0.8.2` のように v0.8 系で積み上げる。過去の `v2` / `v3`
 表記はレガシー版として保持する。
 
-運用ルールは [MAINLINE_VERSIONING.md](MAINLINE_VERSIONING.md) を正典にする。
+バージョン規則は [MAINLINE_VERSIONING.md](MAINLINE_VERSIONING.md)、Gitツリー運用は
+[GIT_TREE_POLICY.md](GIT_TREE_POLICY.md) を正典にする。
 
 ## 全体ドキュメント
 
@@ -20,6 +21,8 @@
 |----------|------|
 | [STATUS_REPORT_2026-06-10.md](STATUS_REPORT_2026-06-10.md) | プロジェクト全体の現状スナップショット |
 | [RELEASE_V0.8.1.md](RELEASE_V0.8.1.md) | v0.8.1 の変更点・検証メモ |
+| [MAINLINE_VERSIONING.md](MAINLINE_VERSIONING.md) | v0.8 系の命名・表示・release生成ルール |
+| [GIT_TREE_POLICY.md](GIT_TREE_POLICY.md) | main / tag / archive branch の運用ルール |
 | [MOTION_PIPELINE_RESEARCH_2026-06-11.md](MOTION_PIPELINE_RESEARCH_2026-06-11.md) | モーション・パイプラインの調査 |
 | [model-audit/](model-audit/) | VRMモデルのライセンス／構造監査（md + json） |
 
@@ -34,5 +37,6 @@
 - **完了したフェーズ文書**: そのアプリの `docs/_archive/` へ移動（履歴として保管）。
 - **正典／恒久ガイド**: バージョンを付けずアプリ直下に常駐（例: `MOTION_AUTHORING_GUIDE.md`）。
 - **本流バージョン規則**: `MAINLINE_VERSIONING.md` に集約し、実装・表示・生成スクリプトを同じ版にそろえる。
+- **Gitツリー運用**: `GIT_TREE_POLICY.md` に集約し、`main` を現役本流、tag をチェックポイント、`archive/closed/` を閉じた過去ツリーとして扱う。
 - **使い終わった非ドキュメント物**（インストーラ・一回限りスクリプト・検証出力など）: ルート `_archive/` へ移動（削除しない）。
 - 各 `docs/` 直下に `README.md` 索引を置き、生きている最新文書へリンクする。

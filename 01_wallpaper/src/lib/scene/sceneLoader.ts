@@ -13,6 +13,7 @@
 
 import type { ScenePreset, SceneProp, SceneLoadResult, SceneLighting, Vec3, PropFallback } from './sceneTypes';
 import { buildDefaultScene, DEFAULT_SCENE_ID } from './scenePresets';
+import { publicAssetUrl } from '../assetUrl';
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === 'string';
@@ -121,7 +122,7 @@ export function validateScenePreset(raw: unknown, fallbackId: string = DEFAULT_S
 // Fetch + validate a scene preset by id. Resolves (never rejects): on any
 // fetch/parse error it returns the built-in default scene with usedDefault=true.
 export async function loadScenePreset(sceneId: string): Promise<{ scene: ScenePreset; result: SceneLoadResult }> {
-  const url = `/scenes/${sceneId}/scene.json`;
+  const url = publicAssetUrl(`/scenes/${sceneId}/scene.json`);
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

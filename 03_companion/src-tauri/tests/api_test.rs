@@ -63,9 +63,9 @@ async fn crud_presets_and_ui_roundtrip() {
         .unwrap();
     assert_eq!(h["ok"], true);
 
-    // todos: create → list → toggle → delete
-    let created: serde_json::Value = auth(c.post(format!("{base}/api/todos")), &token)
-        .json(&serde_json::json!({ "title": "テスト" }))
+    // memos: create -> list -> pin -> delete
+    let created: serde_json::Value = auth(c.post(format!("{base}/api/memos")), &token)
+        .json(&serde_json::json!({ "text": "テスト" }))
         .send()
         .await
         .unwrap()
@@ -73,46 +73,46 @@ async fn crud_presets_and_ui_roundtrip() {
         .await
         .unwrap();
     let id = created["id"].as_str().unwrap().to_string();
-    assert_eq!(created["title"], "テスト");
+    assert_eq!(created["text"], "テスト");
 
-    let todos: serde_json::Value = c
-        .get(format!("{base}/api/todos"))
+    let memos: serde_json::Value = c
+        .get(format!("{base}/api/memos"))
         .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
-    assert_eq!(todos.as_array().unwrap().len(), 1);
+    assert_eq!(memos.as_array().unwrap().len(), 1);
 
-    auth(c.patch(format!("{base}/api/todos/{id}")), &token)
-        .json(&serde_json::json!({ "done": true }))
+    auth(c.patch(format!("{base}/api/memos/{id}")), &token)
+        .json(&serde_json::json!({ "pinned": true }))
         .send()
         .await
         .unwrap();
-    let todos: serde_json::Value = c
-        .get(format!("{base}/api/todos"))
+    let memos: serde_json::Value = c
+        .get(format!("{base}/api/memos"))
         .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
-    assert_eq!(todos[0]["done"], true);
+    assert_eq!(memos[0]["pinned"], true);
 
-    auth(c.delete(format!("{base}/api/todos/{id}")), &token)
+    auth(c.delete(format!("{base}/api/memos/{id}")), &token)
         .send()
         .await
         .unwrap();
-    let todos: serde_json::Value = c
-        .get(format!("{base}/api/todos"))
+    let memos: serde_json::Value = c
+        .get(format!("{base}/api/memos"))
         .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
-    assert!(todos.as_array().unwrap().is_empty());
+    assert!(memos.as_array().unwrap().is_empty());
 
     // UI settings: PUT then GET reflects it
     auth(c.put(format!("{base}/api/ui")), &token)
@@ -181,7 +181,11 @@ async fn crud_presets_and_ui_roundtrip() {
         .json()
         .await
         .unwrap();
-    assert_eq!(presets[0]["name"], "夜モードv2");
+    assert!(presets
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["id"] == pid && p["name"] == "夜モードv2"));
 
     // delete preset
     auth(c.delete(format!("{base}/api/presets/{pid}")), &token)
@@ -196,11 +200,11 @@ async fn crud_presets_and_ui_roundtrip() {
         .json()
         .await
         .unwrap();
-    assert!(presets.as_array().unwrap().is_empty());
+    assert!(!presets.as_array().unwrap().iter().any(|p| p["id"] == pid));
 
     // secrets never leak into /api/state, but status reports presence
     auth(c.put(format!("{base}/api/secrets")), &token)
-        .json(&serde_json::json!({ "openaiKey": "sk-test" }))
+        .json(&serde_json::json!({ "spotifyClientSecret": "spotify-secret-test" }))
         .send()
         .await
         .unwrap();
@@ -212,7 +216,7 @@ async fn crud_presets_and_ui_roundtrip() {
         .json()
         .await
         .unwrap();
-    assert_eq!(status["openai"], true);
+    assert_eq!(status["spotifyClientSecret"], true);
     let state_text = c
         .get(format!("{base}/api/state"))
         .send()
@@ -222,7 +226,7 @@ async fn crud_presets_and_ui_roundtrip() {
         .await
         .unwrap();
     assert!(
-        !state_text.contains("sk-test"),
+        !state_text.contains("spotify-secret-test"),
         "secrets must not appear in /api/state"
     );
 }
@@ -360,6 +364,43 @@ async fn kiritan_state_post_and_get() {
 }
 
 #[tokio::test]
+async fn background_upload_stores_file_and_serves_lightweight_url() {
+    let base = spawn_server().await;
+    let c = reqwest::Client::new();
+    let token = fetch_token(&base, &c).await;
+    let payload = b"fake transparent overlay bytes".to_vec();
+
+    let uploaded: serde_json::Value = auth(
+        c.post(format!(
+            "{base}/api/backgrounds/upload?fileName=light.png&mediaType=overlay"
+        )),
+        &token,
+    )
+    .header("content-type", "image/png")
+    .body(payload.clone())
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+
+    assert_eq!(uploaded["ok"], true);
+    assert_eq!(uploaded["item"]["type"], "image");
+    assert_eq!(uploaded["item"]["kind"], "overlay");
+    assert_eq!(uploaded["item"]["name"], "light.png");
+    assert_eq!(uploaded["item"]["size"], payload.len());
+    let url = uploaded["item"]["url"].as_str().unwrap();
+    assert!(
+        url.starts_with(&format!("{base}/api/backgrounds/")),
+        "served URL should use the active API host, got {url}"
+    );
+
+    let served = c.get(url).send().await.unwrap().bytes().await.unwrap();
+    assert_eq!(served.as_ref(), payload.as_slice());
+}
+
+#[tokio::test]
 async fn mutating_routes_require_companion_token() {
     let base = spawn_server().await;
     let c = reqwest::Client::new();
@@ -368,25 +409,25 @@ async fn mutating_routes_require_companion_token() {
     assert_eq!(state.status(), 200, "GET remains open for overlay polling");
 
     let unauthorized = c
-        .post(format!("{base}/api/todos"))
-        .json(&serde_json::json!({ "title": "no token" }))
+        .post(format!("{base}/api/memos"))
+        .json(&serde_json::json!({ "text": "no token" }))
         .send()
         .await
         .unwrap();
     assert_eq!(unauthorized.status(), 401, "mutating request without token");
 
     let wrong = c
-        .post(format!("{base}/api/todos"))
+        .post(format!("{base}/api/memos"))
         .header(API_TOKEN_HEADER, "wrong-token")
-        .json(&serde_json::json!({ "title": "wrong token" }))
+        .json(&serde_json::json!({ "text": "wrong token" }))
         .send()
         .await
         .unwrap();
     assert_eq!(wrong.status(), 401, "mutating request with wrong token");
 
     let token = fetch_token(&base, &c).await;
-    let created = auth(c.post(format!("{base}/api/todos")), &token)
-        .json(&serde_json::json!({ "title": "authorized" }))
+    let created = auth(c.post(format!("{base}/api/memos")), &token)
+        .json(&serde_json::json!({ "text": "authorized" }))
         .send()
         .await
         .unwrap();

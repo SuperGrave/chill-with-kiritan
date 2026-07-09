@@ -17,13 +17,16 @@ export interface SchedulerConfig {
   cooldownSec: number;
   /** 深夜帯の間隔倍率（§3.1 = 1.5）。 */
   lateNightIntervalMul: number;
+  /** Host override for every mode's ambient interval. Omit to use MODE_TABLE. */
+  intervalSeconds?: [number, number] | null;
   /** Props the host has available (gates amb_*_sip etc.). */
   availableProps: Set<string>;
+  /** Treat availableMotions as an allow-list even when it is empty. */
+  restrictAvailableMotions: boolean;
   /**
-   * When set & non-empty, restrict the eligible pool to ambient ids whose
-   * motion file is actually authored (the host knows what is loaded). Lets a
-   * partial content set self-run without firing unauthored ids. Empty/omitted
-   * = no restriction (full design pool, e.g. for the Node soak test).
+   * When restrictAvailableMotions is true, restrict the eligible pool to
+   * ambient ids whose motion file is actually authored/enabled. Empty then
+   * means "play no ambients"; false keeps the full design pool for tests.
    */
   availableMotions?: Set<string>;
 }
@@ -32,6 +35,7 @@ const DEFAULTS: Omit<SchedulerConfig, 'availableProps'> = {
   recentExclusion: 2,
   cooldownSec: 90,
   lateNightIntervalMul: 1.5,
+  restrictAvailableMotions: false,
 };
 
 export interface AmbientFire {
@@ -71,7 +75,8 @@ export class AmbientScheduler {
   tickSeconds(dt: number, hour: number): AmbientFire | null {
     this.clockSec += dt;
     const spec = MODE_TABLE[this.mode];
-    if (!spec.ambientIntervalSec || spec.ambients.length === 0) return null;
+    const interval = this.intervalFor(spec.ambientIntervalSec);
+    if (!interval || spec.ambients.length === 0) return null;
     if (this.clockSec < this.nextFireAt) return null;
 
     const id = this.pick(hour);
@@ -86,13 +91,20 @@ export class AmbientScheduler {
 
   private armNext(hour: number): void {
     const spec = MODE_TABLE[this.mode];
-    if (!spec.ambientIntervalSec) {
+    const interval = this.intervalFor(spec.ambientIntervalSec);
+    if (!interval) {
       this.nextFireAt = Number.POSITIVE_INFINITY;
       return;
     }
-    const [lo, hi] = spec.ambientIntervalSec;
+    const [lo, hi] = interval;
     const mul = daypartForHour(hour) === 'lateNight' ? this.cfg.lateNightIntervalMul : 1;
     this.nextFireAt = this.clockSec + this.rng.range(lo, hi) * mul;
+  }
+
+  private intervalFor(modeInterval: [number, number] | null): [number, number] | null {
+    if (!modeInterval) return null;
+    const override = this.cfg.intervalSeconds;
+    return override && override[0] > 0 && override[1] >= override[0] ? override : modeInterval;
   }
 
   // Build the eligible candidate list, relaxing constraints only if everything
@@ -102,7 +114,7 @@ export class AmbientScheduler {
     const lateNight = daypartForHour(hour) === 'lateNight';
 
     const motions = this.cfg.availableMotions;
-    const restrict = motions != null && motions.size > 0;
+    const restrict = this.cfg.restrictAvailableMotions && motions != null;
     const eligible = spec.ambients.filter((a) => {
       if (a.requiresProp && !this.cfg.availableProps.has(a.requiresProp)) return false;
       if (restrict && !motions.has(a.id)) return false;

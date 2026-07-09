@@ -21,16 +21,11 @@ function Icon({ children, ...props }: IconProps & { children: ReactNode }) {
   );
 }
 
-export const ChatIcon = (p: IconProps) => (
+export const HomeIcon = (p: IconProps) => (
   <Icon {...p}>
-    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-  </Icon>
-);
-
-export const TodoIcon = (p: IconProps) => (
-  <Icon {...p}>
-    <path d="m9 11 3 3L22 4" />
-    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    <path d="M3 11 12 3l9 8" />
+    <path d="M5 10v10h14V10" />
+    <path d="M9 20v-6h6v6" />
   </Icon>
 );
 
@@ -64,13 +59,6 @@ export const SettingsIcon = (p: IconProps) => (
 export const StatusIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-  </Icon>
-);
-
-export const SendIcon = (p: IconProps) => (
-  <Icon {...p}>
-    <path d="m22 2-7 20-4-9-9-4Z" />
-    <path d="M22 2 11 13" />
   </Icon>
 );
 
@@ -113,12 +101,6 @@ export const RefreshIcon = (p: IconProps) => (
 export const CheckIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M20 6 9 17l-5-5" />
-  </Icon>
-);
-
-export const SparkIcon = (p: IconProps) => (
-  <Icon {...p}>
-    <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z" />
   </Icon>
 );
 

@@ -12,6 +12,7 @@ import type { MotionDef, PoseDef, HandDef, MotionDoc, ValidationIssue } from './
 import { validateMotion, validatePose, validateHand } from './validate';
 import { buildEvaluator } from './evaluate';
 import type { MotionEvaluator } from './evaluate';
+import { publicAssetUrl } from '../../assetUrl';
 
 export interface LoadedMotion {
   ok: true;
@@ -58,7 +59,7 @@ export async function loadMotionDoc(id: string, hintLs?: LsHint): Promise<LoadMo
     return ` Available ${label}: ${listed[kind].join(', ') || '(none yet)'}.`;
   };
 
-  const motionRes = await fetchJson(`/motions/dsl/${id}.motion.json`);
+  const motionRes = await fetchJson(publicAssetUrl(`/motions/dsl/${id}.motion.json`));
   if (!motionRes.ok) {
     return failure('$', `${motionRes.error}.${await hint('motions')} Files live in public/motions/dsl/<id>.motion.json.`);
   }
@@ -71,7 +72,7 @@ export async function loadMotionDoc(id: string, hintLs?: LsHint): Promise<LoadMo
 
   let posture: PoseDef | null = null;
   if (motion.posture) {
-    const res = await fetchJson(`/poses/${motion.posture}.pose.json`);
+    const res = await fetchJson(publicAssetUrl(`/poses/${motion.posture}.pose.json`));
     if (!res.ok) return failure('posture', `${res.error}.${await hint('poses')}`, v.warnings);
     const pv = validatePose(res.data);
     if (!pv.ok) {
@@ -87,7 +88,7 @@ export async function loadMotionDoc(id: string, hintLs?: LsHint): Promise<LoadMo
 
   const loadHand = async (handId: string | undefined, side: 'left' | 'right'): Promise<HandDef | null | LoadMotionFailure> => {
     if (!handId) return null;
-    const res = await fetchJson(`/poses/hands/${handId}.hand.json`);
+    const res = await fetchJson(publicAssetUrl(`/poses/hands/${handId}.hand.json`));
     if (!res.ok) return failure(`hands.${side}`, `${res.error}.${await hint('hands')}`, v.warnings);
     const hv = validateHand(res.data);
     if (!hv.ok) {

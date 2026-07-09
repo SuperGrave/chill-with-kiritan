@@ -27,30 +27,6 @@
   letter-spacing: 0.14em;
 }
 
-.companion-connection {
-  position: absolute;
-  left: 40px;
-  bottom: 28px;
-  padding: 7px 11px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.34);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: rgba(255, 255, 255, 0.78);
-  font-family: var(--font-main);
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.65);
-}
-
-.companion-connection.is-live {
-  border-color: rgba(106, 232, 166, 0.45);
-}
-
-.companion-connection.is-offline {
-  border-color: rgba(255, 181, 105, 0.5);
-  color: rgba(255, 218, 181, 0.9);
-}
-
 /* Debug Mode Styles */
 .overlay-container.debug-mode {
   border: 1px solid rgba(255, 0, 0, 0.5);

@@ -13,6 +13,11 @@ interface LyricsPanelProps {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
+const sampledAtMs = (sampledAt?: string): number => {
+  const parsed = sampledAt ? Date.parse(sampledAt) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : Date.now();
+};
+
 const pickLineIndex = (
   lines: NonNullable<SpotifyState['lyrics']>['lines'],
   synced: boolean,
@@ -41,7 +46,7 @@ const LyricsPanel: React.FC<LyricsPanelProps> = ({ spotify = mockSpotify, settin
   const [anchor, setAnchor] = React.useState({
     key: '',
     progressMs: track?.progressMs ?? 0,
-    seenAt: Date.now(),
+    seenAt: sampledAtMs(track?.sampledAt),
     status: spotify.status,
   });
 
@@ -51,10 +56,10 @@ const LyricsPanel: React.FC<LyricsPanelProps> = ({ spotify = mockSpotify, settin
     setAnchor({
       key: trackKey,
       progressMs: track?.progressMs ?? 0,
-      seenAt: Date.now(),
+      seenAt: sampledAtMs(track?.sampledAt),
       status: spotify.status,
     });
-  }, [trackKey, track?.progressMs, spotify.status]);
+  }, [trackKey, track?.progressMs, track?.sampledAt, spotify.status]);
 
   React.useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 250);
@@ -93,20 +98,33 @@ const LyricsPanel: React.FC<LyricsPanelProps> = ({ spotify = mockSpotify, settin
     overflow: 'hidden',
   });
 
-  const textStyle = (kind: 'prev' | 'current' | 'next'): React.CSSProperties => ({
-    maxWidth: '100%',
-    display: '-webkit-box',
-    WebkitBoxOrient: 'vertical',
-    WebkitLineClamp: kind === 'current' ? s.currentMaxLines : s.sideMaxLines,
-    overflow: 'hidden',
-    overflowWrap: 'anywhere',
-    lineHeight: 1.18,
-    fontSize: `${kind === 'current' ? s.currentSize : s.sideSize}px`,
-    fontWeight: kind === 'current' ? 500 : 300,
-    opacity: kind === 'current' ? 1 : s.sideOpacity,
-    letterSpacing: kind === 'current' ? '0.02em' : '0.04em',
-    textShadow: kind === 'current' ? '0 0 18px rgba(255,255,255,0.25)' : 'none',
-  });
+  const textStyle = (kind: 'prev' | 'current' | 'next'): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      maxWidth: '100%',
+      overflow: 'hidden',
+      lineHeight: 1.18,
+      fontSize: `${kind === 'current' ? s.currentSize : s.sideSize}px`,
+      fontWeight: kind === 'current' ? 500 : 300,
+      opacity: kind === 'current' ? 1 : s.sideOpacity,
+      letterSpacing: kind === 'current' ? '0.02em' : '0.04em',
+      textShadow: kind === 'current' ? '0 0 18px rgba(255,255,255,0.25)' : 'none',
+    };
+    if (s.lineOverflowMode === 'ellipsis') {
+      return {
+        ...base,
+        display: 'block',
+        whiteSpace: 'nowrap',
+        textOverflow: 'ellipsis',
+      };
+    }
+    return {
+      ...base,
+      display: '-webkit-box',
+      WebkitBoxOrient: 'vertical',
+      WebkitLineClamp: kind === 'current' ? s.currentMaxLines : s.sideMaxLines,
+      overflowWrap: 'anywhere',
+    };
+  };
 
   return (
     <div style={{

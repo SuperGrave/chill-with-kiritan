@@ -39,6 +39,8 @@ export type DirectorAction =
 export interface DirectorRunnerConfig {
   seed?: number;
   initialMode?: ModeId;
+  /** Keep the runner in this mode; ambient actions still play from that mode. */
+  fixedMode?: ModeId | null;
   availableProps?: Set<string>;
   /** Authored ambient ids — restricts the scheduler pool to what can actually play. */
   availableMotions?: Set<string>;
@@ -60,7 +62,9 @@ export interface DirectorRunnerConfig {
    */
   transitionMotionsFor?: (from: ModeId, to: ModeId) => string[];
   sleepiness?: Partial<SleepinessConfig>;
-  scheduler?: Partial<Pick<SchedulerConfig, 'recentExclusion' | 'cooldownSec' | 'lateNightIntervalMul'>>;
+  scheduler?: Partial<
+    Pick<SchedulerConfig, 'recentExclusion' | 'cooldownSec' | 'lateNightIntervalMul' | 'intervalSeconds' | 'restrictAvailableMotions'>
+  >;
 }
 
 export interface DirectorStatus {
@@ -95,7 +99,7 @@ export class DirectorRunner {
   constructor(cfg: DirectorRunnerConfig) {
     this.cfg = cfg;
     const rng = makeRng(cfg.seed ?? (Date.now() & 0xffffffff) >>> 0);
-    this.mode = cfg.initialMode ?? 'work_normal';
+    this.mode = cfg.fixedMode ?? cfg.initialMode ?? 'work_normal';
     this.fsm = new ModeFsm(rng, this.mode, cfg.sleepiness, cfg.allowedModes);
     this.sched = new AmbientScheduler(rng, this.mode, {
       ...cfg.scheduler,
@@ -127,8 +131,12 @@ export class DirectorRunner {
     if (this.state === 'transition') return null;
 
     // Mode transitions run on the FSM's minute clock and win over ambients.
-    const t = this.fsm.stepMinutes(dtSec / 60, hour);
-    if (t) return this.beginModeChange(t.from, t.to, hour);
+    if (this.cfg.fixedMode) {
+      this.fsm.holdMinutes(dtSec / 60, hour);
+    } else {
+      const t = this.fsm.stepMinutes(dtSec / 60, hour);
+      if (t) return this.beginModeChange(t.from, t.to, hour);
+    }
 
     // Ambients only fire from the loop state; the scheduler clock pauses during
     // an ambient (we simply don't tick it), so the interval is loop-time.

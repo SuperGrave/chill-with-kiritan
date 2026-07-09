@@ -1,6 +1,6 @@
 use axum::{
-    body::Body,
-    extract::{Path, Query, State},
+    body::{Body, Bytes},
+    extract::{DefaultBodyLimit, Host, Path, Query, State},
     http::{HeaderValue, Method, Request, StatusCode},
     middleware::{from_fn_with_state, Next},
     response::{Html, IntoResponse, Json, Response},
@@ -9,11 +9,13 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::{net::SocketAddr, time::Instant};
+use std::{net::SocketAddr, path::Path as FsPath, time::Instant};
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::services::ServeDir;
 
 use crate::models::*;
 use crate::services;
+use crate::startup;
 use crate::state::Shared;
 
 pub const API_PORT: u16 = 40313;
@@ -66,11 +68,25 @@ mod tests {
 
 /// Builds the full axum router (shared by the live server and integration tests).
 pub fn build_router(shared: Shared) -> Router {
+    let backgrounds_dir = {
+        let g = shared.lock().unwrap();
+        g.data_dir.join("backgrounds")
+    };
+    let _ = std::fs::create_dir_all(&backgrounds_dir);
+
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
             let s = origin.to_str().unwrap_or("");
             is_allowed_origin(s)
         }))
+        // Wallpaper Engine loads the wallpaper from a file:// page, which some
+        // Chromium builds treat as a non-local context for Private Network Access.
+        // Keep this header enabled so file:// wallpapers can still talk to the
+        // loopback Companion API when PNA preflights are enforced. The v0.8.0
+        // camera/reporting outage also had a separate asset cause: the local
+        // Wallpaper Engine folder must contain models/kiritan.vrm for the VRM-gated
+        // camera application and kiritan state poster to run.
+        .allow_private_network(true)
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -84,6 +100,9 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/health", get(health))
         .route("/api/auth/token", get(auth_token))
         .route("/api/state", get(get_state))
+        .route("/api/runtime", get(get_runtime_state))
+        .route("/api/timer", get(get_timer))
+        .route("/api/timer/control", post(timer_control))
         // ── Kiritan runtime state (Stage C) ──────────────────────────
         .route(
             "/api/kiritan/state",
@@ -94,13 +113,15 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/presets", get(list_presets).post(create_preset))
         .route("/api/presets/:id", put(update_preset).delete(delete_preset))
         .route("/api/presets/:id/apply", post(apply_preset))
+        // ── Background media ────────────────────────────────────────
+        .route("/api/backgrounds/upload", post(background_upload))
+        .nest_service("/api/backgrounds", ServeDir::new(backgrounds_dir))
         // ── Config / secrets ─────────────────────────────────────────
         .route("/api/settings", get(get_settings).put(put_settings))
+        .route("/api/startup/status", get(startup_status))
+        .route("/api/startup/repair", post(startup_repair))
         .route("/api/secrets/status", get(secrets_status))
         .route("/api/secrets", put(put_secrets))
-        // ── TODO ─────────────────────────────────────────────────────
-        .route("/api/todos", get(list_todos).post(create_todo))
-        .route("/api/todos/:id", patch(update_todo).delete(delete_todo))
         // ── Memo ─────────────────────────────────────────────────────
         .route("/api/memos", get(list_memos).post(create_memo))
         .route("/api/memos/:id", patch(update_memo).delete(delete_memo))
@@ -110,13 +131,13 @@ pub fn build_router(shared: Shared) -> Router {
             "/api/bookmarks/:id",
             patch(update_bookmark).delete(delete_bookmark),
         )
-        // ── Chat ─────────────────────────────────────────────────────
-        .route("/api/chat/send", post(chat_send))
-        .route("/api/chat/history", get(chat_history))
-        .route("/api/chat/clear", post(chat_clear))
         // ── News / Weather / Spotify ─────────────────────────────────
         .route("/api/news", get(get_news))
         .route("/api/news/refresh", post(news_refresh))
+        .route("/api/personal-news", get(get_personal_news))
+        .route("/api/personal-news/reload", post(personal_news_reload))
+        .route("/api/personal-news/select", post(personal_news_select))
+        .route("/api/personal-news/control", post(personal_news_control))
         .route("/api/weather/current", get(weather_current))
         .route("/api/weather/refresh", post(weather_refresh))
         .route("/api/spotify/auth-url", get(spotify_auth_url))
@@ -124,6 +145,7 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/spotify/refresh", post(spotify_refresh))
         .route("/api/spotify/control", post(spotify_control))
         .route("/spotify/callback", get(spotify_callback))
+        .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
         .layer(from_fn_with_state(shared.clone(), require_mutation_token))
         .layer(cors)
         .with_state(shared)
@@ -170,6 +192,46 @@ fn ok() -> Json<Value> {
     Json(json!({ "ok": true }))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BackgroundUploadQuery {
+    file_name: Option<String>,
+    media_type: Option<String>,
+}
+
+fn safe_background_extension(file_name: Option<&str>, media_type: Option<&str>) -> String {
+    let ext = file_name
+        .and_then(|name| FsPath::new(name).extension())
+        .and_then(|ext| ext.to_str())
+        .map(|ext| {
+            ext.chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .take(12)
+                .collect::<String>()
+                .to_ascii_lowercase()
+        })
+        .filter(|ext| !ext.is_empty());
+
+    ext.unwrap_or_else(|| match media_type {
+        Some("video") => "mp4".to_string(),
+        Some("image") | Some("overlay") => "png".to_string(),
+        _ => "bin".to_string(),
+    })
+}
+
+fn background_public_type(media_type: Option<&str>, ext: &str) -> &'static str {
+    if media_type == Some("video") {
+        return "video";
+    }
+    if media_type == Some("image") || media_type == Some("overlay") {
+        return "image";
+    }
+    match ext {
+        "mp4" | "webm" | "mov" | "m4v" | "mkv" | "avi" => "video",
+        _ => "image",
+    }
+}
+
 async fn require_mutation_token(
     State(shared): State<Shared>,
     req: Request<Body>,
@@ -213,7 +275,238 @@ async fn auth_token(State(s): State<Shared>) -> Json<Value> {
 }
 
 async fn get_state(State(s): State<Shared>) -> Json<WallpaperState> {
-    Json(s.lock().unwrap().state.clone())
+    let g = s.lock().unwrap();
+    let mut state = g.state.clone();
+    repair_ui_state(&mut state.ui);
+    state.timer = materialize_timer(&state.timer, &state.ui.settings);
+    Json(state)
+}
+
+async fn get_runtime_state(State(s): State<Shared>) -> Json<Value> {
+    let g = s.lock().unwrap();
+    let mut ui = g.state.ui.clone();
+    repair_ui_state(&mut ui);
+    let timer = materialize_timer(&g.state.timer, &ui.settings);
+    let personal_news = crate::personal_news::materialize_personal_news(&g.state.personal_news);
+    Json(json!({
+        "news": g.state.news.clone(),
+        "personalNews": personal_news,
+        "spotify": g.state.spotify.clone(),
+        "weather": g.state.weather.clone(),
+        "memos": g.state.memos.clone(),
+        "timer": timer,
+        "updatedAt": g.state.updated_at.clone(),
+    }))
+}
+
+#[derive(Debug, Clone)]
+struct TimerDurations {
+    mode: String,
+    timer_ms: u64,
+    focus_ms: u64,
+    short_break_ms: u64,
+    long_break_ms: u64,
+}
+
+fn timer_minutes(settings: &Value, key: &str, fallback: u64) -> u64 {
+    settings
+        .get("timerPanel")
+        .and_then(|p| p.get(key))
+        .and_then(|v| {
+            v.as_u64()
+                .or_else(|| v.as_f64().map(|n| n.round().max(1.0) as u64))
+        })
+        .unwrap_or(fallback)
+        .max(1)
+}
+
+fn timer_durations(settings: &Value) -> TimerDurations {
+    let mode = settings
+        .get("timerPanel")
+        .and_then(|p| p.get("mode"))
+        .and_then(|v| v.as_str())
+        .filter(|v| *v == "timer" || *v == "pomodoro")
+        .unwrap_or("pomodoro")
+        .to_string();
+    TimerDurations {
+        mode,
+        timer_ms: timer_minutes(settings, "timerMinutes", 10) * 60 * 1000,
+        focus_ms: timer_minutes(settings, "pomodoroMinutes", 25) * 60 * 1000,
+        short_break_ms: timer_minutes(settings, "shortBreakMinutes", 5) * 60 * 1000,
+        long_break_ms: timer_minutes(settings, "longBreakMinutes", 15) * 60 * 1000,
+    }
+}
+
+fn duration_for_timer_phase(settings: &TimerDurations, mode: &str, phase: &str) -> u64 {
+    if mode == "timer" {
+        settings.timer_ms
+    } else {
+        match phase {
+            "shortBreak" => settings.short_break_ms,
+            "longBreak" => settings.long_break_ms,
+            _ => settings.focus_ms,
+        }
+    }
+}
+
+fn reset_timer_from_settings(settings: &TimerDurations) -> TimerState {
+    let duration_ms = duration_for_timer_phase(settings, &settings.mode, "focus");
+    TimerState {
+        mode: settings.mode.clone(),
+        phase: "focus".to_string(),
+        status: "idle".to_string(),
+        cycle: 1,
+        duration_ms,
+        remaining_ms: duration_ms,
+        started_at: None,
+        updated_at: now_iso(),
+        command_seq: 0,
+    }
+}
+
+fn advance_timer_phase(timer: &mut TimerState, settings: &TimerDurations) {
+    let mode = if timer.mode == "timer" || timer.mode == "pomodoro" {
+        timer.mode.clone()
+    } else {
+        settings.mode.clone()
+    };
+    if mode == "timer" {
+        timer.mode = mode;
+        timer.phase = "focus".to_string();
+        timer.status = "finished".to_string();
+        timer.duration_ms = settings.timer_ms;
+        timer.remaining_ms = 0;
+        timer.started_at = None;
+        return;
+    }
+
+    timer.mode = "pomodoro".to_string();
+    if timer.phase == "focus" {
+        let current_cycle = timer.cycle.max(1);
+        timer.phase = if current_cycle % 4 == 0 {
+            "longBreak".to_string()
+        } else {
+            "shortBreak".to_string()
+        };
+        timer.cycle = current_cycle + 1;
+    } else {
+        timer.phase = "focus".to_string();
+        timer.cycle = timer.cycle.max(1);
+    }
+    timer.duration_ms = duration_for_timer_phase(settings, &timer.mode, &timer.phase);
+    timer.remaining_ms = timer.duration_ms;
+    timer.started_at = None;
+}
+
+fn materialize_timer(timer: &TimerState, ui_settings: &Value) -> TimerState {
+    let settings = timer_durations(ui_settings);
+    let mut out = timer.clone();
+    if out.mode != "timer" && out.mode != "pomodoro" {
+        out.mode = settings.mode.clone();
+    }
+    if out.phase != "focus" && out.phase != "shortBreak" && out.phase != "longBreak" {
+        out.phase = "focus".to_string();
+    }
+    if out.duration_ms == 0 {
+        out.duration_ms = duration_for_timer_phase(&settings, &out.mode, &out.phase);
+    }
+    if out.remaining_ms > out.duration_ms {
+        out.remaining_ms = out.duration_ms;
+    }
+    if out.status != "running" {
+        return out;
+    }
+
+    let started_at = out
+        .started_at
+        .as_deref()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|d| d.with_timezone(&chrono::Utc));
+    let Some(started_at) = started_at else {
+        out.status = "paused".to_string();
+        out.started_at = None;
+        return out;
+    };
+
+    let now = chrono::Utc::now();
+    let mut elapsed_ms = (now - started_at).num_milliseconds().max(0) as u64;
+    let mut remaining = out.remaining_ms.max(1);
+    while elapsed_ms >= remaining {
+        elapsed_ms -= remaining;
+        advance_timer_phase(&mut out, &settings);
+        if out.status == "finished" {
+            out.updated_at = now.to_rfc3339();
+            return out;
+        }
+        remaining = out.remaining_ms.max(1);
+    }
+
+    out.remaining_ms = remaining.saturating_sub(elapsed_ms);
+    out.started_at = Some(now.to_rfc3339());
+    out.updated_at = now.to_rfc3339();
+    out
+}
+
+async fn get_timer(State(s): State<Shared>) -> Json<TimerState> {
+    let g = s.lock().unwrap();
+    Json(materialize_timer(&g.state.timer, &g.state.ui.settings))
+}
+
+async fn timer_control(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    let action = body.get("action").and_then(|v| v.as_str()).unwrap_or("");
+    if !matches!(action, "start" | "pause" | "reset" | "toggle" | "next") {
+        return Json(json!({ "ok": false, "error": "unknown timer action" }));
+    }
+
+    let mut g = s.lock().unwrap();
+    let settings = timer_durations(&g.state.ui.settings);
+    let mut timer = materialize_timer(&g.state.timer, &g.state.ui.settings);
+    let was_running = timer.status == "running";
+    let resolved_action = if action == "toggle" {
+        if was_running {
+            "pause"
+        } else {
+            "start"
+        }
+    } else {
+        action
+    };
+
+    match resolved_action {
+        "reset" => {
+            timer = reset_timer_from_settings(&settings);
+        }
+        "start" => {
+            if timer.status == "finished" || timer.remaining_ms == 0 || timer.mode != settings.mode
+            {
+                timer = reset_timer_from_settings(&settings);
+            }
+            timer.status = "running".to_string();
+            timer.started_at = Some(chrono::Utc::now().to_rfc3339());
+        }
+        "pause" => {
+            timer.status = "paused".to_string();
+            timer.started_at = None;
+        }
+        "next" => {
+            if timer.mode != settings.mode {
+                timer = reset_timer_from_settings(&settings);
+            }
+            let keep_running = was_running;
+            advance_timer_phase(&mut timer, &settings);
+            if timer.status != "finished" {
+                timer.status = if keep_running { "running" } else { "idle" }.to_string();
+                timer.started_at = keep_running.then(|| chrono::Utc::now().to_rfc3339());
+            }
+        }
+        _ => {}
+    }
+
+    timer.command_seq = timer.command_seq.saturating_add(1);
+    timer.updated_at = now_iso();
+    g.state.timer = timer.clone();
+    touch(&mut g);
+    Json(json!({ "ok": true, "timer": timer }))
 }
 
 // ─── Kiritan runtime state ──────────────────────────────────────────────────
@@ -258,7 +551,9 @@ async fn post_kiritan_state(
 // ─── UI settings ───────────────────────────────────────────────────────────────
 
 async fn get_ui(State(s): State<Shared>) -> Json<UiState> {
-    Json(s.lock().unwrap().state.ui.clone())
+    let mut ui = s.lock().unwrap().state.ui.clone();
+    repair_ui_state(&mut ui);
+    Json(ui)
 }
 
 async fn put_ui(State(s): State<Shared>, Json(body): Json<Value>) -> Json<UiState> {
@@ -271,8 +566,64 @@ async fn put_ui(State(s): State<Shared>, Json(body): Json<Value>) -> Json<UiStat
     }
     // direct edit detaches from the active preset
     g.state.ui.active_preset_id = None;
+    repair_ui_state(&mut g.state.ui);
     touch(&mut g);
     Json(g.state.ui.clone())
+}
+
+async fn background_upload(
+    State(s): State<Shared>,
+    Host(host): Host,
+    Query(query): Query<BackgroundUploadQuery>,
+    body: Bytes,
+) -> Json<Value> {
+    if body.is_empty() {
+        return Json(json!({ "ok": false, "error": "empty background file" }));
+    }
+
+    let original_name = query
+        .file_name
+        .as_deref()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("background")
+        .trim()
+        .to_string();
+    let media_type = query.media_type.as_deref();
+    let ext = safe_background_extension(Some(&original_name), media_type);
+    let public_type = background_public_type(media_type, &ext);
+    let saved_name = format!("{}.{}", uuid::Uuid::new_v4(), ext);
+    let dir = {
+        let g = s.lock().unwrap();
+        g.data_dir.join("backgrounds")
+    };
+    if let Err(e) = tokio::fs::create_dir_all(&dir).await {
+        return Json(
+            json!({ "ok": false, "error": format!("failed to prepare backgrounds dir: {e}") }),
+        );
+    }
+    let path = dir.join(&saved_name);
+    if let Err(e) = tokio::fs::write(&path, &body).await {
+        return Json(
+            json!({ "ok": false, "error": format!("failed to save background file: {e}") }),
+        );
+    }
+    let host = if host.trim().is_empty() {
+        format!("127.0.0.1:{}", API_PORT)
+    } else {
+        host
+    };
+
+    Json(json!({
+        "ok": true,
+        "item": {
+            "url": format!("http://{}/api/backgrounds/{}", host, saved_name),
+            "type": public_type,
+            "kind": if media_type == Some("overlay") { "overlay" } else { "background" },
+            "name": original_name,
+            "fileName": saved_name,
+            "size": body.len(),
+        }
+    }))
 }
 
 // ─── Presets ───────────────────────────────────────────────────────────────────
@@ -305,7 +656,9 @@ async fn create_preset(State(s): State<Shared>, Json(body): Json<Value>) -> Json
         created_at: now_iso(),
         updated_at: now_iso(),
     };
-    g.state.ui.presets.push(preset.clone());
+    g.state.ui.presets.push(preset);
+    repair_ui_state(&mut g.state.ui);
+    let preset = g.state.ui.presets.last().cloned().unwrap();
     touch(&mut g);
     Json(preset)
 }
@@ -330,7 +683,15 @@ async fn update_preset(
         p.settings = settings.clone();
     }
     p.updated_at = now_iso();
-    let out = p.clone();
+    repair_ui_state(&mut g.state.ui);
+    let out = g
+        .state
+        .ui
+        .presets
+        .iter()
+        .find(|p| p.id == id)
+        .cloned()
+        .unwrap();
     touch(&mut g);
     Json(json!({ "ok": true, "preset": out }))
 }
@@ -356,6 +717,7 @@ async fn apply_preset(State(s): State<Shared>, Path(id): Path<String>) -> Json<V
     g.state.ui.layout = p.layout.clone();
     g.state.ui.settings = p.settings.clone();
     g.state.ui.active_preset_id = Some(id);
+    repair_ui_state(&mut g.state.ui);
     touch(&mut g);
     Json(json!({ "ok": true, "ui": g.state.ui.clone() }))
 }
@@ -367,23 +729,87 @@ async fn get_settings(State(s): State<Shared>) -> Json<AppSettings> {
 }
 
 async fn put_settings(State(s): State<Shared>, Json(body): Json<Value>) -> Json<AppSettings> {
-    let mut g = s.lock().unwrap();
-    let mut cur = serde_json::to_value(&g.state.settings).unwrap_or(json!({}));
-    merge(&mut cur, body);
-    if let Ok(parsed) = serde_json::from_value::<AppSettings>(cur) {
-        g.state.settings = parsed;
-        g.state.ai.provider = g.state.settings.ai.provider.clone();
+    let mut startup_config = None;
+    let mut weather_refresh = None;
+    let next_settings = {
+        let mut g = s.lock().unwrap();
+        let previous_weather = g.state.settings.weather.clone();
+        let mut cur = serde_json::to_value(&g.state.settings).unwrap_or(json!({}));
+        merge(&mut cur, body);
+        if let Ok(parsed) = serde_json::from_value::<AppSettings>(cur) {
+            startup_config = Some(parsed.startup.clone());
+            if parsed.weather != previous_weather {
+                weather_refresh = Some((parsed.weather.clone(), g.http.clone()));
+            }
+            g.state.settings = parsed;
+            g.state.ai.provider = g.state.settings.ai.provider.clone();
+        }
+        touch(&mut g);
+        g.state.settings.clone()
+    };
+
+    if let Some(config) = startup_config {
+        if let Err(e) = startup::reconcile(&config) {
+            eprintln!("[companion] launch-at-login update failed: {e}");
+        }
     }
-    touch(&mut g);
-    Json(g.state.settings.clone())
+
+    if let Some((cfg, http)) = weather_refresh {
+        let shared = s.clone();
+        tokio::spawn(async move {
+            match services::fetch_weather(&http, &cfg).await {
+                Ok(weather) => {
+                    let mut g = shared.lock().unwrap();
+                    if g.state.settings.weather == cfg {
+                        g.state.weather = WeatherState {
+                            source: "live".to_string(),
+                            current: Some(weather.current),
+                            hourly: weather.hourly,
+                            overview: weather.overview,
+                            updated_at: Some(now_iso()),
+                            error: weather.error,
+                        };
+                        touch(&mut g);
+                    }
+                }
+                Err(e) => {
+                    let mut g = shared.lock().unwrap();
+                    if g.state.settings.weather == cfg {
+                        g.state.weather.error = Some(e);
+                        touch(&mut g);
+                    }
+                }
+            }
+        });
+    }
+
+    Json(next_settings)
+}
+
+async fn startup_status(State(s): State<Shared>) -> Json<Value> {
+    let config = s.lock().unwrap().state.settings.startup.clone();
+    Json(json!({
+        "ok": true,
+        "status": startup::status(&config),
+    }))
+}
+
+async fn startup_repair(State(s): State<Shared>) -> Json<Value> {
+    let config = s.lock().unwrap().state.settings.startup.clone();
+    match startup::reconcile(&config) {
+        Ok(status) => Json(json!({ "ok": true, "status": status })),
+        Err(e) => Json(json!({
+            "ok": false,
+            "error": e.to_string(),
+            "status": startup::status(&config),
+        })),
+    }
 }
 
 async fn secrets_status(State(s): State<Shared>) -> Json<Value> {
     let g = s.lock().unwrap();
     let sec = &g.secrets;
     Json(json!({
-        "openai": !sec.openai_key.is_empty(),
-        "google": !sec.google_key.is_empty(),
         "spotifyClientSecret": !sec.spotify_client_secret.is_empty(),
         "spotifyRefreshToken": !sec.spotify_refresh_token.is_empty(),
     }))
@@ -398,8 +824,6 @@ async fn put_secrets(State(s): State<Shared>, Json(body): Json<Value>) -> Json<V
             }
         }
     };
-    set(&mut g.secrets.openai_key, body.get("openaiKey"));
-    set(&mut g.secrets.google_key, body.get("googleKey"));
     set(
         &mut g.secrets.spotify_client_secret,
         body.get("spotifyClientSecret"),
@@ -409,65 +833,6 @@ async fn put_secrets(State(s): State<Shared>, Json(body): Json<Value>) -> Json<V
         body.get("spotifyRefreshToken"),
     );
     g.spotify_token = None; // force re-auth on next poll
-    touch(&mut g);
-    ok()
-}
-
-// ─── TODO ───────────────────────────────────────────────────────────────────────
-
-async fn list_todos(State(s): State<Shared>) -> Json<Vec<TodoItem>> {
-    Json(s.lock().unwrap().state.todos.clone())
-}
-
-async fn create_todo(State(s): State<Shared>, Json(body): Json<Value>) -> Json<TodoItem> {
-    let mut g = s.lock().unwrap();
-    let item = TodoItem {
-        id: uuid::Uuid::new_v4().to_string(),
-        title: body
-            .get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        done: false,
-        priority: body
-            .get("priority")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        due_at: body.get("dueAt").and_then(|v| v.as_str()).map(String::from),
-        created_at: now_iso(),
-        updated_at: now_iso(),
-    };
-    g.state.todos.push(item.clone());
-    touch(&mut g);
-    Json(item)
-}
-
-async fn update_todo(
-    State(s): State<Shared>,
-    Path(id): Path<String>,
-    Json(body): Json<Value>,
-) -> Json<Value> {
-    let mut g = s.lock().unwrap();
-    let Some(t) = g.state.todos.iter_mut().find(|t| t.id == id) else {
-        return Json(json!({ "ok": false }));
-    };
-    if let Some(v) = body.get("title").and_then(|v| v.as_str()) {
-        t.title = v.to_string();
-    }
-    if let Some(v) = body.get("done").and_then(|v| v.as_bool()) {
-        t.done = v;
-    }
-    if let Some(v) = body.get("priority").and_then(|v| v.as_str()) {
-        t.priority = Some(v.to_string());
-    }
-    t.updated_at = now_iso();
-    touch(&mut g);
-    ok()
-}
-
-async fn delete_todo(State(s): State<Shared>, Path(id): Path<String>) -> Json<Value> {
-    let mut g = s.lock().unwrap();
-    g.state.todos.retain(|t| t.id != id);
     touch(&mut g);
     ok()
 }
@@ -591,92 +956,6 @@ async fn delete_bookmark(State(s): State<Shared>, Path(id): Path<String>) -> Jso
     ok()
 }
 
-// ─── Chat ──────────────────────────────────────────────────────────────────────────
-
-async fn chat_history(State(s): State<Shared>) -> Json<Vec<ChatMessage>> {
-    Json(s.lock().unwrap().state.ai.messages.clone())
-}
-
-async fn chat_clear(State(s): State<Shared>) -> Json<Value> {
-    let mut g = s.lock().unwrap();
-    g.state.ai.messages.clear();
-    g.state.ai.status = "idle".to_string();
-    g.state.ai.error = None;
-    touch(&mut g);
-    ok()
-}
-
-async fn chat_send(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
-    let text = body
-        .get("text")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    if text.is_empty() {
-        return Json(json!({ "ok": false, "error": "empty" }));
-    }
-
-    // Push user message + snapshot config/key under lock.
-    let (provider, model, system_prompt, key, history, http) = {
-        let mut g = s.lock().unwrap();
-        g.state.ai.messages.push(ChatMessage {
-            id: uuid::Uuid::new_v4().to_string(),
-            role: "user".to_string(),
-            text: text.clone(),
-            created_at: now_iso(),
-        });
-        g.state.ai.last_user_message = Some(text.clone());
-        g.state.ai.status = "thinking".to_string();
-        g.state.ai.error = None;
-        let provider = g.state.settings.ai.provider.clone();
-        let model = g.state.settings.ai.model.clone();
-        let system = g.state.settings.ai.system_prompt.clone();
-        let key = match provider.as_str() {
-            "openai" => g.secrets.openai_key.clone(),
-            "google" => g.secrets.google_key.clone(),
-            _ => String::new(),
-        };
-        let history = g.state.ai.messages.clone();
-        let http = g.http.clone();
-        touch(&mut g);
-        (provider, model, system, key, history, http)
-    };
-
-    let result = if provider == "none" || provider.is_empty() {
-        Err("AIプロバイダーが未設定です（設定タブで OpenAI/Google を選択しキーを入力）".to_string())
-    } else if key.is_empty() {
-        Err(format!("{} のAPIキーが未設定です", provider))
-    } else if provider == "openai" {
-        services::chat_openai(&http, &key, &model, &system_prompt, &history).await
-    } else {
-        services::chat_gemini(&http, &key, &model, &system_prompt, &history).await
-    };
-
-    let mut g = s.lock().unwrap();
-    match result {
-        Ok(reply) => {
-            let msg = ChatMessage {
-                id: uuid::Uuid::new_v4().to_string(),
-                role: "assistant".to_string(),
-                text: reply.clone(),
-                created_at: now_iso(),
-            };
-            g.state.ai.messages.push(msg.clone());
-            g.state.ai.last_assistant_message = Some(reply);
-            g.state.ai.status = "idle".to_string();
-            touch(&mut g);
-            Json(json!({ "ok": true, "message": msg }))
-        }
-        Err(e) => {
-            g.state.ai.status = "error".to_string();
-            g.state.ai.error = Some(e.clone());
-            touch(&mut g);
-            Json(json!({ "ok": false, "error": e }))
-        }
-    }
-}
-
 // ─── News ──────────────────────────────────────────────────────────────────────────
 
 async fn get_news(State(s): State<Shared>) -> Json<Vec<NewsItem>> {
@@ -699,6 +978,81 @@ async fn news_refresh(State(s): State<Shared>) -> Json<Value> {
     }
 }
 
+// ─── Personal News ───────────────────────────────────────────────────────────
+
+async fn get_personal_news(State(s): State<Shared>) -> Json<PersonalNewsState> {
+    let g = s.lock().unwrap();
+    Json(crate::personal_news::materialize_personal_news(
+        &g.state.personal_news,
+    ))
+}
+
+async fn personal_news_reload(State(s): State<Shared>) -> Json<Value> {
+    let mut g = s.lock().unwrap();
+    let next = crate::personal_news::load_personal_news_state(
+        &g.data_dir,
+        Some(&g.state.personal_news),
+        None,
+    );
+    g.state.personal_news = next.clone();
+    touch(&mut g);
+    Json(json!({ "ok": next.error.is_none(), "personalNews": next }))
+}
+
+async fn personal_news_select(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    let Some(script_id) = body.get("scriptId").and_then(|v| v.as_str()) else {
+        return Json(json!({ "ok": false, "error": "scriptId is required" }));
+    };
+    let mut g = s.lock().unwrap();
+    let next = crate::personal_news::load_personal_news_state(
+        &g.data_dir,
+        Some(&g.state.personal_news),
+        Some(script_id),
+    );
+    let ok = next.selected_script_id.as_deref() == Some(script_id);
+    g.state.personal_news = next.clone();
+    touch(&mut g);
+    Json(json!({ "ok": ok, "personalNews": next }))
+}
+
+async fn personal_news_control(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    let action = body
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("toggle");
+    if !matches!(
+        action,
+        "play"
+            | "pause"
+            | "toggle"
+            | "stop"
+            | "restart"
+            | "nextLine"
+            | "previousLine"
+            | "nextChapter"
+            | "previousChapter"
+            | "setLoop"
+            | "jumpChapter"
+    ) {
+        return Json(json!({ "ok": false, "error": "unknown personal news action" }));
+    }
+    let loop_enabled = body.get("loopEnabled").and_then(|v| v.as_bool());
+    let chapter_index = body
+        .get("chapterIndex")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize);
+    let mut g = s.lock().unwrap();
+    let next = crate::personal_news::control_personal_news(
+        &g.state.personal_news,
+        action,
+        loop_enabled,
+        chapter_index,
+    );
+    g.state.personal_news = next.clone();
+    touch(&mut g);
+    Json(json!({ "ok": true, "personalNews": next }))
+}
+
 // ─── Weather ────────────────────────────────────────────────────────────────────────
 
 async fn weather_current(State(s): State<Shared>) -> Json<WeatherState> {
@@ -711,13 +1065,15 @@ async fn weather_refresh(State(s): State<Shared>) -> Json<Value> {
         (g.state.settings.weather.clone(), g.http.clone())
     };
     match services::fetch_weather(&http, &cfg).await {
-        Ok(cur) => {
+        Ok(weather) => {
             let mut g = s.lock().unwrap();
             g.state.weather = WeatherState {
                 source: "live".to_string(),
-                current: Some(cur),
+                current: Some(weather.current),
+                hourly: weather.hourly,
+                overview: weather.overview,
                 updated_at: Some(now_iso()),
-                error: None,
+                error: weather.error,
             };
             touch(&mut g);
             Json(json!({ "ok": true, "weather": g.state.weather.clone() }))
@@ -771,7 +1127,10 @@ async fn spotify_callback(
         ));
     }
     let Some(code) = query.code else {
-        return Html("<html><body><h1>Spotify authorization failed</h1><p>No code.</p></body></html>".to_string());
+        return Html(
+            "<html><body><h1>Spotify authorization failed</h1><p>No code.</p></body></html>"
+                .to_string(),
+        );
     };
     let (client_id, client_secret, http) = {
         let g = s.lock().unwrap();
@@ -869,9 +1228,10 @@ async fn spotify_control(State(s): State<Shared>, Json(body): Json<Value>) -> Js
 async fn ensure_spotify_token(s: &Shared) -> Result<(String, reqwest::Client), String> {
     let (client_id, client_secret, refresh_token, cached, http) = {
         let g = s.lock().unwrap();
-        let cached = g.spotify_token.as_ref().and_then(|(t, exp)| {
-            (*exp > Instant::now()).then(|| t.clone())
-        });
+        let cached = g
+            .spotify_token
+            .as_ref()
+            .and_then(|(t, exp)| (*exp > Instant::now()).then(|| t.clone()));
         (
             g.state.settings.spotify.client_id.clone(),
             g.secrets.spotify_client_secret.clone(),
@@ -910,28 +1270,36 @@ async fn write_spotify_state(
 ) -> Result<SpotifyState, String> {
     match services::spotify_now_playing(http, token).await {
         Ok(track) => {
-            let lyrics = match &track {
-                Some(t) => {
-                    let previous = s.lock().unwrap().state.spotify.lyrics.clone();
-                    services::lyrics_for_track(http, Some(previous), t).await
+            let previous_lyrics = {
+                let mut g = s.lock().unwrap();
+                let lyrics = match &track {
+                    Some(t) if lyrics_match_track(&g.state.spotify.lyrics, t) => {
+                        g.state.spotify.lyrics.clone()
+                    }
+                    _ => SpotifyLyricsState::default(),
+                };
+                g.state.spotify = SpotifyState {
+                    connected: true,
+                    status: spotify_status(&track),
+                    track: track.clone(),
+                    lyrics: lyrics.clone(),
+                    error: None,
+                };
+                touch(&mut g);
+                lyrics
+            };
+
+            if let Some(t) = &track {
+                let lyrics = services::lyrics_for_track(http, Some(previous_lyrics), t).await;
+                let mut g = s.lock().unwrap();
+                if current_track_matches(g.state.spotify.track.as_ref(), t) {
+                    g.state.spotify.lyrics = lyrics;
+                    touch(&mut g);
                 }
-                None => SpotifyLyricsState::default(),
-            };
-            let mut g = s.lock().unwrap();
-            let status = match &track {
-                Some(t) if t.is_playing => "playing",
-                Some(_) => "paused",
-                None => "idle",
-            };
-            g.state.spotify = SpotifyState {
-                connected: true,
-                status: status.to_string(),
-                track,
-                lyrics,
-                error: None,
-            };
-            touch(&mut g);
-            Ok(g.state.spotify.clone())
+                Ok(g.state.spotify.clone())
+            } else {
+                Ok(s.lock().unwrap().state.spotify.clone())
+            }
         }
         Err(e) => {
             let mut g = s.lock().unwrap();
@@ -941,6 +1309,25 @@ async fn write_spotify_state(
             Err(e)
         }
     }
+}
+
+fn spotify_status(track: &Option<SpotifyTrack>) -> String {
+    match track {
+        Some(t) if t.is_playing => "playing",
+        Some(_) => "paused",
+        None => "idle",
+    }
+    .to_string()
+}
+
+fn lyrics_match_track(lyrics: &SpotifyLyricsState, track: &SpotifyTrack) -> bool {
+    lyrics.track_id == services::spotify_track_key(track) && lyrics.status != "idle"
+}
+
+fn current_track_matches(current: Option<&SpotifyTrack>, sampled: &SpotifyTrack) -> bool {
+    current
+        .and_then(services::spotify_track_key)
+        .is_some_and(|key| Some(key) == services::spotify_track_key(sampled))
 }
 
 fn html_escape(value: &str) -> String {

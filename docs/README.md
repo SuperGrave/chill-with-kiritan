@@ -2,6 +2,14 @@
 
 プロジェクト全体に関わるドキュメントの集約場所と、全体の命名・管理規則。
 
+## 現在の本流
+
+**本流バージョン**: v0.8.0。以前の `v4` を v0.8.0 として扱い、以降は
+`v0.8.1`, `v0.8.2` のように v0.8 系で積み上げる。過去の `v2` / `v3`
+表記はレガシー版として保持する。
+
+運用ルールは [MAINLINE_VERSIONING.md](MAINLINE_VERSIONING.md) を正典にする。
+
 ## 全体ドキュメント
 
 **完成ルート（最新）**: [COMPLETION_AUDIT_2026-07-01.md](COMPLETION_AUDIT_2026-07-01.md)（現状監査・完成イメージ）→ [COMPLETION_EXECUTION_PLAN_2026-07-01.md](COMPLETION_EXECUTION_PLAN_2026-07-01.md)（残り実装計画）→ [COMPLETION_PROGRESS_2026-07-01.md](COMPLETION_PROGRESS_2026-07-01.md)（実施記録）。前身は [SHORT_COMPLETION_AUDIT_2026-06-23.md](SHORT_COMPLETION_AUDIT_2026-06-23.md) / [RELEASE_0.9_PRODUCTION_SHELL_REPORT_2026-06-23.md](RELEASE_0.9_PRODUCTION_SHELL_REPORT_2026-06-23.md)。
@@ -24,5 +32,6 @@
 - **アプリ内フェーズ文書**: `<PHASE>_<TYPE>.md`、`TYPE ∈ {CHECKLIST, PROGRESS, REPORT}`（例: `MOTION_PROBE_0_7_PREMIUM_PROPS_REPORT.md`）。
 - **完了したフェーズ文書**: そのアプリの `docs/_archive/` へ移動（履歴として保管）。
 - **正典／恒久ガイド**: バージョンを付けずアプリ直下に常駐（例: `MOTION_AUTHORING_GUIDE.md`）。
+- **本流バージョン規則**: `MAINLINE_VERSIONING.md` に集約し、実装・表示・生成スクリプトを同じ版にそろえる。
 - **使い終わった非ドキュメント物**（インストーラ・一回限りスクリプト・検証出力など）: ルート `_archive/` へ移動（削除しない）。
 - 各 `docs/` 直下に `README.md` 索引を置き、生きている最新文書へリンクする。

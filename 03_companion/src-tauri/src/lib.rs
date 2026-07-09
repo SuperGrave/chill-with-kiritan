@@ -1,6 +1,10 @@
+#![recursion_limit = "256"]
+
 pub mod api;
 pub mod models;
+pub mod personal_news;
 pub mod services;
+pub mod startup;
 pub mod state;
 mod tasks;
 
@@ -43,6 +47,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(shared)
         .setup(move |app| {
+            let startup_config = {
+                let g = state_for_tasks.lock().unwrap();
+                g.state.settings.startup.clone()
+            };
+            if let Err(e) = startup::reconcile(&startup_config) {
+                eprintln!("[companion] startup registration reconcile failed: {e}");
+            }
+
             // HTTP API server on Tauri's tokio runtime. A bind failure (stale
             // process still holding the port, another app on 40313, ...) is
             // surfaced as a dialog instead of leaving the wallpaper/overlay

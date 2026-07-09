@@ -3,10 +3,10 @@ import {
   newsPanelDefaults,
   musicPanelDefaults,
   lyricsPanelDefaults,
-  aiPanelDefaults,
+  personalNewsPanelDefaults,
   memoPanelDefaults,
+  timerPanelDefaults,
 } from '../../config/uiSettings';
-import { DOCK_BASE_HEIGHT, DOCK_GAP_COUNT } from '../../config/layout';
 
 interface SettingsPanelProps {
   layout: any;
@@ -66,6 +66,33 @@ const TextInput = ({ label, value, onChange }: any) => (
         padding: '4px 8px'
       }}
     />
+  </div>
+);
+
+const ColorInput = ({ label, value, onChange }: any) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0', gap: '8px' }}>
+    <span style={{ fontSize: '14px', opacity: 0.8 }}>{label}</span>
+    <div style={{ display: 'grid', gridTemplateColumns: '40px 100px', gap: '8px', alignItems: 'center' }}>
+      <input
+        type="color"
+        value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#b8dcff'}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: '40px', height: '30px', padding: '2px' }}
+      />
+      <input
+        type="text"
+        value={value || '#b8dcff'}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100px',
+          background: 'rgba(0,0,0,0.5)',
+          color: '#fff',
+          border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: '4px',
+          padding: '4px 8px'
+        }}
+      />
+    </div>
   </div>
 );
 
@@ -153,19 +180,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
     }));
   };
 
-  // The dock and the settings overlay are the only way back into this panel,
-  // so their position sliders must not be able to push them off-canvas.
   const [canvasW, canvasH] = (settings.baseResolution || '1920x1080').split('x').map(Number);
-  const dockMaxX = canvasW - (layout.rightDock.width ?? 110);
-  const dockMaxY = canvasH - (DOCK_BASE_HEIGHT + DOCK_GAP_COUNT * (layout.rightDock.gap ?? 16));
 
   // Merged views: saved values over defaults, so controls always show a value
   // even when the section is missing from an older localStorage snapshot.
   const np = { ...newsPanelDefaults, ...settings.newsPanel };
   const mp = { ...musicPanelDefaults, ...settings.musicPanel };
   const lp = { ...lyricsPanelDefaults, ...settings.lyricsPanel };
-  const ap = { ...aiPanelDefaults, ...settings.aiPanel };
+  const pp = { ...personalNewsPanelDefaults, ...settings.personalNewsPanel };
   const mm = { ...memoPanelDefaults, ...settings.memoPanel };
+  const tp = { ...timerPanelDefaults, ...settings.timerPanel };
 
   const updateLayout = (component: string, key: string, value: number) => {
     setLayout((prev: any) => ({
@@ -249,6 +273,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <SliderInput label="Width" value={layout.clock.width} onChange={(v: number) => updateLayout('clock', 'width', v)} />
         <SliderInput label="Date Font Size" value={layout.clock.dateSize || 24} onChange={(v: number) => updateLayout('clock', 'dateSize', v)} max={100} />
         <SliderInput label="Time Font Size" value={layout.clock.timeSize || 72} onChange={(v: number) => updateLayout('clock', 'timeSize', v)} max={200} />
+        <CheckRow label="Show Background" checked={settings.clock?.showBackground === true} onChange={(v: boolean) => updateClockSetting('showBackground', v)} />
+        <SliderInput label="Background Opacity" value={settings.clock?.backgroundOpacity ?? 0.28} onChange={(v: number) => updateClockSetting('backgroundOpacity', v)} max={1} step={0.05} />
+        <SliderInput label="Padding X" value={settings.clock?.paddingX ?? 0} onChange={(v: number) => updateClockSetting('paddingX', v)} max={120} />
+        <SliderInput label="Padding Y" value={settings.clock?.paddingY ?? 0} onChange={(v: number) => updateClockSetting('paddingY', v)} max={120} />
+        <SliderInput label="Date X Offset" value={settings.clock?.dateOffsetX ?? 0} onChange={(v: number) => updateClockSetting('dateOffsetX', v)} min={-400} max={400} />
       </Accordion>
 
       {layout.weatherCompact && settings.weatherCompact && (
@@ -283,6 +312,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
               <SliderInput label="X Position" value={layout.weatherCompact.x} onChange={(v: number) => updateLayout('weatherCompact', 'x', v)} />
               <SliderInput label="Y Position" value={layout.weatherCompact.y} onChange={(v: number) => updateLayout('weatherCompact', 'y', v)} />
               <SliderInput label="Width" value={layout.weatherCompact.width} onChange={(v: number) => updateLayout('weatherCompact', 'width', v)} />
+              <CheckRow label="Show Background" checked={settings.weatherCompact?.showBackground === true} onChange={(v: boolean) => updateSection('weatherCompact', 'showBackground', v)} />
+              <SliderInput label="Background Opacity" value={settings.weatherCompact?.backgroundOpacity ?? 0.28} onChange={(v: number) => updateSection('weatherCompact', 'backgroundOpacity', v)} max={1} step={0.05} />
 
               {settings.weatherCompact.displayMode !== 'detailed' ? (
                 <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
@@ -344,9 +375,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
                   <div style={{ marginTop: '16px', marginBottom: '8px', paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}><span style={{ fontSize: '12px', color: '#888' }}>APPEARANCE</span></div>
                   <div className="settings-row" style={{ marginTop: '8px', marginBottom: '8px' }}>
                     <span>Show Background</span>
-                    <input type="checkbox" checked={settings.weatherDetail?.showBackground !== false} onChange={(e) => updateSetting('weatherDetail', { ...settings.weatherDetail, showBackground: e.target.checked })} />
+                    <input type="checkbox" checked={settings.weatherDetail?.showBackground === true} onChange={(e) => updateSetting('weatherDetail', { ...settings.weatherDetail, showBackground: e.target.checked })} />
                   </div>
-                  {settings.weatherDetail?.showBackground !== false && (
+                  {settings.weatherDetail?.showBackground === true && (
                     <SliderInput label="Background Opacity" value={settings.weatherDetail?.backgroundOpacity || 0.4} onChange={(v: number) => updateSetting('weatherDetail', { ...settings.weatherDetail, backgroundOpacity: v })} max={1} step={0.1} />
                   )}
 
@@ -362,11 +393,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
           )}
         </Accordion>
       )}
-
-      <Accordion title="Right Dock" defaultOpen={false}>
-        <SliderInput label="X Position" value={layout.rightDock.x} onChange={(v: number) => updateLayout('rightDock', 'x', v)} max={dockMaxX} />
-        <SliderInput label="Y Position" value={layout.rightDock.y} onChange={(v: number) => updateLayout('rightDock', 'y', v)} max={dockMaxY} />
-      </Accordion>
 
       <Accordion title="Settings Overlay" defaultOpen={false}>
         <SliderInput label="X Position" value={layout.detailPanel.x} onChange={(v: number) => updateLayout('detailPanel', 'x', v)} max={canvasW - 100} />
@@ -385,10 +411,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <CheckRow label="Show Divider" checked={np.showDivider} onChange={(v: boolean) => updateSection('newsPanel', 'showDivider', v)} />
         <CheckRow label="Show Footer" checked={np.showFooter} onChange={(v: boolean) => updateSection('newsPanel', 'showFooter', v)} />
         <CheckRow label="Highlight Latest" checked={np.highlightLatest} onChange={(v: boolean) => updateSection('newsPanel', 'highlightLatest', v)} />
+        <CheckRow label="Source/Time In Title Row" checked={np.metaPlacement === 'titleLeft'} onChange={(v: boolean) => updateSection('newsPanel', 'metaPlacement', v ? 'titleLeft' : 'separate')} />
+        <CheckRow label="Single-line Title Ellipsis" checked={np.singleLineTitle} onChange={(v: boolean) => updateSection('newsPanel', 'singleLineTitle', v)} />
         <SliderInput label="Max Items" value={np.maxItems} onChange={(v: number) => updateSection('newsPanel', 'maxItems', v)} min={1} max={20} />
         <SliderInput label="Max Title Lines (0=auto)" value={np.maxTitleLines} onChange={(v: number) => updateSection('newsPanel', 'maxTitleLines', v)} max={10} />
         <SliderInput label="Max Summary Lines (0=auto)" value={np.maxSummaryLines} onChange={(v: number) => updateSection('newsPanel', 'maxSummaryLines', v)} max={10} />
         <SectionDivider label="SIZES" />
+        <SliderInput label="Header Content Gap" value={np.contentTopGap ?? 18} onChange={(v: number) => updateSection('newsPanel', 'contentTopGap', v)} max={160} />
         <SliderInput label="Item Gap" value={np.itemGap} onChange={(v: number) => updateSection('newsPanel', 'itemGap', v)} max={60} />
         <SliderInput label="Index Size" value={np.indexSize} onChange={(v: number) => updateSection('newsPanel', 'indexSize', v)} min={10} max={60} />
         <SliderInput label="Time Size" value={np.timeSize} onChange={(v: number) => updateSection('newsPanel', 'timeSize', v)} min={8} max={40} />
@@ -401,6 +430,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         {renderPlacement('musicPanel', mp)}
         <SectionDivider label="DISPLAY" />
         <CheckRow label="Show Artwork" checked={mp.showArtwork} onChange={(v: boolean) => updateSection('musicPanel', 'showArtwork', v)} />
+        <SelectRow
+          label="Artwork Mode"
+          value={mp.artworkMode}
+          onChange={(v: string) => updateSection('musicPanel', 'artworkMode', v)}
+          options={[
+            { value: 'classic', label: 'Classic' },
+            { value: 'topRight', label: 'Top Right' },
+          ]}
+        />
         <CheckRow label="Show Album Name" checked={mp.showAlbum} onChange={(v: boolean) => updateSection('musicPanel', 'showAlbum', v)} />
         <CheckRow label="Show Time Codes" checked={mp.showTimeCodes} onChange={(v: boolean) => updateSection('musicPanel', 'showTimeCodes', v)} />
         <CheckRow label="Show Controls" checked={mp.showControls} onChange={(v: boolean) => updateSection('musicPanel', 'showControls', v)} />
@@ -418,6 +456,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         />
         <SectionDivider label="SIZES" />
         <SliderInput label="Artwork Scale" value={mp.artworkScale} onChange={(v: number) => updateSection('musicPanel', 'artworkScale', v)} min={0.3} max={1} step={0.05} />
+        <SliderInput label="Top-right Artwork Size" value={mp.artworkCornerSize ?? 0} onChange={(v: number) => updateSection('musicPanel', 'artworkCornerSize', v)} min={0} max={400} />
+        <SliderInput label="Artwork Top Gap" value={mp.artworkTopGap ?? 0} onChange={(v: number) => updateSection('musicPanel', 'artworkTopGap', v)} min={0} max={160} />
+        <SliderInput label="Artwork to Bar Gap" value={mp.artworkProgressGap ?? 20} onChange={(v: number) => updateSection('musicPanel', 'artworkProgressGap', v)} min={0} max={240} />
         <SliderInput label="Row Gap" value={mp.gap} onChange={(v: number) => updateSection('musicPanel', 'gap', v)} max={60} />
         <SliderInput label="Title Size" value={mp.titleSize} onChange={(v: number) => updateSection('musicPanel', 'titleSize', v)} min={10} max={60} />
         <SliderInput label="Artist Size" value={mp.artistSize} onChange={(v: number) => updateSection('musicPanel', 'artistSize', v)} min={8} max={40} />
@@ -441,7 +482,17 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
             { value: 'right', label: 'Right' },
           ]}
         />
+        <SelectRow
+          label="Long Line"
+          value={lp.lineOverflowMode ?? 'wrap'}
+          onChange={(v: string) => updateSection('lyricsPanel', 'lineOverflowMode', v)}
+          options={[
+            { value: 'wrap', label: 'Wrap' },
+            { value: 'ellipsis', label: 'Ellipsis' },
+          ]}
+        />
         <SectionDivider label="SIZES" />
+        <SliderInput label="Header Content Gap" value={lp.contentTopGap ?? 18} onChange={(v: number) => updateSection('lyricsPanel', 'contentTopGap', v)} max={160} />
         <SliderInput label="Current Line Size" value={lp.currentSize} onChange={(v: number) => updateSection('lyricsPanel', 'currentSize', v)} min={14} max={72} />
         <SliderInput label="Side Line Size" value={lp.sideSize} onChange={(v: number) => updateSection('lyricsPanel', 'sideSize', v)} min={10} max={48} />
         <SliderInput label="Meta Size" value={lp.metaSize} onChange={(v: number) => updateSection('lyricsPanel', 'metaSize', v)} min={8} max={28} />
@@ -449,19 +500,27 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <SliderInput label="Side Opacity" value={lp.sideOpacity} onChange={(v: number) => updateSection('lyricsPanel', 'sideOpacity', v)} max={1} step={0.05} />
       </Accordion>
 
-      <Accordion title="AI Panel" defaultOpen={false}>
-        {renderPlacement('aiPanel', ap)}
+      <Accordion title="Personal News Panel" defaultOpen={false}>
+        {renderPlacement('personalNewsPanel', pp)}
+        <SectionDivider label="AUTO DISPLAY" />
+        <CheckRow label="Show When Lyrics Unavailable" checked={pp.autoShowWhenLyricsUnavailable !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'autoShowWhenLyricsUnavailable', v)} />
+        <CheckRow label="Hide Lyrics Panel When Auto Shown" checked={pp.hideLyricsWhenAutoShown !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'hideLyricsWhenAutoShown', v)} />
         <SectionDivider label="DISPLAY" />
-        <CheckRow label="Show Role Labels" checked={ap.showLabels} onChange={(v: boolean) => updateSection('aiPanel', 'showLabels', v)} />
-        <CheckRow label="Show Timestamps" checked={ap.showTimestamps} onChange={(v: boolean) => updateSection('aiPanel', 'showTimestamps', v)} />
-        <CheckRow label="Show Status Row" checked={ap.showStatus} onChange={(v: boolean) => updateSection('aiPanel', 'showStatus', v)} />
-        <CheckRow label="Show Input Row" checked={ap.showInput} onChange={(v: boolean) => updateSection('aiPanel', 'showInput', v)} />
-        <SectionDivider label="SIZES" />
-        <SliderInput label="Text Size" value={ap.textSize} onChange={(v: number) => updateSection('aiPanel', 'textSize', v)} min={10} max={32} />
-        <SliderInput label="Label Size" value={ap.labelSize} onChange={(v: number) => updateSection('aiPanel', 'labelSize', v)} min={8} max={24} />
-        <SliderInput label="Timestamp Size" value={ap.timeSize} onChange={(v: number) => updateSection('aiPanel', 'timeSize', v)} min={8} max={24} />
-        <SliderInput label="Message Gap" value={ap.msgGap} onChange={(v: number) => updateSection('aiPanel', 'msgGap', v)} max={60} />
-        <SliderInput label="Bubble Opacity" value={ap.bubbleOpacity} onChange={(v: number) => updateSection('aiPanel', 'bubbleOpacity', v)} max={1} step={0.02} />
+        <CheckRow label="Show Status Badge" checked={pp.showStatus !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'showStatus', v)} />
+        <CheckRow label="Show News Title" checked={pp.personalNewsShowTitle !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'personalNewsShowTitle', v)} />
+        <CheckRow label="Show Topic" checked={pp.personalNewsShowTopic !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'personalNewsShowTopic', v)} />
+        <CheckRow label="Show Body" checked={pp.personalNewsShowBody !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'personalNewsShowBody', v)} />
+        <CheckRow label="Show Supplement" checked={pp.personalNewsShowSource !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'personalNewsShowSource', v)} />
+        <CheckRow label="Show Progress" checked={pp.personalNewsShowProgress !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'personalNewsShowProgress', v)} />
+        <CheckRow label="Show Chapter Marks" checked={pp.personalNewsShowChapterMarks !== false} onChange={(v: boolean) => updateSection('personalNewsPanel', 'personalNewsShowChapterMarks', v)} />
+        <SliderInput label="News Title Size" value={pp.personalNewsTitleSize ?? 14} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsTitleSize', v)} min={8} max={32} />
+        <SliderInput label="Topic Size" value={pp.personalNewsTopicSize ?? 17} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsTopicSize', v)} min={8} max={40} />
+        <SliderInput label="Body Size" value={pp.personalNewsBodySize ?? 34} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsBodySize', v)} min={12} max={80} />
+        <SliderInput label="Supplement Size" value={pp.personalNewsSourceSize ?? 12} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsSourceSize', v)} min={8} max={28} />
+        <ColorInput label="Supplement Color" value={pp.personalNewsSupplementColor ?? '#b8dcff'} onChange={(v: string) => updateSection('personalNewsPanel', 'personalNewsSupplementColor', v)} />
+        <SliderInput label="Progress Height" value={pp.personalNewsProgressHeight ?? 10} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsProgressHeight', v)} min={4} max={32} />
+        <SliderInput label="News Gap" value={pp.personalNewsGap ?? 12} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsGap', v)} max={60} />
+        <SliderInput label="Scroll Speed" value={pp.personalNewsScrollSpeed ?? 1} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsScrollSpeed', v)} min={0.2} max={3} step={0.1} />
       </Accordion>
 
       <Accordion title="Memo Panel" defaultOpen={false}>
@@ -473,10 +532,39 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <SliderInput label="Max Items (0=all)" value={mm.maxItems} onChange={(v: number) => updateSection('memoPanel', 'maxItems', v)} max={20} />
         <SliderInput label="Max Lines / Memo (0=auto)" value={mm.maxLines} onChange={(v: number) => updateSection('memoPanel', 'maxLines', v)} max={20} />
         <SectionDivider label="SIZES" />
+        <SliderInput label="Header Content Gap" value={mm.contentTopGap ?? 18} onChange={(v: number) => updateSection('memoPanel', 'contentTopGap', v)} max={160} />
         <SliderInput label="Text Size" value={mm.textSize} onChange={(v: number) => updateSection('memoPanel', 'textSize', v)} min={10} max={32} />
         <SliderInput label="Date Size" value={mm.dateSize} onChange={(v: number) => updateSection('memoPanel', 'dateSize', v)} min={8} max={24} />
         <SliderInput label="Card Gap" value={mm.cardGap} onChange={(v: number) => updateSection('memoPanel', 'cardGap', v)} max={60} />
         <SliderInput label="Card Padding" value={mm.cardPadding} onChange={(v: number) => updateSection('memoPanel', 'cardPadding', v)} max={40} />
+      </Accordion>
+
+      <Accordion title="Timer Panel" defaultOpen={false}>
+        {renderPlacement('timerPanel', tp)}
+        <SectionDivider label="DISPLAY" />
+        <SelectRow
+          label="Mode"
+          value={tp.mode}
+          onChange={(v: string) => updateSection('timerPanel', 'mode', v)}
+          options={[
+            { value: 'timer', label: 'Timer' },
+            { value: 'pomodoro', label: 'Pomodoro' },
+          ]}
+        />
+        <CheckRow label="Show Controls" checked={tp.showControls} onChange={(v: boolean) => updateSection('timerPanel', 'showControls', v)} />
+        <CheckRow label="Show Cycle" checked={tp.showCycle} onChange={(v: boolean) => updateSection('timerPanel', 'showCycle', v)} />
+        <SectionDivider label="DURATIONS" />
+        <SliderInput label="Timer Minutes" value={tp.timerMinutes} onChange={(v: number) => updateSection('timerPanel', 'timerMinutes', v)} min={1} max={180} />
+        <SliderInput label="Focus Minutes" value={tp.pomodoroMinutes} onChange={(v: number) => updateSection('timerPanel', 'pomodoroMinutes', v)} min={1} max={90} />
+        <SliderInput label="Short Break Minutes" value={tp.shortBreakMinutes} onChange={(v: number) => updateSection('timerPanel', 'shortBreakMinutes', v)} min={1} max={30} />
+        <SliderInput label="Long Break Minutes" value={tp.longBreakMinutes} onChange={(v: number) => updateSection('timerPanel', 'longBreakMinutes', v)} min={1} max={60} />
+        <SectionDivider label="SIZES" />
+        <SliderInput label="Header Content Gap" value={tp.contentTopGap ?? 18} onChange={(v: number) => updateSection('timerPanel', 'contentTopGap', v)} max={160} />
+        <SliderInput label="Title Size" value={tp.titleSize} onChange={(v: number) => updateSection('timerPanel', 'titleSize', v)} min={10} max={52} />
+        <SliderInput label="Time Size" value={tp.timeSize} onChange={(v: number) => updateSection('timerPanel', 'timeSize', v)} min={24} max={110} />
+        <SliderInput label="Meta Size" value={tp.metaSize} onChange={(v: number) => updateSection('timerPanel', 'metaSize', v)} min={8} max={28} />
+        <SliderInput label="Bar Height" value={tp.barHeight ?? 12} onChange={(v: number) => updateSection('timerPanel', 'barHeight', v)} min={4} max={50} />
+        <SliderInput label="Element Gap" value={tp.itemGap ?? 6} onChange={(v: number) => updateSection('timerPanel', 'itemGap', v)} min={0} max={40} />
       </Accordion>
 
       <Accordion title="Test Data Overrides" defaultOpen={false}>

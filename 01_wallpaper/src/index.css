@@ -447,6 +447,31 @@ input[type='range'] {
   inset: 0;
 }
 
+.scene-bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: scene-bg-fade-in var(--scene-bg-fade-seconds, 1s) ease both;
+}
+
+.scene-bg-outside,
+.scene-bg-room,
+.scene-bg-custom-overlay {
+  animation: scene-bg-fade-in var(--scene-bg-fade-seconds, 1s) ease both;
+}
+
+.scene-bg-custom-overlay {
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+@keyframes scene-bg-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Fallbacks are applied ONLY via the --fallback modifier, so a loaded image set
    inline (background-image) is never fighting a class `background` shorthand. */
 .scene-bg-outside--fallback {

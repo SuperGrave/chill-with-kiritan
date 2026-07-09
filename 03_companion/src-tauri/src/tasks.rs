@@ -25,13 +25,15 @@ async fn weather_loop(shared: Shared) {
             (g.state.settings.weather.clone(), g.http.clone())
         };
         match services::fetch_weather(&http, &cfg).await {
-            Ok(cur) => {
+            Ok(weather) => {
                 let mut g = shared.lock().unwrap();
                 g.state.weather = WeatherState {
                     source: "live".to_string(),
-                    current: Some(cur),
+                    current: Some(weather.current),
+                    hourly: weather.hourly,
+                    overview: weather.overview,
                     updated_at: Some(now_iso()),
-                    error: None,
+                    error: weather.error,
                 };
                 g.state.updated_at = now_iso();
             }
@@ -64,9 +66,10 @@ async fn spotify_loop(shared: Shared) {
     loop {
         let (client_id, client_secret, refresh_token, cached, http) = {
             let g = shared.lock().unwrap();
-            let cached = g.spotify_token.as_ref().and_then(|(t, exp)| {
-                (*exp > Instant::now()).then(|| t.clone())
-            });
+            let cached = g
+                .spotify_token
+                .as_ref()
+                .and_then(|(t, exp)| (*exp > Instant::now()).then(|| t.clone()));
             (
                 g.state.settings.spotify.client_id.clone(),
                 g.secrets.spotify_client_secret.clone(),
@@ -80,14 +83,16 @@ async fn spotify_loop(shared: Shared) {
             let token = match cached {
                 Some(t) => Some(t),
                 None => match services::spotify_refresh_token(
-                    &http, &client_id, &client_secret, &refresh_token,
+                    &http,
+                    &client_id,
+                    &client_secret,
+                    &refresh_token,
                 )
                 .await
                 {
                     Ok((t, expires)) => {
                         let mut g = shared.lock().unwrap();
-                        let exp = Instant::now()
-                            + Duration::from_secs(expires.saturating_sub(60));
+                        let exp = Instant::now() + Duration::from_secs(expires.saturating_sub(60));
                         g.spotify_token = Some((t.clone(), exp));
                         Some(t)
                     }
@@ -102,30 +107,56 @@ async fn spotify_loop(shared: Shared) {
 
             if let Some(token) = token {
                 if let Ok(track) = services::spotify_now_playing(&http, &token).await {
-                    let lyrics = match &track {
-                        Some(t) => {
-                            let previous = shared.lock().unwrap().state.spotify.lyrics.clone();
-                            services::lyrics_for_track(&http, Some(previous), t).await
+                    let previous_lyrics = {
+                        let mut g = shared.lock().unwrap();
+                        let lyrics = match &track {
+                            Some(t) if lyrics_match_track(&g.state.spotify.lyrics, t) => {
+                                g.state.spotify.lyrics.clone()
+                            }
+                            _ => SpotifyLyricsState::default(),
+                        };
+                        g.state.spotify = SpotifyState {
+                            connected: true,
+                            status: spotify_status(&track),
+                            track: track.clone(),
+                            lyrics: lyrics.clone(),
+                            error: None,
+                        };
+                        g.state.updated_at = now_iso();
+                        lyrics
+                    };
+
+                    if let Some(t) = &track {
+                        let lyrics =
+                            services::lyrics_for_track(&http, Some(previous_lyrics), t).await;
+                        let mut g = shared.lock().unwrap();
+                        if current_track_matches(g.state.spotify.track.as_ref(), t) {
+                            g.state.spotify.lyrics = lyrics;
+                            g.state.updated_at = now_iso();
                         }
-                        None => SpotifyLyricsState::default(),
-                    };
-                    let mut g = shared.lock().unwrap();
-                    let status = match &track {
-                        Some(t) if t.is_playing => "playing",
-                        Some(_) => "paused",
-                        None => "idle",
-                    };
-                    g.state.spotify = SpotifyState {
-                        connected: true,
-                        status: status.to_string(),
-                        track,
-                        lyrics,
-                        error: None,
-                    };
-                    g.state.updated_at = now_iso();
+                    }
                 }
             }
         }
-        sleep(Duration::from_secs(15)).await;
+        sleep(Duration::from_secs(5)).await;
     }
+}
+
+fn spotify_status(track: &Option<SpotifyTrack>) -> String {
+    match track {
+        Some(t) if t.is_playing => "playing",
+        Some(_) => "paused",
+        None => "idle",
+    }
+    .to_string()
+}
+
+fn lyrics_match_track(lyrics: &SpotifyLyricsState, track: &SpotifyTrack) -> bool {
+    lyrics.track_id == services::spotify_track_key(track) && lyrics.status != "idle"
+}
+
+fn current_track_matches(current: Option<&SpotifyTrack>, sampled: &SpotifyTrack) -> bool {
+    current
+        .and_then(services::spotify_track_key)
+        .is_some_and(|key| Some(key) == services::spotify_track_key(sampled))
 }

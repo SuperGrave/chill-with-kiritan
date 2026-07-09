@@ -44,7 +44,9 @@ const ClockWidget: React.FC<ClockProps> = ({ layout, settings, debugMode }) => {
     });
   };
 
-
+  const showBackground = settings.showBackground === true;
+  const paddingX = settings.paddingX ?? 0;
+  const paddingY = settings.paddingY ?? 0;
 
   return (
     <div 
@@ -53,10 +55,24 @@ const ClockWidget: React.FC<ClockProps> = ({ layout, settings, debugMode }) => {
         left: layout.x,
         top: layout.y,
         width: layout.width,
+        padding: showBackground ? `${paddingY}px ${paddingX}px` : undefined,
+        borderRadius: showBackground ? '24px' : undefined,
+        background: showBackground ? `rgba(0, 0, 0, ${settings.backgroundOpacity ?? 0.28})` : undefined,
+        backdropFilter: showBackground ? 'blur(16px)' : undefined,
+        WebkitBackdropFilter: showBackground ? 'blur(16px)' : undefined,
+        border: showBackground ? '1px solid rgba(255, 255, 255, 0.15)' : undefined,
+        boxShadow: showBackground ? '0 12px 40px rgba(0, 0, 0, 0.32)' : undefined,
+        boxSizing: 'border-box',
       }}
     >
       {settings.showDate && (
-        <div className="clock-date" style={{ fontSize: `${layout.dateSize || 63}px` }}>
+        <div
+          className="clock-date"
+          style={{
+            fontSize: `${layout.dateSize || 63}px`,
+            transform: `translateX(${settings.dateOffsetX ?? 0}px)`,
+          }}
+        >
           {formatDate(time)}
         </div>
       )}

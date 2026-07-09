@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import type { CameraMode, SpringBoneMode, ExternalRequestAction, MotionRequest } from './VrmViewer';
+import type { CameraMode, SpringBoneMode, ExternalRequestAction, MotionRequest, MotionDirectorSettings } from './VrmViewer';
 import type { IdleState, IdleDebug } from './lib/motion/idleStateMachine';
 import { IDLE_STATES, IDLE_STATE_LABELS } from './lib/motion/idleStateMachine';
 import type { ExternalMotionDebug } from './lib/motion/externalMotionController';
 import type { SceneDebug } from './lib/scene/sceneTypes';
+import type { SceneBackground } from './lib/scene/sceneTypes';
 import { getDaypart } from './lib/scene/daypart';
 import type { Daypart } from './lib/scene/daypart';
+import { uiSettings as defaultUiSettings } from '../../02_ui-overlay/src/config/uiSettings';
+import { fetchCompanionUi } from '../../02_ui-overlay/src/services/companionClient';
 // Expression Preset System 0.1
 import { EXPRESSION_PRESETS, EXPRESSION_PRESET_IDS } from './lib/expression/expressionPresets';
 import type { ExpressionOverlayDebug } from './lib/expression/expressionPresetEvaluator';
@@ -50,6 +53,7 @@ import SceneBackgroundLayer from './components/SceneBackgroundLayer';
 import ProductionOverlay from './components/ProductionOverlay';
 import type { BgAssetStatus, BgDebug, BgFit } from './components/SceneBackgroundLayer';
 import VrmViewer from './VrmViewer';
+import { publicAssetUrl } from './lib/assetUrl';
 import './index.css';
 
 // Short labels for the background asset states (debug section).
@@ -59,6 +63,190 @@ const BG_STATUS_LABEL: Record<BgAssetStatus, string> = {
   none: 'none',
   loading: '…',
 };
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+type WallpaperSettings = typeof defaultUiSettings.wallpaper;
+type WallpaperBackgroundOverlay = WallpaperSettings['backgroundOverlays'][number];
+
+type BackgroundQueueItem = {
+  url: string;
+  type: 'image' | 'video';
+  name?: string;
+  presetId?: string;
+};
+
+function normalizeBackgroundQueue(value: unknown): BackgroundQueueItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): BackgroundQueueItem[] => {
+    if (typeof item === 'string' && item.length > 0) {
+      return [{ url: item, type: item.startsWith('data:video/') ? 'video' : 'image' }];
+    }
+    if (item && typeof item === 'object' && 'url' in item && typeof (item as { url?: unknown }).url === 'string') {
+      const typed = item as { url: string; type?: unknown; name?: unknown; presetId?: unknown };
+      if (!typed.url) return [];
+      return [{
+        url: typed.url,
+        type: typed.type === 'video' || typed.url.startsWith('data:video/') ? 'video' : 'image',
+        name: typeof typed.name === 'string' ? typed.name : undefined,
+        presetId: typeof typed.presetId === 'string' ? typed.presetId : undefined,
+      }];
+    }
+    return [];
+  });
+}
+
+const WALLPAPER_BLEND_MODES = new Set(['normal', 'screen', 'multiply', 'overlay', 'soft-light', 'lighten', 'darken']);
+
+function normalizeBackgroundOverlays(value: unknown): WallpaperSettings['backgroundOverlays'] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): WallpaperBackgroundOverlay[] => {
+    if (!item || typeof item !== 'object' || !('url' in item) || typeof (item as { url?: unknown }).url !== 'string') {
+      return [];
+    }
+    const typed = item as {
+      url: string;
+      name?: unknown;
+      visible?: unknown;
+      opacity?: unknown;
+      blendMode?: unknown;
+      fit?: unknown;
+    };
+    if (!typed.url) return [];
+    return [{
+      url: typed.url,
+      name: typeof typed.name === 'string' ? typed.name : undefined,
+      visible: typed.visible !== false,
+      opacity: Number.isFinite(Number(typed.opacity)) ? Number(typed.opacity) : 0.65,
+      blendMode:
+        typeof typed.blendMode === 'string' && WALLPAPER_BLEND_MODES.has(typed.blendMode)
+          ? typed.blendMode as WallpaperBackgroundOverlay['blendMode']
+          : 'screen',
+      fit: typed.fit === 'contain' ? 'contain' : 'cover',
+    }];
+  });
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
+const asVec3 = (value: unknown, fallback: [number, number, number]): [number, number, number] => {
+  if (!Array.isArray(value) || value.length !== 3) return [...fallback] as [number, number, number];
+  return value.map((v, i) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback[i];
+  }) as [number, number, number];
+};
+
+const finiteNumber = (value: unknown, fallback: number): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const normalizeTransform = (value: unknown, fallback: TransformEntry): TransformEntry => {
+  const src = isRecord(value) ? value : {};
+  return {
+    position: asVec3(src.position, fallback.position),
+    rotation: asVec3(src.rotation, fallback.rotation),
+    scale: asVec3(src.scale, fallback.scale),
+  };
+};
+
+const transformEqual = (a: TransformEntry, b: TransformEntry): boolean =>
+  a.position.every((v, i) => v === b.position[i]) &&
+  a.rotation.every((v, i) => v === b.rotation[i]) &&
+  a.scale.every((v, i) => v === b.scale[i]);
+
+const objectLayoutTargets = ['character', 'desk', 'chair', 'laptop'] as const;
+const IDENTITY_TRANSFORM: TransformEntry = {
+  position: [0, 0, 0],
+  rotation: [0, 0, 0],
+  scale: [1, 1, 1],
+};
+
+function applyObjectLayout(base: LayoutTransforms | null, value: unknown): LayoutTransforms | null {
+  if (!base || !isRecord(value)) return base;
+  let changed = false;
+  const next: LayoutTransforms = { ...base };
+  for (const target of objectLayoutTargets) {
+    if (!isRecord(value[target])) continue;
+    const entry = normalizeTransform(value[target], base[target]);
+    if (!transformEqual(entry, base[target])) {
+      next[target] = entry;
+      changed = true;
+    }
+  }
+  return changed ? next : base;
+}
+
+function applyItemLayout(base: ItemTransforms, value: unknown): ItemTransforms {
+  if (!isRecord(value)) return base;
+  let changed = false;
+  const next: ItemTransforms = { ...base };
+  for (const [id, raw] of Object.entries(value)) {
+    if (!id.startsWith('item:') || !isRecord(raw)) continue;
+    const fallback = next[id] ?? { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+    const entry = normalizeTransform(raw, fallback);
+    if (!next[id] || !transformEqual(entry, next[id])) {
+      next[id] = entry;
+      changed = true;
+    }
+  }
+  return changed ? next : base;
+}
+
+function normalizeTransformMap(defaults: Record<string, unknown>, value: unknown): Record<string, TransformEntry> {
+  const src = isRecord(value) ? value : {};
+  const next: Record<string, TransformEntry> = {};
+  for (const [id, fallbackRaw] of Object.entries(defaults)) {
+    const fallback = normalizeTransform(fallbackRaw, IDENTITY_TRANSFORM);
+    next[id] = normalizeTransform(src[id], fallback);
+  }
+  for (const [id, raw] of Object.entries(src)) {
+    if (next[id] || !isRecord(raw)) continue;
+    next[id] = normalizeTransform(raw, IDENTITY_TRANSFORM);
+  }
+  return next;
+}
+
+function normalizeWallpaperSettings(value: unknown): WallpaperSettings {
+  const raw = isRecord(value) ? value : {};
+  const defaults = defaultUiSettings.wallpaper;
+  const camera = {
+    x: finiteNumber(raw.cameraX, defaults.cameraX),
+    y: finiteNumber(raw.cameraY, defaults.cameraY),
+    z: finiteNumber(raw.cameraZ, defaults.cameraZ),
+    yaw: finiteNumber(raw.cameraYaw, defaults.cameraYaw),
+    pitch: finiteNumber(raw.cameraPitch, defaults.cameraPitch),
+    roll: finiteNumber(raw.cameraRoll, defaults.cameraRoll),
+  };
+  const cameraLooksReset =
+    raw.cameraAdjustmentEnabled !== false &&
+    camera.x === 0 &&
+    camera.z === 0 &&
+    camera.yaw === 0 &&
+    camera.pitch === 0 &&
+    camera.roll === 0;
+
+  return {
+    ...defaults,
+    ...raw,
+    backgroundQueue: normalizeBackgroundQueue(raw.backgroundQueue ?? defaults.backgroundQueue),
+    backgroundOverlays: normalizeBackgroundOverlays(raw.backgroundOverlays ?? defaults.backgroundOverlays),
+    modelLightScale: finiteNumber(raw.modelLightScale, defaults.modelLightScale),
+    cameraMoveStep: finiteNumber(raw.cameraMoveStep, defaults.cameraMoveStep),
+    cameraRotateStep: finiteNumber(raw.cameraRotateStep, defaults.cameraRotateStep),
+    cameraAdjustmentEnabled: raw.cameraAdjustmentEnabled === undefined ? defaults.cameraAdjustmentEnabled : raw.cameraAdjustmentEnabled !== false,
+    cameraX: cameraLooksReset ? defaults.cameraX : camera.x,
+    cameraY: cameraLooksReset ? defaults.cameraY : camera.y,
+    cameraZ: cameraLooksReset ? defaults.cameraZ : camera.z,
+    cameraYaw: cameraLooksReset ? defaults.cameraYaw : camera.yaw,
+    cameraPitch: cameraLooksReset ? defaults.cameraPitch : camera.pitch,
+    cameraRoll: cameraLooksReset ? defaults.cameraRoll : camera.roll,
+    objectLayout: normalizeTransformMap(defaults.objectLayout, raw.objectLayout ?? defaults.objectLayout) as unknown as WallpaperSettings['objectLayout'],
+    itemLayout: normalizeTransformMap(defaults.itemLayout, raw.itemLayout ?? defaults.itemLayout) as unknown as WallpaperSettings['itemLayout'],
+  };
+}
 
 // Keyboard 4-8 map to the five idle states, in the order shown in the UI.
 const IDLE_KEYS: Record<string, IdleState> = {
@@ -144,7 +332,7 @@ function App() {
   const [cameraMode, setCameraMode] = useState<CameraMode>('ideal');
   const [lookAtEnabled, setLookAtEnabled] = useState(true);
   const [springBoneMode, setSpringBoneMode] = useState<SpringBoneMode>('normal');
-  const [fpsLimit, setFpsLimit] = useState(true); // 30fps by default
+  const [fpsLimit, setFpsLimit] = useState(30);
   const [currentExpression, setCurrentExpression] = useState('neutral');
   const [autoBlink, setAutoBlink] = useState(true);
   const [idleMotion, setIdleMotion] = useState(true);
@@ -299,6 +487,58 @@ function App() {
     lightOverlayEnabled: true,
     fit: 'cover',
   });
+  const [wallpaperSettings, setWallpaperSettings] = useState<WallpaperSettings>(() =>
+    normalizeWallpaperSettings(defaultUiSettings.wallpaper),
+  );
+  const wallpaperSettingsRef = useRef(wallpaperSettings);
+  const [motionSettings, setMotionSettings] = useState<MotionDirectorSettings>(defaultUiSettings.motion);
+  const [backgroundQueueIndex, setBackgroundQueueIndex] = useState(0);
+
+  useEffect(() => {
+    wallpaperSettingsRef.current = wallpaperSettings;
+  }, [wallpaperSettings]);
+
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      const ui = await fetchCompanionUi();
+      if (!alive || !ui?.settings) return;
+      const wp = normalizeWallpaperSettings(ui.settings.wallpaper);
+      setWallpaperSettings(wp);
+      setMotionSettings({ ...defaultUiSettings.motion, ...(ui.settings.motion ?? {}) });
+      if (isRecord(wp.objectLayout)) {
+        setLayout((prev) => applyObjectLayout(prev, wp.objectLayout));
+      }
+      if (isRecord(wp.itemLayout)) {
+        setItemTransforms((prev) => applyItemLayout(prev, wp.itemLayout));
+      }
+      setItemSelection((prev) => {
+        const next = {
+          ...prev,
+          phone: wp.propPhoneVisible !== false,
+          controller: wp.propControllerVisible !== false,
+          cup: wp.propCupVisible !== false,
+        };
+        if (next.phone === prev.phone && next.controller === prev.controller && next.cup === prev.cup) return prev;
+        saveItemSelection(next);
+        return next;
+      });
+      const nextFps = Number(ui.settings.overlay?.fpsLimit);
+      if (Number.isFinite(nextFps)) setFpsLimit(clamp(nextFps, 15, 60));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (productionMode && wallpaperSettings.cameraAdjustmentEnabled !== true) {
+      setCameraMode('ideal');
+    }
+  }, [productionMode, wallpaperSettings.cameraAdjustmentEnabled]);
 
   // Scene Layout Calibration (Motion Probe 0.6). selectedTarget is now a free
   // string id: the fixed 'character'|'desk'|'chair'|'laptop'|'camera' OR an
@@ -306,7 +546,7 @@ function App() {
   const [layout, setLayout] = useState<LayoutTransforms | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<string>('character');
   const [guidesEnabled, setGuidesEnabled] = useState(false);
-  const [cameraNudge, setCameraNudge] = useState({ dx: 0, dy: 0, dz: 0, dolly: 0, seq: 0 });
+  const [cameraNudge, setCameraNudge] = useState({ dx: 0, dy: 0, dz: 0, dolly: 0, yaw: 0, pitch: 0, roll: 0, seq: 0 });
   const [cameraReadback, setCameraReadback] = useState<{ position: [number, number, number]; target: [number, number, number]; fov: number }>({
     position: [0, 0, 0],
     target: [0, 0, 0],
@@ -419,7 +659,7 @@ function App() {
         (ls.motions ?? []).map(async (id): Promise<MotionEntry> => {
           let label = id;
           try {
-            const r = await fetch(`/motions/dsl/${id}.motion.json?ts=${Date.now()}`, { cache: 'no-store' });
+            const r = await fetch(publicAssetUrl(`/motions/dsl/${id}.motion.json?ts=${Date.now()}`), { cache: 'no-store' });
             if (r.ok) label = ((await r.json()) as { label?: string }).label || id;
           } catch {
             /* keep the id as label */
@@ -436,7 +676,7 @@ function App() {
       setMotionListNote('');
     } catch {
       // Production build (no dev middleware): fall back to the statically known files.
-      entries.push({ kind: 'vrma', ref: '/motions/sample_idle.vrma', label: 'sample_idle.vrma', group: 'VRMAパック' });
+      entries.push({ kind: 'vrma', ref: publicAssetUrl('/motions/sample_idle.vrma'), label: 'sample_idle.vrma', group: 'VRMAパック' });
       setMotionListNote('一覧の自動取得は devサーバ専用です（既知の項目のみ表示中）');
     }
     setMotionList(entries);
@@ -510,7 +750,7 @@ function App() {
   };
   const nudgeCamera = (dx: number, dy: number, dz: number, dolly: number) => {
     setCameraMode('free');
-    setCameraNudge((prev) => ({ dx, dy, dz, dolly, seq: prev.seq + 1 }));
+    setCameraNudge((prev) => ({ dx, dy, dz, dolly, yaw: 0, pitch: 0, roll: 0, seq: prev.seq + 1 }));
   };
   const fmtV = (v: [number, number, number]) => `[${r3(v[0])}, ${r3(v[1])}, ${r3(v[2])}]`;
   const fmtVdeg = (v: [number, number, number]) =>
@@ -556,7 +796,7 @@ function App() {
           else if (key === 'pagedown') dy = -CAM_PAN_STEP;
           else if (key === '+' || key === '=') dolly = CAM_DOLLY_STEP;
           else if (key === '-') dolly = -CAM_DOLLY_STEP;
-          setCameraNudge((prev) => ({ dx, dy, dz, dolly, seq: prev.seq + 1 }));
+          setCameraNudge((prev) => ({ dx, dy, dz, dolly, yaw: 0, pitch: 0, roll: 0, seq: prev.seq + 1 }));
           return;
         }
         let op: 'pos' | 'rot' | 'scale' | null = null;
@@ -599,7 +839,7 @@ function App() {
       if (key === '3') setCameraMode('monitor side');
       if (key === 'b') setAutoBlink(prev => !prev);
       if (key === 'l') setLookAtEnabled(prev => !prev);
-      if (key === 'f') setFpsLimit(prev => !prev);
+      if (key === 'f') setFpsLimit(prev => (prev >= 60 ? 30 : 60));
       if (key === 'n') setCurrentExpression('neutral');
       if (key === 'j') setCurrentExpression('joy');
       if (key === 'u') setCurrentExpression('fun');
@@ -648,60 +888,133 @@ function App() {
     : layout
       ? layout[selectedTarget as keyof LayoutTransforms]
       : undefined;
+  const backgroundQueue = useMemo(
+    () => normalizeBackgroundQueue((wallpaperSettings as { backgroundQueue?: unknown }).backgroundQueue),
+    [wallpaperSettings],
+  );
+  const backgroundOverlays = useMemo(
+    () => normalizeBackgroundOverlays((wallpaperSettings as { backgroundOverlays?: unknown }).backgroundOverlays),
+    [wallpaperSettings],
+  );
+  const backgroundMode = wallpaperSettings.backgroundMode ?? 'single';
+  const videoQueueMode = backgroundMode === 'video' || backgroundMode === 'videoSlideshow';
+  const activeBackgroundQueue = videoQueueMode ? backgroundQueue.filter((item) => item.type === 'video') : backgroundQueue;
+  const queueBackgroundEnabled = wallpaperSettings.backgroundImageEnabled !== false && backgroundMode !== 'single' && activeBackgroundQueue.length > 0;
+  const backgroundQueueSignature = activeBackgroundQueue.map((item) => `${item.type}:${item.name ?? ''}:${item.url.slice(0, 48)}`).join('|');
+
+  useEffect(() => {
+    setBackgroundQueueIndex(0);
+  }, [backgroundQueueSignature, backgroundMode]);
+
+  useEffect(() => {
+    if (!queueBackgroundEnabled || activeBackgroundQueue.length <= 1 || videoQueueMode) return;
+    const intervalSeconds = Number(wallpaperSettings.backgroundQueueIntervalSeconds ?? 60);
+    const intervalMs = Math.max(5, Number.isFinite(intervalSeconds) ? intervalSeconds : 60) * 1000;
+    const id = window.setInterval(() => {
+      setBackgroundQueueIndex((idx) => (idx + 1) % activeBackgroundQueue.length);
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [activeBackgroundQueue.length, videoQueueMode, queueBackgroundEnabled, wallpaperSettings.backgroundQueueIntervalSeconds, backgroundQueueSignature]);
+
+  const advanceBackgroundQueue = () => {
+    if (!queueBackgroundEnabled || activeBackgroundQueue.length <= 1) return;
+    setBackgroundQueueIndex((idx) => (idx + 1) % activeBackgroundQueue.length);
+  };
+
+  const activeBackgroundItem = queueBackgroundEnabled
+    ? activeBackgroundQueue[Math.min(activeBackgroundQueue.length - 1, backgroundQueueIndex % Math.max(1, activeBackgroundQueue.length))]
+    : null;
+  const customBackgroundUrl =
+    typeof wallpaperSettings.backgroundImageDataUrl === 'string' && wallpaperSettings.backgroundImageDataUrl.length > 0
+      ? wallpaperSettings.backgroundImageDataUrl
+      : null;
+  const useCustomBackground = !!activeBackgroundItem || (!!customBackgroundUrl && wallpaperSettings.backgroundImageEnabled !== false);
+  const effectiveBackground: SceneBackground | undefined = activeBackgroundItem
+    ? activeBackgroundItem.type === 'video'
+      ? { roomImage: null, outsideImage: null, lightOverlay: null, windowVideo: activeBackgroundItem.url }
+      : { roomImage: activeBackgroundItem.url, outsideImage: null, lightOverlay: null, windowVideo: null }
+    : useCustomBackground && customBackgroundUrl
+      ? { roomImage: customBackgroundUrl, outsideImage: null, lightOverlay: null, windowVideo: null }
+      : sceneDebug.background;
+  const effectiveBackgroundEnabled = backgroundEnabled;
+  const effectiveBgFit: BgFit = wallpaperSettings.backgroundFit === 'contain' ? 'contain' : 'cover';
+  const modelLightScale = clamp(Number(wallpaperSettings.modelLightScale ?? 1), 0, 3);
+  const modelVisible = wallpaperSettings.modelVisible !== false;
+  const cameraAdjustment = {
+    enabled: wallpaperSettings.cameraAdjustmentEnabled === true,
+    x: finiteNumber(wallpaperSettings.cameraX, defaultUiSettings.wallpaper.cameraX),
+    y: finiteNumber(wallpaperSettings.cameraY, defaultUiSettings.wallpaper.cameraY),
+    z: finiteNumber(wallpaperSettings.cameraZ, defaultUiSettings.wallpaper.cameraZ),
+    yaw: finiteNumber(wallpaperSettings.cameraYaw, defaultUiSettings.wallpaper.cameraYaw),
+    pitch: finiteNumber(wallpaperSettings.cameraPitch, defaultUiSettings.wallpaper.cameraPitch),
+    roll: finiteNumber(wallpaperSettings.cameraRoll, defaultUiSettings.wallpaper.cameraRoll),
+  };
 
   return (
     <div className={`wallpaper-shell ${productionMode ? 'production-mode' : 'probe-mode'}`}>
       <SceneBackgroundLayer
-        background={sceneDebug.background}
-        enabled={backgroundEnabled}
+        background={effectiveBackground}
+        enabled={effectiveBackgroundEnabled}
         lightOverlayEnabled={lightOverlayEnabled}
-        fit={bgFit}
+        fit={useCustomBackground ? effectiveBgFit : bgFit}
+        videoMuted={wallpaperSettings.backgroundVideoMuted !== false}
+        videoLoop={!videoQueueMode || activeBackgroundQueue.length <= 1}
+        fadeSeconds={Number(wallpaperSettings.backgroundQueueFadeSeconds ?? 1)}
+        overlays={backgroundOverlays}
+        onVideoEnded={videoQueueMode ? advanceBackgroundQueue : undefined}
         onBgDebug={setBgDebug}
         daypart={daypart}
       />
 
-      <VrmViewer
-        cameraMode={cameraMode}
-        lookAtEnabled={lookAtEnabled}
-        springBoneMode={springBoneMode}
-        fpsLimit={fpsLimit}
-        currentExpression={currentExpression}
-        autoBlink={autoBlink}
-        idleMotion={idleMotion}
-        expressionPresetId={expressionPresetId}
-        expressionPresetIntensity={expressionPresetIntensity}
-        idleRequest={idleRequest}
-        autoIdle={autoIdle}
-        externalClipWeight={externalClipWeight}
-        externalRequest={externalRequest}
-        motionRequest={motionRequest}
-        sceneId={sceneId}
-        propsEnabled={propsEnabled}
-        placeholdersEnabled={placeholdersEnabled}
-        sceneReloadSeq={sceneReloadSeq}
-        variantRegistry={variantRegistry}
-        variantSelection={variantSelection}
-        propLibrary={propLibrary}
-        itemSelection={itemSelection}
-        itemLayout={itemLayout}
-        layoutTransforms={layout}
-        selectedTarget={selectedTarget}
-        guidesEnabled={guidesEnabled}
-        cameraNudge={cameraNudge}
-        onFpsUpdate={setFps}
-        onStatusUpdate={setStatus}
-        onIdleDebug={setIdleDebug}
-        onExternalDebug={setExternalDebug}
-        onExpressionPresetDebug={setExprPresetDebug}
-        onSceneDebug={setSceneDebug}
-        onLayoutInit={(init) => {
-          setLayout(init.transforms);
-          setCameraReadback({ position: init.camera.position, target: init.camera.target, fov: init.camera.fov });
-        }}
-        onCameraReadback={setCameraReadback}
-        autoStartDirector={productionMode}
-        daypart={daypart}
-      />
+      {modelVisible && (
+        <VrmViewer
+          cameraMode={cameraMode}
+          lookAtEnabled={lookAtEnabled}
+          springBoneMode={springBoneMode}
+          fpsLimit={fpsLimit}
+          currentExpression={currentExpression}
+          autoBlink={autoBlink}
+          idleMotion={idleMotion}
+          expressionPresetId={expressionPresetId}
+          expressionPresetIntensity={expressionPresetIntensity}
+          idleRequest={idleRequest}
+          autoIdle={autoIdle}
+          externalClipWeight={externalClipWeight}
+          externalRequest={externalRequest}
+          motionRequest={motionRequest}
+          sceneId={sceneId}
+          propsEnabled={propsEnabled}
+          placeholdersEnabled={placeholdersEnabled}
+          sceneReloadSeq={sceneReloadSeq}
+          variantRegistry={variantRegistry}
+          variantSelection={variantSelection}
+          propLibrary={propLibrary}
+          itemSelection={itemSelection}
+          itemLayout={itemLayout}
+          layoutTransforms={layout}
+          selectedTarget={selectedTarget}
+          guidesEnabled={guidesEnabled}
+          cameraNudge={cameraNudge}
+          cameraAdjustment={cameraAdjustment}
+          onFpsUpdate={setFps}
+          onStatusUpdate={setStatus}
+          onIdleDebug={setIdleDebug}
+          onExternalDebug={setExternalDebug}
+          onExpressionPresetDebug={setExprPresetDebug}
+          onSceneDebug={setSceneDebug}
+          onLayoutInit={(init) => {
+            const wp = wallpaperSettingsRef.current;
+            setLayout(applyObjectLayout(init.transforms, wp.objectLayout) ?? init.transforms);
+            setCameraReadback({ position: init.camera.position, target: init.camera.target, fov: init.camera.fov });
+          }}
+          onCameraReadback={setCameraReadback}
+          autoStartDirector={productionMode}
+          motionSettings={motionSettings}
+          daypart={daypart}
+          lightScale={modelLightScale}
+          vrmModelPath={wallpaperSettings.vrmModelPath ?? ''}
+        />
+      )}
 
       {productionMode && <ProductionOverlay />}
 
@@ -1183,7 +1496,7 @@ function App() {
               id="display"
               icon="⚙️"
               title="表示・負荷"
-              summary={`SB:${springBoneMode} · ${fpsLimit ? '30fps' : '60fps+'}`}
+              summary={`SB:${springBoneMode} · ${fpsLimit}fps`}
               open={openSections.display}
               onToggle={toggleSection}
             >
@@ -1206,8 +1519,8 @@ function App() {
                 >
                   揺れ物: {springBoneMode} <kbd>M</kbd>
                 </button>
-                <button type="button" className={chip(!fpsLimit)} onClick={() => setFpsLimit(!fpsLimit)}>
-                  FPS上限: {fpsLimit ? '30' : '60+'} <kbd>F</kbd>
+                <button type="button" className={chip(fpsLimit >= 60)} onClick={() => setFpsLimit(prev => (prev >= 60 ? 30 : 60))}>
+                  FPS上限: {fpsLimit} <kbd>F</kbd>
                 </button>
               </div>
             </Section>

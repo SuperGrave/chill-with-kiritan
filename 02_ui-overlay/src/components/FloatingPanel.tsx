@@ -9,6 +9,7 @@ interface FloatingPanelProps {
   showHeader?: boolean;
   showBackground?: boolean;
   backgroundOpacity?: number;
+  contentTopGap?: number;
   children: React.ReactNode;
 }
 
@@ -23,6 +24,7 @@ const FloatingPanel: React.FC<FloatingPanelProps> = ({
   showHeader = true,
   showBackground = true,
   backgroundOpacity = 0.4,
+  contentTopGap,
   children,
 }) => {
   return (
@@ -47,7 +49,22 @@ const FloatingPanel: React.FC<FloatingPanelProps> = ({
         boxShadow: showBackground ? '0 12px 40px rgba(0, 0, 0, 0.4)' : 'none',
       }}
     >
-      {showHeader && <div className="floating-panel-header">{title}</div>}
+      {showHeader && (
+        <div
+          className="floating-panel-header"
+          style={typeof contentTopGap === 'number' ? { marginBottom: contentTopGap } : undefined}
+        >
+          <span style={{
+            display: 'block',
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {title}
+          </span>
+        </div>
+      )}
       <div className="floating-panel-content">{children}</div>
     </div>
   );

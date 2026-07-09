@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import type { SceneProp, PropLoadResult } from './sceneTypes';
 import { createPlaceholderProp } from './placeholderProps';
+import { publicAssetUrl } from '../assetUrl';
 
 // Structural slice of three's GLTFLoader we actually use (avoids the ts-ignored
 // example-module import leaking into this file's types).
@@ -79,7 +80,7 @@ function stripLightsAndCameras(root: THREE.Object3D): number {
 async function loadOneProp(prop: SceneProp, loader: PropGltfLoader): Promise<{ object: THREE.Object3D | null; result: PropLoadResult }> {
   if (!prop.url) return makePlaceholder(prop, 'no url');
   try {
-    const gltf = await loader.loadAsync(prop.url);
+    const gltf = await loader.loadAsync(publicAssetUrl(prop.url));
     const stripped = stripLightsAndCameras(gltf.scene);
     if (stripped > 0) console.info(`[PROP] ${prop.id}: removed ${stripped} embedded light/camera node(s) from the GLB`);
     const container = wrap(gltf.scene, prop, false);

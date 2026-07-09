@@ -13,6 +13,7 @@
 // dependency outside the storage helpers (Node-testable, like sceneLoader).
 
 import type { ScenePreset, SceneProp, Vec3 } from './sceneTypes';
+import { publicAssetUrl } from '../assetUrl';
 
 export interface PropVariant {
   id: string;
@@ -98,7 +99,7 @@ export function validateVariantsRegistry(raw: unknown): PropVariantsRegistry | n
 // (file absent/malformed) and the variant system simply stays inert.
 export async function loadPropVariantsRegistry(): Promise<PropVariantsRegistry | null> {
   try {
-    const res = await fetch(REGISTRY_URL);
+    const res = await fetch(publicAssetUrl(REGISTRY_URL));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const registry = validateVariantsRegistry((await res.json()) as unknown);
     if (!registry) console.warn('[VARIANTS] props.variants.json is malformed — variant UI disabled');

@@ -480,17 +480,30 @@ section('8. Director runtime soak — host play→finished loop, no stall (3h ×
 {
   const { DirectorRunner } = D('directorRunner.js');
   const { resolveTransitionChain } = D('modeTable.js');
-  // Phase-1 authored content (mirrors VrmViewer's DIRECTOR_LOOPS / transitions).
-  const LOOPS = { work_normal: 'loop_work_normal', work_sleepy: 'loop_work_sleepy', video_relax: 'loop_video_relax', sleep_desk: 'loop_sleep_desk' };
+  // Current production auto-run content: the three completed loops only.
+  const PRIMARY_MODES = new Set(['work_normal', 'video_relax', 'sleep_desk']);
+  const LOOPS = { work_normal: 'loop_work_normal', video_relax: 'loop_video_relax', sleep_desk: 'loop_sleep_desk' };
   const AUTHORED_TR = new Set(['tr_sit_to_slump', 'tr_slump_wake', 'tr_lean_back', 'tr_lean_forward']);
   const ONESHOT = 3; // seconds a transition/ambient clip "plays" before finishing
 
   let exception = null;
   let totTrans = 0, totAmb = 0, totLoop = 0, maxChain = 0;
+  const seenModes = new Set();
+  const badModes = new Set();
   for (const seed of [1, 5, 42, 777]) {
     const r = new DirectorRunner({
       seed,
-      availableMotions: new Set(['amb_work_neck_roll', 'amb_work_screen_scan', 'amb_slpy_head_bob', 'amb_vid_chuckle', 'amb_slp_head_shift']),
+      allowedModes: PRIMARY_MODES,
+      availableMotions: new Set([
+        'amb_work_neck_roll',
+        'amb_work_posture_reset',
+        'amb_work_stretch',
+        'amb_vid_chuckle',
+        'amb_vid_nod_watch',
+        'amb_vid_eyes_widen',
+        'amb_slp_head_shift',
+        'amb_slp_dream_smile',
+      ]),
       loopMotionFor: (m) => LOOPS[m] ?? null,
       transitionMotionsFor: (f, t) => {
         const c = resolveTransitionChain(f, t);
@@ -514,17 +527,24 @@ section('8. Director runtime soak — host play→finished loop, no stall (3h ×
             const nxt = r.onClipFinished();
             if (nxt) {
               if (nxt.kind === 'transition') { totTrans++; chainLen++; maxChain = Math.max(maxChain, chainLen); }
-              else chainLen = 0;
+              else {
+                totAmb += nxt.kind === 'ambient' ? 1 : 0;
+                totLoop += nxt.kind === 'loop' ? 1 : 0;
+                chainLen = 0;
+              }
               remaining = nxt.kind === 'loop' ? Infinity : ONESHOT;
             } else remaining = Infinity;
           }
         }
         // Invariant: never wedged in 'transition' without a playing clip.
         if (r.status().state === 'transition' && !Number.isFinite(remaining)) throw new Error('stuck in transition with no clip');
+        seenModes.add(r.status().mode);
+        if (!PRIMARY_MODES.has(r.status().mode)) badModes.add(r.status().mode);
       }
     } catch (e) { exception = e; break; }
   }
   ok(exception === null, `soak ran without stall/exception ${exception ? `(${exception.message})` : ''}`);
+  ok(badModes.size === 0, `production auto-run stayed in primary modes (${[...seenModes].sort().join(', ')})`);
   ok(totTrans > 0, `transitions auto-played (${totTrans})`);
   ok(totAmb > 0, `ambients fired between transitions (${totAmb})`);
   ok(totLoop > 0, `loops resumed after chains/ambients (${totLoop})`);
@@ -572,10 +592,13 @@ section('9. Context-loop return registry (issue #1)');
   ok(contextReturnLoop('tr_sit_to_stand') === null, 'tr_sit_to_stand has no sitting settle loop');
   ok(contextReturnLoop('tr_walk_stop') === null, 'tr_walk_stop has no sitting settle loop');
 
-  // 9f. Host loop table == registry (single source of truth, issue #1).
+  // 9f. Context registry keeps both primary and secondary loop return targets.
   ok(
-    PHASE1_MODE_LOOP.work_normal === 'loop_work_normal' && PHASE1_MODE_LOOP.sleep_desk === 'loop_sleep_desk',
-    'PHASE1_MODE_LOOP defines the 4 Phase-1 loops',
+    PHASE1_MODE_LOOP.work_normal === 'loop_work_normal' &&
+      PHASE1_MODE_LOOP.video_relax === 'loop_video_relax' &&
+      PHASE1_MODE_LOOP.sleep_desk === 'loop_sleep_desk' &&
+      PHASE1_MODE_LOOP.work_sleepy === 'loop_work_sleepy',
+    'PHASE1_MODE_LOOP defines return targets for primary and secondary loops',
   );
 }
 

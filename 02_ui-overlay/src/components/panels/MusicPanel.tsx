@@ -21,14 +21,49 @@ const formatMs = (ms?: number): string => {
   return `${m}:${sec}`;
 };
 
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+const sampledAtMs = (sampledAt?: string): number => {
+  const parsed = sampledAt ? Date.parse(sampledAt) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : Date.now();
+};
+
 const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings, offline = false, onControl }) => {
   const [busyAction, setBusyAction] = React.useState<string | null>(null);
   const s = { ...musicPanelDefaults, ...settings };
   const track = spotify.track;
+  const trackKey = `${track?.id ?? ''}|${track?.title ?? ''}|${track?.artist ?? ''}`;
+  const [now, setNow] = React.useState(Date.now());
+  const [anchor, setAnchor] = React.useState({
+    key: trackKey,
+    progressMs: track?.progressMs ?? 0,
+    seenAt: sampledAtMs(track?.sampledAt),
+    status: spotify.status,
+  });
+
+  React.useEffect(() => {
+    setAnchor({
+      key: trackKey,
+      progressMs: track?.progressMs ?? 0,
+      seenAt: sampledAtMs(track?.sampledAt),
+      status: spotify.status,
+    });
+  }, [trackKey, track?.progressMs, track?.sampledAt, spotify.status]);
+
+  React.useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const progressMs =
+    anchor.status === 'playing' && anchor.key === trackKey
+      ? clamp(anchor.progressMs + (now - anchor.seenAt), 0, track?.durationMs ?? Number.MAX_SAFE_INTEGER)
+      : track?.progressMs ?? 0;
 
   const progressPercent =
-    track?.durationMs && track.progressMs !== undefined
-      ? (track.progressMs / track.durationMs) * 100
+    track?.durationMs
+      ? (progressMs / track.durationMs) * 100
       : 0;
 
   const statusTone =
@@ -61,45 +96,80 @@ const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings
     padding: 0,
   };
 
+  const isTopRightArtwork = s.showArtwork !== false && s.artworkMode === 'topRight';
+  const cornerArtworkRaw = Number(s.artworkCornerSize ?? 0);
+  const cornerArtworkSize = Number.isFinite(cornerArtworkRaw) ? Math.max(0, cornerArtworkRaw) : 0;
+  const hasCornerArtwork = isTopRightArtwork && cornerArtworkSize > 0;
+  const artworkTopGap = Math.max(0, Number(s.artworkTopGap ?? 0));
+  const artworkProgressGap = Math.max(0, Number(s.artworkProgressGap ?? s.gap ?? 20));
+  const renderArtworkBox = (style: React.CSSProperties, placeholderSize = '14px') => (
+    <div style={{
+      borderRadius: '12px',
+      border: '1px solid rgba(255,255,255,0.15)',
+      background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.25) 100%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      flexShrink: 0,
+      ...style,
+    }}>
+      {track?.albumArtUrl ? (
+        <img
+          src={track.albumArtUrl}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <span style={{ opacity: 0.3, letterSpacing: '0.2em', fontSize: placeholderSize }}>
+          NO ARTWORK
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div style={{
       color: '#fff',
       fontFamily: 'var(--font-main)',
       display: 'flex',
       flexDirection: 'column',
-      gap: `${s.gap}px`,
+      gap: 0,
       minHeight: '100%',
       boxSizing: 'border-box',
+      position: 'relative',
     }}>
-      {s.showArtwork && (
-        <div style={{
+      {hasCornerArtwork && renderArtworkBox({
+        position: 'absolute',
+        top: `${artworkTopGap}px`,
+        right: 0,
+        width: `${cornerArtworkSize}px`,
+        height: `${cornerArtworkSize}px`,
+        zIndex: 0,
+        pointerEvents: 'none',
+      }, `${Math.max(8, cornerArtworkSize * 0.08)}px`)}
+
+      {s.showArtwork !== false && !isTopRightArtwork && (
+        renderArtworkBox({
           width: `${s.artworkScale * 100}%`,
-          margin: '0 auto',
+          margin: `0 auto ${s.gap}px`,
           aspectRatio: '1',
-          borderRadius: '12px',
-          border: '1px solid rgba(255,255,255,0.15)',
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.25) 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-          flexShrink: 0,
-        }}>
-          {track?.albumArtUrl ? (
-            <img
-              src={track.albumArtUrl}
-              alt=""
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          ) : (
-            <span style={{ opacity: 0.3, letterSpacing: '0.2em', fontSize: '14px' }}>
-              NO ARTWORK
-            </span>
-          )}
-        </div>
+        })
       )}
 
-      <div>
+      <div style={{
+        position: 'relative',
+        zIndex: 1,
+        boxSizing: 'border-box',
+        minHeight: hasCornerArtwork ? `${artworkTopGap + cornerArtworkSize}px` : undefined,
+        paddingTop: hasCornerArtwork ? `${artworkTopGap}px` : undefined,
+        paddingRight: hasCornerArtwork ? `${cornerArtworkSize + 16}px` : undefined,
+        display: hasCornerArtwork ? 'flex' : undefined,
+        flexDirection: hasCornerArtwork ? 'column' : undefined,
+        justifyContent: hasCornerArtwork ? 'center' : undefined,
+        minWidth: 0,
+        marginBottom: `${hasCornerArtwork ? artworkProgressGap : s.gap}px`,
+      }}>
         <div style={{
           fontSize: `${s.titleSize}px`,
           fontWeight: 300,
@@ -124,7 +194,7 @@ const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings
         </div>
       </div>
 
-      <div>
+      <div style={{ marginBottom: s.showControls ? `${s.gap}px` : 0 }}>
         <WeatherToneBar
           mode="progress"
           value={progressPercent}
@@ -141,7 +211,7 @@ const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings
             letterSpacing: '0.1em',
             opacity: 0.7,
           }}>
-            <span>{formatMs(track?.progressMs)}</span>
+            <span>{formatMs(track ? progressMs : undefined)}</span>
             <span>{formatMs(track?.durationMs)}</span>
           </div>
         )}
@@ -154,6 +224,7 @@ const MusicPanel: React.FC<MusicPanelProps> = ({ spotify = mockSpotify, settings
           alignItems: 'center',
           gap: '32px',
           marginTop: '4px',
+          marginBottom: s.showFooter ? `${s.gap}px` : 0,
         }}>
           <button type="button" aria-label="Previous track" title="Previous track" style={controlButtonStyle} disabled={controlsDisabled} onClick={() => runControl('previous')}>
             <SkipBack size={s.controlSize} strokeWidth={1.5} />

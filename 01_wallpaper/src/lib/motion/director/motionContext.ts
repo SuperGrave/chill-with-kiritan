@@ -19,9 +19,10 @@ import type { ModeId } from './types';
 import { MODE_TABLE } from './modeTable';
 
 /**
- * Phase-1 mode → base-loop motion id. This is the canonical map; the host's
- * Director loop table (DIRECTOR_LOOPS) is exactly this, so loops are defined in
- * one place only.
+ * Phase-1 playback-context mode → base-loop motion id. This registry is wider
+ * than the current production auto-run set: VrmViewer may choose a smaller
+ * "primary" subset while keeping these return-loop mappings for Lab playback
+ * and secondary clips.
  */
 export const PHASE1_MODE_LOOP: Partial<Record<ModeId, string>> = {
   work_normal: 'loop_work_normal',

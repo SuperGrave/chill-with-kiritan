@@ -40,6 +40,7 @@ export default function TabStatus() {
   const [state, setState] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [ts, setTs] = useState("");
+  const [refreshStatus, setRefreshStatus] = useState("");
 
   const check = async () => {
     try {
@@ -57,8 +58,32 @@ export default function TabStatus() {
 
   // Manual refresh of live data sources.
   const refreshData = async () => {
+    setRefreshStatus("全データを更新中…");
     await Promise.allSettled([api.newsRefresh(), api.weatherRefresh(), api.spotifyRefresh()]);
-    check();
+    await check();
+    setRefreshStatus("全データを更新しました");
+  };
+
+  const refreshWeather = async () => {
+    setRefreshStatus("天気を更新中…");
+    try {
+      const res: any = await api.weatherRefresh();
+      await check();
+      setRefreshStatus(res?.ok ? "天気を更新しました" : `天気更新に失敗: ${res?.error ?? "設定を確認してください"}`);
+    } catch {
+      setRefreshStatus("天気更新に失敗しました");
+    }
+  };
+
+  const refreshNews = async () => {
+    setRefreshStatus("ニュースを更新中…");
+    try {
+      const res: any = await api.newsRefresh();
+      await check();
+      setRefreshStatus(res?.ok ? `ニュースを更新しました（${res.count ?? 0}件）` : `ニュース更新に失敗: ${res?.error ?? "フィードを確認してください"}`);
+    } catch {
+      setRefreshStatus("ニュース更新に失敗しました");
+    }
   };
 
   useEffect(() => {
@@ -68,7 +93,6 @@ export default function TabStatus() {
   }, []);
 
   const spotify = state?.spotify;
-  const ai = state?.ai;
   const weather = state?.weather;
   const news = state?.news ?? [];
   const ui = state?.ui;
@@ -82,11 +106,6 @@ export default function TabStatus() {
     : spotify?.status === "error" ? { tone: "err", text: "エラー" }
     : spotify?.status === "idle" ? { tone: "warn", text: "停止中" }
     : { tone: "warn", text: "未接続" };
-
-  const aiPill: Pill =
-    !ai || ai.provider === "none" ? { tone: "warn", text: "none" }
-    : ai.status === "error" ? { tone: "err", text: `${ai.provider} (エラー)` }
-    : { tone: "ok", text: ai.provider };
 
   const weatherPill: Pill =
     weather?.source === "live" ? { tone: "ok", text: "live" } : { tone: "warn", text: "mock" };
@@ -124,7 +143,6 @@ export default function TabStatus() {
         <StatusRow label="Overlay UI" pill={overlayPill} />
         <StatusRow label="Spotify" pill={spotifyPill} />
         {spotify?.track && <StatusRow label="再生中" value={`${spotify.track.title} / ${spotify.track.artist}`} />}
-        <StatusRow label="AI Provider" pill={aiPill} />
         <StatusRow label="Weather Source" pill={weatherPill} />
         {weather?.current && <StatusRow label="気温" value={`${Math.round(weather.current.temperature)}°C (${weather.current.location})`} />}
         <StatusRow label="News" value={`${news.length} 件`} />
@@ -134,11 +152,20 @@ export default function TabStatus() {
 
       <div className="status-footer">
         <span className="ts">最終確認: {ts}</span>
+        <button onClick={refreshWeather} className="secondary-btn">
+          <RefreshIcon />
+          天気更新
+        </button>
+        <button onClick={refreshNews} className="secondary-btn">
+          <RefreshIcon />
+          ニュース更新
+        </button>
         <button onClick={refreshData} className="secondary-btn">
           <RefreshIcon />
           データ更新
         </button>
       </div>
+      {refreshStatus && <p className="hint">{refreshStatus}</p>}
     </section>
   );
 }

@@ -10,13 +10,21 @@ import FloatingPanel from './components/FloatingPanel';
 import NewsPanel from './components/panels/NewsPanel';
 import MusicPanel from './components/panels/MusicPanel';
 import LyricsPanel from './components/panels/LyricsPanel';
-import AiPanel from './components/panels/AiPanel';
+import PersonalNewsPanel from './components/panels/PersonalNewsPanel';
 import MemoPanel from './components/panels/MemoPanel';
+import TimerPanel from './components/panels/TimerPanel';
 import DebugGuide from './components/DebugGuide';
 import { useWeatherData } from './hooks/useWeatherData';
 import { useCompanionData } from './hooks/useCompanionData';
-import { fetchCompanionUi, pushCompanionUi, sendCompanionChat, sendSpotifyControl } from './services/companionClient';
-import type { AiState, SpotifyState } from './types/panels';
+import {
+  fetchCompanionUi,
+  pushCompanionUi,
+  sendSpotifyControl,
+  sendTimerControl,
+} from './services/companionClient';
+import type { CompanionWeatherState } from './services/companionClient';
+import type { SpotifyState } from './types/panels';
+import type { WeatherBundle } from './types/weather';
 import './styles/base.css';
 import './styles/overlay.css';
 import './styles/weather.css';
@@ -25,17 +33,85 @@ interface OverlayAppProps {
   productionMode?: boolean;
 }
 
-export type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'AI' | 'NEWS' | 'MEMO';
-
-const OFFLINE_AI: AiState = {
-  provider: 'none',
-  status: 'idle',
-  messages: [],
-};
+export type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'PERSONAL_NEWS' | 'NEWS' | 'MEMO' | 'TIMER';
 
 const OFFLINE_SPOTIFY: SpotifyState = {
   connected: false,
   status: 'idle',
+};
+
+const weatherCondition = (code: number): string => {
+  if (code === 0) return 'SUNNY';
+  if (code === 1 || code === 2) return 'PARTLY CLOUDY';
+  if (code === 3) return 'CLOUDY';
+  if (code === 45 || code === 48) return 'FOG';
+  if (code >= 51 && code <= 55) return 'DRIZZLE';
+  if (code >= 61 && code <= 65) return 'RAIN';
+  if (code >= 71 && code <= 77) return 'SNOW';
+  if (code >= 80 && code <= 82) return 'SHOWERS';
+  if (code === 85 || code === 86) return 'SNOW';
+  if (code >= 95) return 'THUNDER';
+  return 'UNKNOWN';
+};
+
+const windDirectionLabel = (degrees: number): string => {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const normalized = ((degrees % 360) + 360) % 360;
+  return directions[Math.round(normalized / 45) % 8];
+};
+
+const liveNumber = (value: number | null | undefined): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const companionWeatherToBundle = (weather?: CompanionWeatherState | null): WeatherBundle | null => {
+  const current = weather?.current;
+  if (!current || weather?.source !== 'live') return null;
+  const temperature = Math.round(current.temperature);
+  const updatedAt = weather.updatedAt ?? new Date().toISOString();
+  const temperatureMin = liveNumber(current.temperatureMin);
+  const temperatureMax = liveNumber(current.temperatureMax);
+  const hourly = (weather.hourly ?? []).map((point) => ({
+    time: point.time,
+    temperature: Math.round(point.temperature),
+    condition: typeof point.weatherCode === 'number' ? weatherCondition(point.weatherCode) : 'UNKNOWN',
+    weatherCode: liveNumber(point.weatherCode) === undefined ? undefined : Number(point.weatherCode),
+    precipitationProbability: liveNumber(point.precipitationProbability),
+    humidity: liveNumber(point.humidity),
+    windSpeed: liveNumber(point.windSpeed),
+  }));
+  return {
+    summary: {
+      location: current.location,
+      condition: weatherCondition(current.weatherCode),
+      weatherCode: current.weatherCode,
+      isDay: current.isDay,
+      currentTemperature: temperature,
+      apparentTemperature: Math.round(current.apparentTemperature),
+      temperatureMin: temperatureMin === undefined ? temperature : Math.round(temperatureMin),
+      temperatureMax: temperatureMax === undefined ? temperature : Math.round(temperatureMax),
+      humidity: Math.round(current.humidity),
+      pressure: Number(current.pressure.toFixed(1)),
+      precipitationProbability: liveNumber(current.precipitationProbability),
+      precipitation: liveNumber(current.precipitation),
+      rain: liveNumber(current.rain),
+      snowfall: liveNumber(current.snowfall),
+      cloudCover: liveNumber(current.cloudCover),
+      uvIndex: liveNumber(current.uvIndex),
+      windSpeed: Number(current.windSpeed.toFixed(1)),
+      windDirection: windDirectionLabel(current.windDirection),
+      windDirectionDegrees: current.windDirection,
+      windGust: liveNumber(current.windGust),
+      sunrise: current.sunrise ?? undefined,
+      sunset: current.sunset ?? undefined,
+      updatedAt,
+      source: 'live',
+    },
+    hourly,
+    overview: weather.overview ?? undefined,
+    source: 'live',
+    updatedAt,
+    error: weather.error ?? undefined,
+  };
 };
 
 const readStored = <T,>(key: string, fallback: T): T => {
@@ -184,9 +260,10 @@ function App({ productionMode = false }: OverlayAppProps) {
     WEATHER: ['weatherCompact', 'showCompactWeather'],
     MUSIC: ['musicPanel', 'show'],
     LYRICS: ['lyricsPanel', 'show'],
-    AI: ['aiPanel', 'show'],
+    PERSONAL_NEWS: ['personalNewsPanel', 'show'],
     NEWS: ['newsPanel', 'show'],
     MEMO: ['memoPanel', 'show'],
+    TIMER: ['timerPanel', 'show'],
   };
 
   const isPanelVisible = (id: PanelId) => {
@@ -207,27 +284,54 @@ function App({ productionMode = false }: OverlayAppProps) {
     WEATHER: isPanelVisible('WEATHER'),
     MUSIC: isPanelVisible('MUSIC'),
     LYRICS: isPanelVisible('LYRICS'),
-    AI: isPanelVisible('AI'),
+    PERSONAL_NEWS: isPanelVisible('PERSONAL_NEWS'),
     NEWS: isPanelVisible('NEWS'),
     MEMO: isPanelVisible('MEMO'),
+    TIMER: isPanelVisible('TIMER'),
   };
 
-  const { weatherBundle } = useWeatherData();
-
-  // Weather may still be loading or offline. Production never renders the
-  // bundled mock values as though they were current observations.
-  const weatherData = weatherBundle.summary;
-  const weatherAvailable = !productionMode || weatherBundle.source === 'live';
+  const { weatherBundle: localWeatherBundle } = useWeatherData();
 
   // In production, null means OFFLINE and [] means a real connected empty
   // state. Mock data remains available only to the standalone overlay preview.
   const { data: companion, online: companionOnline, refresh: refreshCompanion } = useCompanionData();
   const connected = companionOnline;
   const liveNews = companion ? companion.news : productionMode ? [] : undefined;
-  const liveAi = companion?.ai ?? (productionMode ? OFFLINE_AI : undefined);
+  const livePersonalNews = companion?.personalNews;
   const liveSpotify = companion?.spotify ?? (productionMode ? OFFLINE_SPOTIFY : undefined);
   const liveMemos = companion ? companion.memos : productionMode ? [] : undefined;
+  const liveTimer = companion?.timer ?? null;
   const newsSource = companion ? 'live' : productionMode ? 'offline' : undefined;
+  const lyricsHasLines = (liveSpotify?.lyrics?.lines?.length ?? 0) > 0;
+  const personalNewsSettings = {
+    ...defaultUiSettings.personalNewsPanel,
+    ...(effectiveSettings.personalNewsPanel ?? {}),
+  };
+  const personalNewsAutoActive =
+    !lyricsHasLines &&
+    personalNewsSettings.autoShowWhenLyricsUnavailable !== false &&
+    livePersonalNews?.currentScript;
+  const showPersonalNewsPanel = panelVisibility.PERSONAL_NEWS || Boolean(personalNewsAutoActive);
+  const showLyricsPanel =
+    panelVisibility.LYRICS &&
+    !(personalNewsAutoActive && personalNewsSettings.hideLyricsWhenAutoShown !== false);
+  const personalNewsPanelTitle = `PERSONAL NEWS${livePersonalNews?.currentScript?.title ? ` : ${livePersonalNews.currentScript.title}` : ''}`;
+  const companionWeatherBundle = companionWeatherToBundle(companion?.weather);
+
+  // Companion is the production source of truth for weather. The old local
+  // Open-Meteo path remains only as a standalone-preview/offline fallback.
+  const weatherBundle = companionWeatherBundle ?? localWeatherBundle;
+  const weatherData = weatherBundle.summary;
+  const weatherAvailable = productionMode
+    ? companionWeatherBundle?.source === 'live'
+    : weatherBundle.source === 'live' || weatherBundle.source === 'mock';
+  const weatherDisplayMode = effectiveSettings.weatherCompact?.displayMode ?? 'compact';
+  const weatherChrome =
+    weatherDisplayMode === 'detailed'
+      ? effectiveSettings.weatherDetail
+      : effectiveSettings.weatherCompact;
+  const showWeatherBackground = weatherChrome?.showBackground === true;
+  const weatherBackgroundOpacity = weatherChrome?.backgroundOpacity ?? 0.28;
 
   return (
     <div className={`overlay-app-root ${productionMode ? 'production-mode' : ''}`} style={{
@@ -284,21 +388,32 @@ function App({ productionMode = false }: OverlayAppProps) {
           position: 'absolute',
           left: layout.weatherCompact.x,
           top: layout.weatherCompact.y,
-          width: effectiveSettings.weatherCompact.displayMode === 'detailed' ? Math.max(layout.weatherCompact.width, 360) : layout.weatherCompact.width,
-          transform: effectiveSettings.weatherCompact.displayMode === 'detailed' ? `scale(${effectiveSettings.weatherDetail?.fontSize !== undefined ? effectiveSettings.weatherDetail.fontSize : 1})` : 'none',
-          transformOrigin: 'top left'
+          width: weatherDisplayMode === 'detailed' ? Math.max(layout.weatherCompact.width, 360) : layout.weatherCompact.width,
+          transform: weatherDisplayMode === 'detailed' ? `scale(${effectiveSettings.weatherDetail?.fontSize !== undefined ? effectiveSettings.weatherDetail.fontSize : 1})` : 'none',
+          transformOrigin: 'top left',
+          pointerEvents: 'auto',
+          background: showWeatherBackground && weatherDisplayMode === 'compact' ? `rgba(0,0,0,${weatherBackgroundOpacity})` : 'transparent',
+          borderRadius: showWeatherBackground && weatherDisplayMode === 'compact' ? '24px' : undefined,
+          padding: showWeatherBackground && weatherDisplayMode === 'compact' ? '16px' : undefined,
+          backdropFilter: showWeatherBackground && weatherDisplayMode === 'compact' ? 'blur(16px)' : undefined,
+          WebkitBackdropFilter: showWeatherBackground && weatherDisplayMode === 'compact' ? 'blur(16px)' : undefined,
+          border: showWeatherBackground && weatherDisplayMode === 'compact' ? '1px solid rgba(255,255,255,0.15)' : undefined,
+          boxShadow: showWeatherBackground && weatherDisplayMode === 'compact' ? '0 12px 40px rgba(0,0,0,0.32)' : undefined,
+          boxSizing: 'border-box',
         }}>
             {!weatherAvailable ? (
               <div className="overlay-empty-state">WEATHER / OFFLINE</div>
-            ) : effectiveSettings.weatherCompact.displayMode === 'detailed' ? (
+            ) : weatherDisplayMode === 'detailed' ? (
               <div 
                 className={`weather-compact ${effectiveSettings.debugMode ? 'debug-mode' : ''}`}
                 style={{ 
                   width: '100%', 
-                  background: effectiveSettings.weatherDetail?.showBackground !== false ? `rgba(0,0,0,${effectiveSettings.weatherDetail?.backgroundOpacity !== undefined ? effectiveSettings.weatherDetail.backgroundOpacity : 0.4})` : 'transparent',
-                  borderRadius: '8px', 
-                  backdropFilter: effectiveSettings.weatherDetail?.showBackground !== false ? 'blur(8px)' : 'none',
-                  border: effectiveSettings.weatherDetail?.showBackground !== false ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                  background: showWeatherBackground ? `rgba(0,0,0,${weatherBackgroundOpacity})` : 'transparent',
+                  borderRadius: showWeatherBackground ? '24px' : undefined,
+                  backdropFilter: showWeatherBackground ? 'blur(16px)' : 'none',
+                  WebkitBackdropFilter: showWeatherBackground ? 'blur(16px)' : 'none',
+                  border: showWeatherBackground ? '1px solid rgba(255,255,255,0.15)' : 'none',
+                  boxShadow: showWeatherBackground ? '0 12px 40px rgba(0,0,0,0.32)' : 'none',
                 }}
               >
                 <WeatherDetailPanel weatherData={weatherData} weatherBundle={weatherBundle} pattern={effectiveSettings.weatherDetail?.pattern || "diagonal"} settings={effectiveSettings.weatherDetail} />
@@ -324,6 +439,7 @@ function App({ productionMode = false }: OverlayAppProps) {
             showHeader={effectiveSettings.newsPanel?.showHeader !== false}
             showBackground={effectiveSettings.newsPanel?.showBackground !== false}
             backgroundOpacity={effectiveSettings.newsPanel?.backgroundOpacity ?? 0.4}
+            contentTopGap={effectiveSettings.newsPanel?.contentTopGap ?? defaultUiSettings.newsPanel.contentTopGap}
           >
             <NewsPanel settings={effectiveSettings.newsPanel} items={liveNews} updatedAt={companion?.updatedAt ?? ''} source={newsSource} />
           </FloatingPanel>
@@ -354,34 +470,35 @@ function App({ productionMode = false }: OverlayAppProps) {
           <FloatingPanel
             title="LYRICS"
             layout={layout.lyricsPanel}
-            visible={panelVisibility.LYRICS}
+            visible={showLyricsPanel}
             debugMode={effectiveSettings.debugMode}
             showHeader={effectiveSettings.lyricsPanel?.showHeader !== false}
             showBackground={effectiveSettings.lyricsPanel?.showBackground !== false}
             backgroundOpacity={effectiveSettings.lyricsPanel?.backgroundOpacity ?? 0.34}
+            contentTopGap={effectiveSettings.lyricsPanel?.contentTopGap ?? defaultUiSettings.lyricsPanel.contentTopGap}
           >
-            <LyricsPanel settings={effectiveSettings.lyricsPanel} spotify={liveSpotify} offline={productionMode && !connected} />
+            <LyricsPanel
+              settings={effectiveSettings.lyricsPanel}
+              spotify={liveSpotify}
+              offline={productionMode && !connected}
+            />
           </FloatingPanel>
         )}
-        {layout.aiPanel && (
+        {layout.personalNewsPanel && (
           <FloatingPanel
-            title="AI"
-            layout={layout.aiPanel}
-            visible={panelVisibility.AI}
+            title={personalNewsPanelTitle}
+            layout={layout.personalNewsPanel}
+            visible={showPersonalNewsPanel}
             debugMode={effectiveSettings.debugMode}
-            showHeader={effectiveSettings.aiPanel?.showHeader !== false}
-            showBackground={effectiveSettings.aiPanel?.showBackground !== false}
-            backgroundOpacity={effectiveSettings.aiPanel?.backgroundOpacity ?? 0.4}
+            showHeader={personalNewsSettings.showHeader !== false}
+            showBackground={personalNewsSettings.showBackground !== false}
+            backgroundOpacity={personalNewsSettings.backgroundOpacity ?? 0.34}
+            contentTopGap={personalNewsSettings.contentTopGap ?? defaultUiSettings.personalNewsPanel.contentTopGap}
           >
-            <AiPanel
-              settings={effectiveSettings.aiPanel}
-              ai={liveAi}
+            <PersonalNewsPanel
+              settings={personalNewsSettings}
+              personalNews={livePersonalNews}
               offline={productionMode && !connected}
-              onSend={async (text) => {
-                const ok = await sendCompanionChat(text);
-                await refreshCompanion();
-                return ok;
-              }}
             />
           </FloatingPanel>
         )}
@@ -394,8 +511,32 @@ function App({ productionMode = false }: OverlayAppProps) {
             showHeader={effectiveSettings.memoPanel?.showHeader !== false}
             showBackground={effectiveSettings.memoPanel?.showBackground !== false}
             backgroundOpacity={effectiveSettings.memoPanel?.backgroundOpacity ?? 0.4}
+            contentTopGap={effectiveSettings.memoPanel?.contentTopGap ?? defaultUiSettings.memoPanel.contentTopGap}
           >
             <MemoPanel settings={effectiveSettings.memoPanel} memos={liveMemos} offline={productionMode && !connected} />
+          </FloatingPanel>
+        )}
+        {layout.timerPanel && (
+          <FloatingPanel
+            title="TIMER"
+            layout={layout.timerPanel}
+            visible={panelVisibility.TIMER}
+            debugMode={effectiveSettings.debugMode}
+            showHeader={effectiveSettings.timerPanel?.showHeader !== false}
+            showBackground={effectiveSettings.timerPanel?.showBackground !== false}
+            backgroundOpacity={effectiveSettings.timerPanel?.backgroundOpacity ?? 0.4}
+            contentTopGap={effectiveSettings.timerPanel?.contentTopGap ?? defaultUiSettings.timerPanel.contentTopGap}
+          >
+            <TimerPanel
+              settings={effectiveSettings.timerPanel}
+              timer={liveTimer}
+              offline={productionMode && !connected}
+              onControl={async (action) => {
+                const ok = await sendTimerControl(action);
+                await refreshCompanion();
+                return ok;
+              }}
+            />
           </FloatingPanel>
         )}
 
@@ -420,11 +561,6 @@ function App({ productionMode = false }: OverlayAppProps) {
           onReset={handleReset}
         />}
 
-        {productionMode && (
-          <div className={`companion-connection ${connected ? 'is-live' : 'is-offline'}`}>
-            COMPANION: {connected ? 'LIVE' : 'OFFLINE'}
-          </div>
-        )}
       </div>
     </div>
   );

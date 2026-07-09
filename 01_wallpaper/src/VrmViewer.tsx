@@ -47,10 +47,11 @@ import type { PoseComposer } from './lib/lab/poseComposer/poseComposer';
 import { installPoseComposerPanel } from './lib/lab/poseComposer/poseComposerPanel';
 import { DirectorRunner } from './lib/motion/director/directorRunner';
 import { KiritanPoster } from './lib/motion/director/kiritanPoster';
+import type { FsmSnapshot } from './lib/motion/director/modeFsm';
 import { resolveTransitionChain } from './lib/motion/director/modeTable';
-import { PHASE1_MODE_LOOP, contextReturnLoop } from './lib/motion/director/motionContext';
+import { contextReturnLoop } from './lib/motion/director/motionContext';
 import {
-  LEAVE_SEQ, RETURN_SEQ, AWAY_MOTIONS, seqAt, seqDuration, leaveRoot, returnRoot,
+  LEAVE_SEQ, RETURN_SEQ, seqAt, seqDuration, leaveRoot, returnRoot,
 } from './lib/motion/director/awayWalk';
 import type { ModeId } from './lib/motion/director/types';
 import type { MotionLab, ClipSwapRequest } from './lib/lab/motionLab';
@@ -66,6 +67,7 @@ import { GazeController, gazeDirToPanelPoint, offsetToGazeDir, GAZE_ANCHOR_Y } f
 // clip, sampled at clip-local time and scaled by the external clip weight.
 import { sampleFaceTimeline, gazeStateToFix } from './lib/motion/dsl/evaluate';
 import type { MotionFaceTimeline, FaceSample } from './lib/motion/dsl/evaluate';
+import { publicAssetUrl } from './lib/assetUrl';
 
 // Workdesk presets (0.6) are added alongside the original 1/2/3 modes; the
 // existing three names keep their exact behavior. 'free' is the orbit / camera-
@@ -96,8 +98,19 @@ export interface MotionRequest {
   seq: number;
 }
 
+export interface MotionDirectorSettings {
+  directorMode?: 'auto' | 'fixed' | string;
+  fixedMode?: string;
+  modeMinMinutes?: number;
+  modeMaxMinutes?: number;
+  motionMinSeconds?: number;
+  motionMaxSeconds?: number;
+  disabledModes?: string[];
+  disabledMotions?: string[];
+}
+
 // Path a user-supplied VRM Animation is loaded from (see public/motions/README).
-const VRMA_SAMPLE_PATH = '/motions/sample_idle.vrma';
+const VRMA_SAMPLE_PATH = publicAssetUrl('/motions/sample_idle.vrma');
 
 // Bones the idle layer applies, in the established 0.2 order. Also the set the
 // external clip blends *additively under* (idle breath rides on top).
@@ -202,27 +215,96 @@ const CAMERA_PRESETS: Record<Exclude<CameraMode, 'free'>, { pos: [number, number
   workdesk_close: { pos: [0.0, 1.15, 0.95], look: [0.0, 1.05, -0.1] },
 };
 
-// Director (INF-5) Phase-1 demo content: which authored motions each mode may
-// schedule. Modes absent here have no base loop yet, so the director keeps the
-// current clip on a transition into them (graceful until more content lands).
-// mode → base-loop motion id. Single source of truth lives in motionContext.ts
-// (shared with the Lab's context-loop settle and the Node test harness, issue #1).
-const DIRECTOR_LOOPS: Partial<Record<ModeId, string>> = PHASE1_MODE_LOOP;
-const DIRECTOR_AMBIENTS: Partial<Record<ModeId, string[]>> = {
-  // amb_work_sip (cup) is intentionally omitted for the release — re-add it here
-  // (it stays prop-gated by DIRECTOR_PROP_AMBIENTS) once the drinking motion is ready.
-  work_normal: ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_screen_scan', 'amb_work_stretch'],
-  work_sleepy: ['amb_slpy_head_bob', 'amb_slpy_slow_blink', 'amb_slpy_tilt_drift'],
+// Director runtime content lanes:
+// Auto-run keeps the完成組. Fixed mode may also use authored secondary loops.
+type DirectorPlayableMode = 'work_normal' | 'video_relax' | 'sleep_desk';
+
+const DIRECTOR_AUTO_MODES: readonly DirectorPlayableMode[] = ['work_normal', 'video_relax', 'sleep_desk'];
+const DIRECTOR_PLAYABLE_MODES: readonly DirectorPlayableMode[] = ['work_normal', 'video_relax', 'sleep_desk'];
+const DIRECTOR_PLAYABLE_MODE_SET = new Set<ModeId>(DIRECTOR_PLAYABLE_MODES);
+
+const DIRECTOR_LOOPS: Record<DirectorPlayableMode, string> = {
+  work_normal: 'loop_work_normal',
+  video_relax: 'loop_video_relax',
+  sleep_desk: 'loop_sleep_desk',
+};
+
+const DIRECTOR_AMBIENTS: Record<DirectorPlayableMode, readonly string[]> = {
+  work_normal: ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_stretch'],
   video_relax: ['amb_vid_chuckle', 'amb_vid_nod_watch', 'amb_vid_eyes_widen'],
   sleep_desk: ['amb_slp_head_shift', 'amb_slp_dream_smile'],
 };
+
+const DIRECTOR_SECONDARY_CONTENT = {
+  loops: {},
+  ambients: {
+    work_normal: ['amb_work_screen_scan', 'amb_work_sip'],
+  },
+  transitions: ['tr_sit_to_stand', 'tr_stand_to_sit', 'tr_walk_start', 'loop_walk', 'tr_walk_stop'],
+} as const;
+
+const DIRECTOR_SECONDARY_CONTENT_COUNT =
+  Object.keys(DIRECTOR_SECONDARY_CONTENT.loops).length +
+  Object.values(DIRECTOR_SECONDARY_CONTENT.ambients).reduce((sum, list) => sum + list.length, 0) +
+  DIRECTOR_SECONDARY_CONTENT.transitions.length;
+
+function directorLoopFor(mode: ModeId): string | null {
+  return DIRECTOR_PLAYABLE_MODE_SET.has(mode) ? DIRECTOR_LOOPS[mode as DirectorPlayableMode] : null;
+}
+
+function pickInitialDirectorMode(requested: ModeId | undefined, availableModes: ReadonlySet<ModeId>): DirectorPlayableMode {
+  const availablePlayable = DIRECTOR_PLAYABLE_MODES.filter((mode) => availableModes.has(mode));
+  const pool = availablePlayable.length > 0 ? availablePlayable : DIRECTOR_AUTO_MODES;
+  if (requested && DIRECTOR_PLAYABLE_MODE_SET.has(requested) && availableModes.has(requested)) {
+    return requested as DirectorPlayableMode;
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function isDirectorPlayableMode(value: string | undefined): value is DirectorPlayableMode {
+  return !!value && DIRECTOR_PLAYABLE_MODE_SET.has(value as ModeId);
+}
+
+function numericRange(valueMin: unknown, valueMax: unknown, fallback: [number, number], floor: number): [number, number] {
+  const min = Number(valueMin);
+  const max = Number(valueMax);
+  const lo = Number.isFinite(min) ? Math.max(floor, min) : fallback[0];
+  const hi = Number.isFinite(max) ? Math.max(lo, max) : Math.max(lo, fallback[1]);
+  return [lo, hi];
+}
+
+function normalizeDirectorSettings(settings: MotionDirectorSettings | undefined) {
+  const fixedMode = isDirectorPlayableMode(settings?.fixedMode) ? settings.fixedMode : 'work_normal';
+  const disabledModes = new Set((settings?.disabledModes ?? []).filter(isDirectorPlayableMode));
+  const disabledMotions = new Set((settings?.disabledMotions ?? []).filter((id) => typeof id === 'string' && id.length > 0));
+  return {
+    directorMode: settings?.directorMode === 'fixed' ? 'fixed' : 'auto',
+    fixedMode,
+    disabledModes,
+    disabledMotions,
+    modeMinutes: numericRange(settings?.modeMinMinutes, settings?.modeMaxMinutes, [15, 30], 1),
+    motionSeconds: numericRange(settings?.motionMinSeconds, settings?.motionMaxSeconds, [90, 240], 5),
+  };
+}
+
+function directorSettingsKey(settings: MotionDirectorSettings | undefined): string {
+  const normalized = normalizeDirectorSettings(settings);
+  return JSON.stringify({
+    directorMode: normalized.directorMode,
+    fixedMode: normalized.fixedMode,
+    disabledModes: [...normalized.disabledModes].sort(),
+    disabledMotions: [...normalized.disabledMotions].sort(),
+    modeMinutes: normalized.modeMinutes,
+    motionSeconds: normalized.motionSeconds,
+  });
+}
+
 // Ambients that need a held prop (gated by availableProps in the scheduler).
 const DIRECTOR_PROP_AMBIENTS = new Set<string>(['amb_work_sip']);
 // Authored Transition motions (Step 1) the director may insert between mode
 // loops (preloaded like loops/ambients; the runner's chain is filtered to the
 // ones that actually loaded). Sourced from TRANSITION_TABLE in modeTable.ts.
 const DIRECTOR_TRANSITIONS: string[] = [
-  'tr_sit_to_slump', // work_sleepy → sleep_desk
   'tr_slump_wake',   // sleep_desk → (sitting)
   'tr_lean_back',    // work → video (recline)
   'tr_lean_forward', // video → work (sit up)
@@ -230,14 +312,14 @@ const DIRECTOR_TRANSITIONS: string[] = [
 
 function sittingFallbackLoop(posture: string | null | undefined, currentMode: ModeId | null): string | null {
   if (!posture?.startsWith('sit_')) return null;
-  return (currentMode ? DIRECTOR_LOOPS[currentMode] : null) ?? DIRECTOR_LOOPS.work_normal ?? null;
+  return (currentMode ? directorLoopFor(currentMode) : null) ?? DIRECTOR_LOOPS.work_normal;
 }
 
 export interface VrmViewerProps {
   cameraMode: CameraMode;
   lookAtEnabled: boolean;
   springBoneMode: SpringBoneMode;
-  fpsLimit: boolean;
+  fpsLimit: number;
   currentExpression: string;
   autoBlink: boolean;
   idleMotion: boolean;
@@ -281,11 +363,12 @@ export interface VrmViewerProps {
   // and feeds the current transforms back down; the viewer applies them to the
   // live prop containers / character each frame (no-op when null, i.e. before the
   // first scene load seeds them). selectedTarget + guidesEnabled drive the visual
-  // guides. Camera nudges arrive as an {dx,dy,dz,dolly,seq} nonce (free mode only).
+  // guides. Camera nudges arrive as an {dx,dy,dz,dolly,yaw,pitch,roll,seq} nonce (free mode only).
   layoutTransforms: LayoutTransforms | null;
   selectedTarget: string;
   guidesEnabled: boolean;
-  cameraNudge: { dx: number; dy: number; dz: number; dolly: number; seq: number };
+  cameraNudge: { dx: number; dy: number; dz: number; dolly: number; yaw?: number; pitch?: number; roll?: number; seq: number };
+  cameraAdjustment: { enabled: boolean; x: number; y: number; z: number; yaw: number; pitch: number; roll: number };
   onFpsUpdate: (fps: number) => void;
   onStatusUpdate: (status: string) => void;
   onIdleDebug: (debug: IdleDebug) => void;
@@ -303,6 +386,7 @@ export interface VrmViewerProps {
   // __motionLab.director(true). Dev/probe/lab entries leave this false so the
   // Lab keeps full manual control (no competing auto-start).
   autoStartDirector: boolean;
+  motionSettings: MotionDirectorSettings;
   // Stage D (2026-07-01): which lighting/background variant to show. App
   // derives this from the local clock (see lib/scene/daypart.ts); changing it
   // relights the current scene without a reload.
@@ -310,6 +394,9 @@ export interface VrmViewerProps {
   // Display setting multiplier for the model/prop lights. 1 keeps scene-authored
   // lighting, 0 darkens, values above 1 brighten without touching materials.
   lightScale: number;
+  // Empty uses the packaged default at models/kiritan.vrm. Absolute Windows
+  // paths are accepted for local Wallpaper Engine operation.
+  vrmModelPath?: string;
 }
 
 const VrmViewer: React.FC<VrmViewerProps> = (props) => {
@@ -320,6 +407,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   const gazeCtrlRef = useRef(new GazeController());
 
   const propsRef = useRef(props);
+  const motionDirectorSettingsKey = directorSettingsKey(props.motionSettings);
   useEffect(() => {
     propsRef.current = props;
   }, [props]);
@@ -397,6 +485,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   // Director (INF-5): the runtime runner + a cache of swap-ready clips by motion id.
   const directorRef = useRef<DirectorRunner | null>(null);
   const directorClipsRef = useRef<Map<string, ClipSwapRequest>>(new Map());
+  const directorSettingsKeyRef = useRef<string | null>(null);
   // Prop microEvents (INF-4) of the ACTIVE DSL clip: timed attach/detach fired at
   // action.time. `fired` tracks which indices already ran (reset on swap / loop
   // wrap); `attached` tracks props this clip parented so an interrupted clip can
@@ -797,16 +886,23 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     prevDirModeRef.current = null;
     directorRootRef.current = [0, 0, 0, 0];
     if (vrmRef.current) vrmRef.current.scene.visible = true;
+    const directorSettings = normalizeDirectorSettings(propsRef.current.motionSettings);
+    directorSettingsKeyRef.current = directorSettingsKey(propsRef.current.motionSettings);
+    const fixedMode = directorSettings.directorMode === 'fixed' ? directorSettings.fixedMode : null;
+    const candidateModes = fixedMode ? [fixedMode] : DIRECTOR_AUTO_MODES.filter((mode) => !directorSettings.disabledModes.has(mode));
+    const modesToLoad = candidateModes.length > 0 ? candidateModes : (['work_normal'] as DirectorPlayableMode[]);
     const ids = new Set<string>();
-    for (const m of Object.values(DIRECTOR_LOOPS)) if (m) ids.add(m);
-    for (const list of Object.values(DIRECTOR_AMBIENTS)) for (const a of list ?? []) ids.add(a);
+    for (const mode of modesToLoad) {
+      ids.add(DIRECTOR_LOOPS[mode]);
+      for (const ambient of DIRECTOR_AMBIENTS[mode] ?? []) ids.add(ambient);
+    }
     for (const t of DIRECTOR_TRANSITIONS) ids.add(t);
-    for (const m of AWAY_MOTIONS) ids.add(m); // leave/return locomotion clips
     const loaded: string[] = [];
     for (const id of ids) if (await preloadDirectorMotion(id)) loaded.push(id);
     const authoredAmbients = new Set<string>(
-      Object.values(DIRECTOR_AMBIENTS).flat().filter((a): a is string => !!a && directorClipsRef.current.has(a)),
+      modesToLoad.flatMap((mode) => DIRECTOR_AMBIENTS[mode] ?? []).filter((a): a is string => !!a && directorClipsRef.current.has(a)),
     );
+    for (const id of directorSettings.disabledMotions) authoredAmbients.delete(id);
     // Prop gating: a prop-requiring ambient (amb_*_sip) is only eligible when its
     // prop is actually in the scene. Cup is the only Phase-1 held prop.
     const availableProps = new Set<string>();
@@ -820,17 +916,22 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     // loop would otherwise strand her on the previous clip. Always non-empty:
     // work_normal's loop is required for the director to start at all.
     const authoredModes = new Set<ModeId>();
-    for (const [mode, loopId] of Object.entries(DIRECTOR_LOOPS) as [ModeId, string | undefined][]) {
+    for (const mode of modesToLoad) {
+      const loopId = DIRECTOR_LOOPS[mode];
       if (loopId && directorClipsRef.current.has(loopId)) authoredModes.add(mode);
     }
-    if (AWAY_MOTIONS.every((id) => directorClipsRef.current.has(id))) authoredModes.add('away_room');
+    if (authoredModes.size === 0 && directorClipsRef.current.has(DIRECTOR_LOOPS.work_normal)) authoredModes.add('work_normal');
+    if (authoredModes.size === 0) return { ok: false, loaded, error: 'No primary Director loops loaded' };
+    const requestedInitial = fixedMode ?? opts?.initialMode;
+    const initialMode = pickInitialDirectorMode(requestedInitial, authoredModes);
     const runner = new DirectorRunner({
       seed: opts?.seed,
-      initialMode: opts?.initialMode ?? 'work_normal',
+      initialMode,
+      fixedMode: fixedMode && authoredModes.has(fixedMode) ? fixedMode : null,
       availableMotions: authoredAmbients,
       availableProps,
       allowedModes: authoredModes,
-      loopMotionFor: (mode) => DIRECTOR_LOOPS[mode] ?? null,
+      loopMotionFor: directorLoopFor,
       // Resolve a (from→to) bridge from the design table, but only commit to it
       // when EVERY motion in the chain actually preloaded (else swap straight to
       // the loop — a partial chain would leave the posture mismatched).
@@ -839,13 +940,18 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         if (chain.length === 0) return [];
         return chain.every((id) => directorClipsRef.current.has(id)) ? chain : [];
       },
+      sleepiness: { dwellMinutes: directorSettings.modeMinutes },
+      scheduler: { intervalSeconds: directorSettings.motionSeconds, restrictAvailableMotions: true },
     });
     directorRef.current = runner;
     const first = runner.start();
     if (first) playDirectorMotion(first.motionId);
     propsRef.current.onStatusUpdate(
-      `[DIRECTOR] running — ${first?.motionId ?? 'no loop'} + ${authoredAmbients.size} ambients` +
+      `[DIRECTOR] ${fixedMode ? `fixed:${fixedMode}` : 'auto'} — ${first?.motionId ?? 'no loop'} + ${authoredAmbients.size} ambients` +
         ` + modes[${[...authoredModes].join(',')}]` +
+        ` + mode ${directorSettings.modeMinutes[0]}-${directorSettings.modeMinutes[1]}m` +
+        ` + action ${directorSettings.motionSeconds[0]}-${directorSettings.motionSeconds[1]}s` +
+        ` + secondary ${DIRECTOR_SECONDARY_CONTENT_COUNT} inactive` +
         `${availableProps.size ? ` + props[${[...availableProps].join(',')}]` : ''}`,
     );
     return { ok: true, loaded };
@@ -864,6 +970,28 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     propsRef.current.onStatusUpdate('[DIRECTOR] stopped — returning to idle');
     return { ok: true };
   };
+
+  useEffect(() => {
+    const nextKey = motionDirectorSettingsKey;
+    if (!props.autoStartDirector || !directorRef.current) {
+      directorSettingsKeyRef.current = nextKey;
+      return;
+    }
+    if (directorSettingsKeyRef.current === nextKey) return;
+    let cancelled = false;
+    directorSettingsKeyRef.current = nextKey;
+    stopDirector();
+    startDirector().then((result) => {
+      if (cancelled) {
+        stopDirector();
+        return;
+      }
+      if (!result.ok) console.warn('[DIRECTOR] settings restart failed:', result.error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.autoStartDirector, motionDirectorSettingsKey]);
 
   // --- Away orchestrator (Step 4) --------------------------------------------
   const startAwayLeave = (): void => {
@@ -904,7 +1032,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       directorRootRef.current = returnRoot(a.elapsed, AWAY_PARAMS);
       if (a.elapsed >= seqDuration(RETURN_SEQ)) {
         directorRootRef.current = [0, 0, 0, 0]; // exactly back at the chair
-        const loop = DIRECTOR_LOOPS[a.returnTo] ?? DIRECTOR_LOOPS.work_normal ?? null;
+        const loop = directorLoopFor(a.returnTo) ?? DIRECTOR_LOOPS.work_normal;
         if (loop) playDirectorMotion(loop);
         a.active = false;
         propsRef.current.onStatusUpdate(`[DIRECTOR] back — ${a.returnTo}`);
@@ -1263,8 +1391,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
 
     props.onStatusUpdate('Loading VRM...');
 
+    const modelPath = publicAssetUrl(propsRef.current.vrmModelPath || '/models/kiritan.vrm');
     loader.load(
-      '/models/kiritan.vrm',
+      modelPath,
       (gltf) => {
         const vrm = gltf.userData.vrm as VRM;
         vrmRef.current = vrm;
@@ -1494,7 +1623,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       },
       (error: unknown) => {
         console.error(error);
-        props.onStatusUpdate('Error: Failed to load /models/kiritan.vrm. Please check models/README_MODEL_PLACEMENT.md.');
+        props.onStatusUpdate(`Error: Failed to load ${modelPath}. Please check models/README_MODEL_PLACEMENT.md.`);
       }
     );
 
@@ -1507,10 +1636,28 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     // (0.2) No mousemove listener — cursor-follow gaze was removed by design.
 
     const clock = new THREE.Clock();
-    // Stage C: fire-and-forget kiritanState sync to Companion, gated on the
-    // director's own mode-change/heartbeat cadence (see kiritanPoster.ts).
-    // A missing/offline Companion has zero effect on the wallpaper.
+    // Stage C: fire-and-forget kiritanState sync to Companion. It normally
+    // mirrors the Motion Director, but also sends a conservative fallback while
+    // the director is still loading or failed, so Companion never mistakes a
+    // visible wallpaper for an offline one.
     const kiritanPoster = new KiritanPoster();
+    const kiritanFallbackStartedAtMs = Date.now();
+    const fallbackKiritanSnapshot = (): FsmSnapshot => {
+      const directorSettings = normalizeDirectorSettings(propsRef.current.motionSettings);
+      const mode = directorSettings.directorMode === 'fixed' ? directorSettings.fixedMode : 'work_normal';
+      return {
+        mode,
+        prevMode: null,
+        sinceMinutes: Math.max(0, (Date.now() - kiritanFallbackStartedAtMs) / 60_000),
+        dwellTargetMinutes: directorSettings.modeMinutes[1],
+        sleepiness: 0,
+      };
+    };
+    const postKiritanState = () => {
+      const director = directorRef.current;
+      const snapshot = director ? director.snapshot() : fallbackKiritanSnapshot();
+      kiritanPoster.maybePost(snapshot, { nowMs: Date.now(), ambient: null, away: null });
+    };
     let frameCount = 0;
     let lastFpsTime = 0;
     let timeAccumulator = 0;
@@ -1901,9 +2048,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
 
       const currentProps = propsRef.current;
 
-      // 30 FPS throttle
-      const targetDelta = currentProps.fpsLimit ? 1 / 30 : 1 / 60; // 60 is effectively uncapped here
-      if (currentProps.fpsLimit && timeAccumulator < targetDelta) {
+      const targetFps = Math.min(60, Math.max(15, Number(currentProps.fpsLimit) || 60));
+      const targetDelta = 1 / targetFps;
+      if (timeAccumulator < targetDelta) {
         return;
       }
       
@@ -1961,7 +2108,33 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         const vrm = vrmRef.current;
 
         // Camera Update
-        if (currentProps.cameraMode !== 'free') {
+        if (currentProps.cameraAdjustment.enabled) {
+          controls.enabled = false;
+          const n = (value: number) => (Number.isFinite(value) ? value : 0);
+          const preset = CAMERA_PRESETS.ideal;
+          const offset = new THREE.Vector3(n(currentProps.cameraAdjustment.x), n(currentProps.cameraAdjustment.y), n(currentProps.cameraAdjustment.z));
+          const targetCamPos = new THREE.Vector3(...preset.pos).add(offset);
+          const targetCamLook = new THREE.Vector3(...preset.look).add(offset);
+          const view = new THREE.Vector3().subVectors(targetCamLook, targetCamPos);
+          const yaw = n(currentProps.cameraAdjustment.yaw);
+          const pitch = n(currentProps.cameraAdjustment.pitch);
+          const roll = n(currentProps.cameraAdjustment.roll);
+          if (view.lengthSq() > 1e-8) {
+            if (yaw !== 0) view.applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(yaw));
+            if (pitch !== 0) {
+              const right = new THREE.Vector3().crossVectors(view, new THREE.Vector3(0, 1, 0)).normalize();
+              if (right.lengthSq() > 1e-8) view.applyAxisAngle(right, THREE.MathUtils.degToRad(pitch));
+            }
+          }
+
+          camera.position.lerp(targetCamPos, 5.0 * updateDelta);
+          if (!camera.userData.target) camera.userData.target = new THREE.Vector3(0, 1, 0);
+          camera.userData.target.lerp(targetCamPos.clone().add(view), 5.0 * updateDelta);
+          camera.up.set(0, 1, 0);
+          camera.lookAt(camera.userData.target);
+          if (roll !== 0) camera.rotateZ(THREE.MathUtils.degToRad(roll));
+          controls.target.copy(camera.userData.target);
+        } else if (currentProps.cameraMode !== 'free') {
           controls.enabled = false;
           const preset = CAMERA_PRESETS[currentProps.cameraMode];
           const targetCamPos = new THREE.Vector3(...preset.pos);
@@ -1973,6 +2146,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           // But simply looking at the lerped target is fine
           if (!camera.userData.target) camera.userData.target = new THREE.Vector3(0, 1, 0);
           camera.userData.target.lerp(targetCamLook, 5.0 * updateDelta);
+          camera.up.set(0, 1, 0);
           camera.lookAt(camera.userData.target);
           
           // Keep controls target synced so switching to 'free' is seamless
@@ -2022,12 +2196,9 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         // 1a-dir. Director (INF-5): advance the FSM + ambient scheduler in real
         //         time and execute its play actions through the same swap path.
         //         Ambient end is handled by the mixer 'finished' listener.
+        postKiritanState();
         const director = directorRef.current;
         if (director) {
-          // Stage C: report mode/presence/sleepiness to Companion. The poster's
-          // own cadence gate (mode-change or ~30s heartbeat) decides whether
-          // this frame actually sends anything.
-          kiritanPoster.maybePost(director.snapshot(), { nowMs: Date.now(), ambient: null, away: null });
           // Tick the FSM/scheduler during normal play AND while hidden (so the
           // away dwell still expires and a return target is chosen) — but NOT
           // mid leave/return, where the host orchestrator owns the clips (else a
@@ -2532,7 +2703,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     const cam = cameraRef.current;
     const controls = controlsRef.current;
     if (!cam || !controls) return;
-    const { dx, dy, dz, dolly } = props.cameraNudge;
+    const { dx, dy, dz, dolly, yaw = 0, pitch = 0, roll = 0 } = props.cameraNudge;
     // Pan: shift both eye and target so the framing translates.
     cam.position.x += dx;
     cam.position.y += dy;
@@ -2545,6 +2716,21 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       const dir = new THREE.Vector3().subVectors(controls.target, cam.position);
       const len = dir.length();
       if (len > 1e-4) cam.position.addScaledVector(dir.multiplyScalar(1 / len), dolly);
+    }
+    if (yaw !== 0 || pitch !== 0 || roll !== 0) {
+      const view = new THREE.Vector3().subVectors(controls.target, cam.position);
+      if (view.lengthSq() > 1e-8) {
+        if (yaw !== 0) view.applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(yaw));
+        if (pitch !== 0) {
+          const right = new THREE.Vector3().crossVectors(view, cam.up).normalize();
+          if (right.lengthSq() > 1e-8) view.applyAxisAngle(right, THREE.MathUtils.degToRad(pitch));
+        }
+        controls.target.copy(cam.position).add(view);
+        if (roll !== 0) {
+          const forward = view.clone().normalize();
+          cam.up.applyAxisAngle(forward, THREE.MathUtils.degToRad(roll)).normalize();
+        }
+      }
     }
     controls.update();
   }, [props.cameraNudge]);

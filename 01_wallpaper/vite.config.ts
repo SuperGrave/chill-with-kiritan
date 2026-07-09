@@ -169,6 +169,7 @@ function motionLabApi(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './',
   plugins: [react(), motionLabApi()],
   resolve: {
     dedupe: ['react', 'react-dom'],

@@ -19,6 +19,14 @@ const NewsPanel: React.FC<NewsPanelProps> = ({
 }) => {
   const s = { ...newsPanelDefaults, ...settings };
   const shown = s.maxItems > 0 ? items.slice(0, s.maxItems) : items;
+  const titleOverflowStyle: React.CSSProperties = s.singleLineTitle
+    ? {
+        display: 'block',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }
+    : clampLines(s.maxTitleLines);
 
   return (
     <div style={{
@@ -37,6 +45,9 @@ const NewsPanel: React.FC<NewsPanelProps> = ({
         )}
         {shown.map((item, i) => {
           const latest = s.highlightLatest && i === 0;
+          const titleLeftMeta = s.metaPlacement === 'titleLeft';
+          const showTextMeta = s.showTime || (s.showSource && item.source);
+          const showMeta = showTextMeta || latest;
           return (
             <div
               key={item.id}
@@ -65,7 +76,7 @@ const NewsPanel: React.FC<NewsPanelProps> = ({
               )}
 
               <div style={{ flex: 1, minWidth: 0 }}>
-                {(s.showTime || s.showSource || latest) && (
+                {showMeta && !titleLeftMeta && (
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -92,15 +103,52 @@ const NewsPanel: React.FC<NewsPanelProps> = ({
                   </div>
                 )}
 
-                <div style={{
-                  fontSize: `${s.titleSize}px`,
-                  lineHeight: 1.5,
-                  letterSpacing: '0.03em',
-                  opacity: 0.95,
-                  ...clampLines(s.maxTitleLines),
-                }}>
-                  {item.title}
-                </div>
+                {titleLeftMeta ? (
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', minWidth: 0 }}>
+                    {showTextMeta && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexShrink: 0,
+                        fontSize: `${s.timeSize}px`,
+                        letterSpacing: '0.1em',
+                        opacity: latest ? 0.92 : 0.58,
+                      }}>
+                        {s.showTime && <span>{formatTimeHM(item.publishedAt)}</span>}
+                        {s.showSource && item.source && (
+                          <span style={{ fontSize: '0.85em', letterSpacing: '0.15em' }}>{item.source}</span>
+                        )}
+                      </div>
+                    )}
+                    <div style={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: `${s.titleSize}px`,
+                      lineHeight: 1.5,
+                      letterSpacing: '0.03em',
+                      opacity: 0.95,
+                      ...titleOverflowStyle,
+                    }}>
+                      {item.title}
+                    </div>
+                    {latest && (
+                      <span style={{ flexShrink: 0 }}>
+                        <StatusBadge tone="neutral">LATEST</StatusBadge>
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{
+                    fontSize: `${s.titleSize}px`,
+                    lineHeight: 1.5,
+                    letterSpacing: '0.03em',
+                    opacity: 0.95,
+                    ...titleOverflowStyle,
+                  }}>
+                    {item.title}
+                  </div>
+                )}
 
                 {s.showSummary && item.summary && (
                   <div style={{
@@ -126,6 +174,7 @@ const NewsPanel: React.FC<NewsPanelProps> = ({
           paddingTop: '20px',
           display: 'flex',
           alignItems: 'center',
+          flexWrap: 'wrap',
           gap: '12px',
           fontSize: `${s.footerSize}px`,
           letterSpacing: '0.1em',

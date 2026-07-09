@@ -7,6 +7,7 @@
 **/dist/
 **/dist-ssr/
 **/build/
+release/
 
 # Rust / Tauri build artifacts
 **/target/
@@ -56,3 +57,6 @@ WD-XLLubrifontJPN-Regular.otf
 *.pem
 *.key
 *.keystore
+
+# Local personal source data for Personal News generation.
+でどれこぬーんの興味大全集.md

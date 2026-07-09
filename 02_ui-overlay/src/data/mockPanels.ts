@@ -1,4 +1,4 @@
-import type { NewsItem, AiState, SpotifyState, MemoItem } from '../types/panels';
+import type { NewsItem, SpotifyState, MemoItem, PersonalNewsState } from '../types/panels';
 
 // Layout-testing stand-ins until the Companion App serves /api/state.
 // Shapes follow types/panels.ts so the swap is data-only.
@@ -48,6 +48,62 @@ export const mockNews: NewsItem[] = [
 
 export const mockNewsUpdatedAt = '2026-06-11T10:05:00+09:00';
 
+export const mockPersonalNews: PersonalNewsState = {
+  scripts: [{
+    id: 'mock-personal-news',
+    title: '昨日の俺流興味ニュース',
+    fileName: 'mock-personal-news.txt',
+    description: '歌詞なし時の代替表示プレビュー',
+    chapterCount: 3,
+    lineCount: 6,
+    sourceCount: 2,
+    supplementCount: 2,
+    estimatedDurationMs: 60_000,
+    modifiedAt: new Date().toISOString(),
+  }],
+  currentScript: {
+    id: 'mock-personal-news',
+    title: '昨日の俺流興味ニュース',
+    fileName: 'mock-personal-news.txt',
+    description: '歌詞なし時の代替表示プレビュー',
+    chapters: [
+      { id: 'chapter_001', title: '01 AIコーディング', lineIndex: 0, positionMs: 0 },
+      { id: 'chapter_002', title: '02 AndroidとPC環境', lineIndex: 2, positionMs: 22_000 },
+      { id: 'chapter_003', title: '03 ゲームと海の話', lineIndex: 4, positionMs: 43_000 },
+    ],
+    lines: [
+      { id: 'line_001', kind: 'text', topic: '01 AIコーディング', text: 'きりたんメモです。AIコーディング系は便利さの裏側に、実行権限まわりの怖さも見えてきました。', durationMs: 10_000, sourceId: null, positionMs: 0 },
+      { id: 'line_002', kind: 'text', topic: '01 AIコーディング', text: '知らないリポジトリをAIに読ませる時は、読むだけ・実行しない、の境界をちゃんと作りたいところですね。', durationMs: 12_000, sourceId: null, positionMs: 10_000 },
+      { id: 'line_003', kind: 'text', topic: '02 AndroidとPC環境', text: 'Android 17のベータ周りは、壁紙やWebView系の検証にもじわっと関係してきそうです。', durationMs: 10_000, sourceId: null, positionMs: 22_000 },
+      { id: 'line_004', kind: 'text', topic: '02 AndroidとPC環境', text: 'PCファーストで作って、段階的に実機へ持っていく方針はまだかなり相性がよさそうです。', durationMs: 11_000, sourceId: null, positionMs: 32_000 },
+      { id: 'line_005', kind: 'text', topic: '03 ゲームと海の話', text: 'Switch 2や海事ニュースも、作業の横で流れてくると地味に楽しいやつです。', durationMs: 9_000, sourceId: null, positionMs: 43_000 },
+      { id: 'line_006', kind: 'text', topic: '03 ゲームと海の話', text: '以上、歌詞がない曲の余白からお送りする、きりたん式の興味ニュースでした。', durationMs: 8_000, sourceId: null, positionMs: 52_000 },
+    ],
+    supplements: [
+      { id: 'supplement_001', title: '01 AIコーディング / Agentic coding security report', text: 'Agentic coding security report', url: 'https://example.com/ai-coding-security', lineIndex: 1, chapterIndex: 0, positionMs: 10_000, durationMs: 6_000 },
+      { id: 'supplement_002', title: '02 AndroidとPC環境 / Android Developers latest updates', text: 'Android Developers latest updates', url: 'https://developer.android.com/latest-updates', lineIndex: 3, chapterIndex: 1, positionMs: 32_000, durationMs: 6_000 },
+    ],
+    sources: [
+      { id: 'source_001', title: 'Agentic coding security report', url: 'https://example.com/ai-coding-security', lineIndex: 1, chapterIndex: 0, positionMs: 10_000 },
+      { id: 'source_002', title: 'Android Developers latest updates', url: 'https://developer.android.com/latest-updates', lineIndex: 3, chapterIndex: 1, positionMs: 32_000 },
+    ],
+    estimatedDurationMs: 60_000,
+    modifiedAt: new Date().toISOString(),
+  },
+  selectedScriptId: 'mock-personal-news',
+  status: 'playing',
+  lineIndex: 0,
+  lineStartedAt: new Date().toISOString(),
+  lineElapsedMs: 0,
+  elapsedMs: 0,
+  durationMs: 60_000,
+  currentChapterIndex: 0,
+  loopEnabled: true,
+  scriptDir: null,
+  error: null,
+  updatedAt: new Date().toISOString(),
+};
+
 export const mockSpotify: SpotifyState = {
   connected: true,
   status: 'playing',
@@ -59,6 +115,7 @@ export const mockSpotify: SpotifyState = {
     albumArtUrl: undefined,
     durationMs: 225_000,
     progressMs: 83_000,
+    sampledAt: new Date().toISOString(),
     isPlaying: true,
   },
   lyrics: {
@@ -73,27 +130,6 @@ export const mockSpotify: SpotifyState = {
     ],
     error: null,
   },
-};
-
-export const mockAi: AiState = {
-  provider: 'openai',
-  status: 'idle',
-  messages: [
-    { id: 'm1', role: 'user', text: '明日の天気は？', createdAt: '2026-06-11T09:41:00+09:00' },
-    {
-      id: 'm2',
-      role: 'assistant',
-      text: '明日の札幌は晴れのち曇りですね。最高気温は22度くらいの予報です。お出かけ日和かもしれませんよ。',
-      createdAt: '2026-06-11T09:41:08+09:00',
-    },
-    { id: 'm3', role: 'user', text: 'ありがとう。', createdAt: '2026-06-11T09:42:00+09:00' },
-    {
-      id: 'm4',
-      role: 'assistant',
-      text: 'どういたしまして！他に知りたいことはありますか？',
-      createdAt: '2026-06-11T09:42:05+09:00',
-    },
-  ],
 };
 
 export const mockMemos: MemoItem[] = [

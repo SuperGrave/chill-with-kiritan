@@ -1,0 +1,50 @@
+# Title: 2026-07-05 俺流興味ニュース
+# Description: 歌詞が見つからない曲の時に流す、でどれこぬーん向けの5分くらいのニュース原稿。
+# DefaultLineMs: 9500
+
+## Scenario
+[Topic: 01 AIコーディング安全メモ]
+[Line: 8.5] きりたんです。今日は歌詞がない曲のすき間から、昨日の俺流興味ニュースをざっくり流します。
+[Line: 10.0] 最初はAIコーディングまわり。便利なエージェントほど、知らないリポジトリを開いた時の実行権限が怖い、という話が出ています。
+[Supplement: 5.0 | TechRadar - Claude Code exploit report | https://www.techradar.com/pro/security/agentic-coding-tools-have-access-to-everything-they-need-for-this-security-experts-warn-claude-code-can-be-exploited-simply-by-trying-to-be-helpful]
+[Line: 11.0] TechRadarは、見た目は普通のMarkdown指示から、DNS TXT経由で危ないコマンドへつながる実験を紹介していました。
+[Line: 10.5] これは「AIが親切に直そうとして実行する」瞬間が攻撃面になる、というかなり実用的な注意ポイントです。
+[Line: 9.0] きりたん的には、今後のCodex運用も「読む」「提案する」「実行する」の境界をUIで分けたいですね。
+
+[Topic: 02 OpenAIとCodexの流れ]
+[Line: 8.5] OpenAI公式の製品ニュース欄では、Codex関連やAWS提供、企業向けの利用分析と支出管理が並んでいます。
+[Supplement: 5.0 | OpenAI Product Releases | https://openai.com/news/product-releases/]
+[Line: 10.5] 大きな新発表そのものより、「Codexをいろんな役割とワークフローに広げる」流れが見えるのが面白いところです。
+[Line: 10.0] いま作っている壁紙やCompanionみたいなローカル統合も、AIに任せる範囲が増えるほど安全導線が価値になります。
+[Line: 9.5] つまり、かわいいUIの裏側で、承認・ログ・元データリンクがきちんと残る設計が刺さるやつです。
+
+[Topic: 03 AndroidとPCファースト開発]
+[Line: 9.0] Android側は、Android Developersの最新更新でAndroid 17 Beta 4.1やAndroid Studio Quail系の更新が見えています。
+[Supplement: 5.0 | Android Developers - Latest updates | https://developer.android.com/latest-updates]
+[Line: 10.0] Android 17 Beta 4.1は、互換性テストやバックグラウンドオーディオ、アプリメモリ制限あたりが注目点です。
+[Line: 10.0] 壁紙・WebView・端末内完結アプリを作るなら、こういう地味な制限変更があとで効いてくるんですよね。
+[Line: 9.5] なので、今の「PCで触りやすく作って、段階的に端末確認へ持っていく」方針はまだかなり相性よさそうです。
+
+[Topic: 04 Switch 2と遊びの観測]
+[Line: 8.5] ゲーム方面では、日本のSwitch 2とSwitch eShopの6月ランキングが出ていました。
+[Supplement: 5.0 | Nintendo Everything - Japan eShop June 2026 rankings | https://nintendoeverything.com/nintendo-reveals-japans-best-selling-digital-games-for-june-2026/]
+[Line: 10.0] Switch 2側ではStar Foxが上位、Switch側ではパワプロやRhythm Heaven Grooveが目立つ、というかなり日本っぽい並びです。
+[Line: 9.5] ここは単なるランキングというより、作業の合間に「何が今の遊びとして強いか」を見る温度計ですね。
+[Line: 9.0] きりたん武闘録とかゲームAI系の作業にも、流行っている遊びの構造を見るのは地味に効きます。
+
+[Topic: 05 アニメ・世界観ネタ]
+[Line: 8.5] アニメ方面では、Sparks of Tomorrowの公式サイトに、7月5日放送開始と事前配信の情報が出ています。
+[Supplement: 5.0 | Sparks of Tomorrow official site | https://denkimokuroku.jp/en/]
+[Line: 10.0] 煙に包まれた別史の京都、電気の時代を夢見る少年少女、という説明だけでも、背景美術好きにはだいぶおいしいです。
+[Line: 9.5] 壁紙制作目線だと、こういう「世界観を1画面で感じさせる背景」はかなり参考資料になります。
+[Line: 8.5] キャラを置くだけじゃなく、部屋・窓外・光・小物で生活感を作る、という方向ですね。
+
+[Topic: 06 海事と西太平洋]
+[Line: 8.5] 海の話も拾っておきます。gCaptainでは、紅海で貨物船が攻撃を報告したニュースがトップに出ていました。
+[Supplement: 5.0 | gCaptain - Maritime and Offshore News | https://gcaptain.com/]
+[Line: 10.5] 船の動きはニュース見出しだけだと遠く見えますが、航路リスクや保険、乗組員の安全に直結します。
+[Line: 9.5] さらにUSNI Newsでは、西太平洋の艦艇行動や演習まとめとしてValiant Shield 2026が扱われています。
+[Supplement: 5.0 | USNI News - Western Pacific Pulse July 3 2026 | https://news.usni.org/2026/07/03/usni-news-western-pacific-pulse-july-3-2026]
+[Line: 10.5] 日本周辺、グアム、フィリピン海あたりの演習情報は、海事・防衛・乗り物の興味が重なる場所ですね。
+[Line: 9.5] 今日はAIの実行安全、Androidの制限、ゲームの温度感、背景美術、そして海のリスクまででした。
+[Line: 8.5] 歌詞がない曲でも、右下がちょっと賢そうに流れていると楽しいはずです。以上、きりたんニュースでした。

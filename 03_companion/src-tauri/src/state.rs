@@ -39,6 +39,7 @@ struct Persist {
     memos: Vec<MemoItem>,
     bookmarks: Vec<BookmarkItem>,
     chat: Vec<ChatMessage>,
+    timer: Option<TimerState>,
 }
 
 impl AppState {
@@ -71,6 +72,9 @@ impl AppState {
                 state.memos = p.memos;
                 state.bookmarks = p.bookmarks;
                 state.ai.messages = p.chat;
+                if let Some(timer) = p.timer {
+                    state.timer = timer;
+                }
             }
         }
         let secrets = load_or_migrate_secrets(&data_dir, legacy_secrets);
@@ -79,6 +83,9 @@ impl AppState {
         if state.bookmarks.is_empty() {
             state.bookmarks = default_bookmarks();
         }
+
+        repair_ui_state(&mut state.ui);
+        state.personal_news = crate::personal_news::load_personal_news_state(&data_dir, None, None);
 
         state.ai.provider = state.settings.ai.provider.clone();
 
@@ -114,11 +121,16 @@ impl AppState {
             memos: self.state.memos.clone(),
             bookmarks: self.state.bookmarks.clone(),
             chat: self.state.ai.messages.clone(),
+            timer: Some(self.state.timer.clone()),
         };
         let Ok(text) = serde_json::to_string_pretty(&p) else {
             return;
         };
-        write_atomic_with_backup(&self.data_dir.join(DATA_FILE), &text, BackupMode::SanitizeSecrets);
+        write_atomic_with_backup(
+            &self.data_dir.join(DATA_FILE),
+            &text,
+            BackupMode::SanitizeSecrets,
+        );
         persist_secrets(&self.data_dir, &self.secrets);
         // touch updatedAt so pollers can detect change
         // (caller already mutated `state`; we just stamp time here is not ideal

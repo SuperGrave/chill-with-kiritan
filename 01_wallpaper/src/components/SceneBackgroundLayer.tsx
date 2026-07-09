@@ -22,8 +22,18 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { SceneBackground } from '../lib/scene/sceneTypes';
 import type { Daypart } from '../lib/scene/daypart';
+import { publicAssetUrl } from '../lib/assetUrl';
 
 export type BgFit = 'cover' | 'contain';
+
+export interface BackgroundOverlay {
+  url: string;
+  name?: string;
+  visible?: boolean;
+  opacity?: number;
+  blendMode?: CSSProperties['mixBlendMode'];
+  fit?: BgFit;
+}
 
 // Resolved status of one background asset (for the debug HUD).
 //   ok       : the image loaded and is shown
@@ -48,6 +58,11 @@ export interface SceneBackgroundLayerProps {
   enabled: boolean;
   lightOverlayEnabled: boolean;
   fit?: BgFit;
+  videoMuted?: boolean;
+  videoLoop?: boolean;
+  fadeSeconds?: number;
+  overlays?: BackgroundOverlay[];
+  onVideoEnded?: () => void;
   onBgDebug?: (debug: BgDebug) => void;
   // Stage D (2026-07-01): 'night' swaps in background.night.* images (when
   // present — each falls back to the day image, same as a missing day image
@@ -91,29 +106,41 @@ function layerStyle(url: string, fit: BgFit): CSSProperties {
   };
 }
 
+function clamp01(value: number | undefined, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(1, Math.max(0, n));
+}
+
 export default function SceneBackgroundLayer({
   background,
   enabled,
   lightOverlayEnabled,
   fit = 'cover',
+  videoMuted = true,
+  videoLoop = true,
+  fadeSeconds = 1,
+  overlays = [],
+  onVideoEnded,
   onBgDebug,
   daypart = 'day',
 }: SceneBackgroundLayerProps) {
   const isNight = daypart === 'night';
+  const videoUrl = publicAssetUrl(background?.windowVideo ?? null);
   // A night image, if the scene authored one, wins; otherwise fall through to
   // the day image (which itself falls back to the CSS gradient below when
   // missing/broken — see useImageStatus). No art authored yet = always this
   // fallback path, but the gradient itself still switches with isNight.
-  const roomUrl = (isNight ? background?.night?.roomImage : null) ?? background?.roomImage ?? null;
-  const outsideUrl = (isNight ? background?.night?.outsideImage : null) ?? background?.outsideImage ?? null;
-  const lightUrl = (isNight ? background?.night?.lightOverlay : null) ?? background?.lightOverlay ?? null;
+  const roomUrl = publicAssetUrl((isNight ? background?.night?.roomImage : null) ?? background?.roomImage ?? null);
+  const outsideUrl = publicAssetUrl((isNight ? background?.night?.outsideImage : null) ?? background?.outsideImage ?? null);
+  const lightUrl = publicAssetUrl((isNight ? background?.night?.lightOverlay : null) ?? background?.lightOverlay ?? null);
 
-  const roomRaw = useImageStatus(roomUrl);
-  const outsideRaw = useImageStatus(outsideUrl);
+  const roomRaw = useImageStatus(videoUrl ? null : roomUrl);
+  const outsideRaw = useImageStatus(videoUrl ? null : outsideUrl);
   const lightRaw = useImageStatus(lightUrl);
 
-  const room: BgAssetStatus = roomRaw === 'loading' ? 'loading' : roomRaw === 'ok' ? 'ok' : 'fallback';
-  const outside: BgAssetStatus = outsideRaw === 'loading' ? 'loading' : outsideRaw === 'ok' ? 'ok' : 'fallback';
+  const room: BgAssetStatus = videoUrl ? 'ok' : roomRaw === 'loading' ? 'loading' : roomRaw === 'ok' ? 'ok' : 'fallback';
+  const outside: BgAssetStatus = videoUrl ? 'none' : outsideRaw === 'loading' ? 'loading' : outsideRaw === 'ok' ? 'ok' : 'fallback';
   // A missing light overlay is transparent (no fallback) -> 'none', not 'fallback'.
   const light: BgAssetStatus = lightRaw === 'loading' ? 'loading' : lightRaw === 'ok' ? 'ok' : 'none';
 
@@ -126,20 +153,64 @@ export default function SceneBackgroundLayer({
   if (!enabled) return null;
 
   const nightFallback = isNight ? ' scene-bg--night' : '';
+  const transitionStyle = { '--scene-bg-fade-seconds': `${Math.max(0, fadeSeconds)}s` } as CSSProperties;
+  const renderOverlays = () => overlays
+    .filter((overlay) => overlay.visible !== false && overlay.url)
+    .map((overlay, index) => {
+      const overlayUrl = publicAssetUrl(overlay.url);
+      if (!overlayUrl) return null;
+      const overlayFit = overlay.fit === 'cover' || overlay.fit === 'contain' ? overlay.fit : fit;
+      return (
+        <div
+          key={`${overlayUrl}:${index}`}
+          className="scene-bg-custom-overlay"
+          style={{
+            ...layerStyle(overlayUrl, overlayFit),
+            opacity: clamp01(overlay.opacity, 0.65),
+            mixBlendMode: overlay.blendMode ?? 'screen',
+          }}
+        />
+      );
+    });
+
+  if (videoUrl) {
+    return (
+      <div className="scene-bg-layer" aria-hidden="true" style={transitionStyle}>
+        <video
+          key={videoUrl}
+          className="scene-bg-video"
+          src={videoUrl}
+          autoPlay
+          muted={videoMuted}
+          loop={videoLoop}
+          playsInline
+          style={{ objectFit: fit }}
+          onEnded={onVideoEnded}
+        />
+        {light === 'ok' && lightOverlayEnabled && lightUrl && (
+          <div className="scene-bg-light" style={layerStyle(lightUrl, fit)} />
+        )}
+        {renderOverlays()}
+      </div>
+    );
+  }
 
   return (
-    <div className="scene-bg-layer" aria-hidden="true">
+    <div className="scene-bg-layer" aria-hidden="true" style={transitionStyle}>
       <div
+        key={`outside:${outsideUrl ?? 'fallback'}:${daypart}`}
         className={outside === 'ok' ? 'scene-bg-outside' : `scene-bg-outside scene-bg-outside--fallback${nightFallback}`}
         style={outside === 'ok' && outsideUrl ? layerStyle(outsideUrl, fit) : undefined}
       />
       <div
+        key={`room:${roomUrl ?? 'fallback'}:${daypart}`}
         className={room === 'ok' ? 'scene-bg-room' : `scene-bg-room scene-bg-room--fallback${nightFallback}`}
         style={room === 'ok' && roomUrl ? layerStyle(roomUrl, fit) : undefined}
       />
       {light === 'ok' && lightOverlayEnabled && lightUrl && (
         <div className="scene-bg-light" style={layerStyle(lightUrl, fit)} />
       )}
+      {renderOverlays()}
     </div>
   );
 }

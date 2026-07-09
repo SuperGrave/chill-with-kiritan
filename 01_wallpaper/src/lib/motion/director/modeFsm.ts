@@ -21,6 +21,8 @@ export interface SleepinessConfig {
   nightPerMinute: number;
   /** Multiplier applied to work_sleepy / sleep_desk weights: w *= 1 + s*gain. */
   weightGain: number;
+  /** Host override for every mode's dwell target. Omit to use MODE_TABLE. */
+  dwellMinutes?: [number, number] | null;
 }
 
 const DEFAULT_SLEEPINESS: SleepinessConfig = {
@@ -149,6 +151,12 @@ export class ModeFsm {
     return entry;
   }
 
+  /** Advance timers/sleepiness without allowing a mode transition. */
+  holdMinutes(dt: number, hour: number): void {
+    this.accrueSleepiness(dt, hour);
+    this.sinceMin += dt;
+  }
+
   private pickNext(hour: number): ModeId {
     const cand = resolveTransitionWeights(
       this.mode,
@@ -166,7 +174,8 @@ export class ModeFsm {
   }
 
   private sampleDwell(mode: ModeId): number {
-    const [lo, hi] = MODE_TABLE[mode].dwellMin;
+    const override = this.cfg.dwellMinutes;
+    const [lo, hi] = override && override[0] > 0 && override[1] >= override[0] ? override : MODE_TABLE[mode].dwellMin;
     return this.rng.range(lo, hi);
   }
 

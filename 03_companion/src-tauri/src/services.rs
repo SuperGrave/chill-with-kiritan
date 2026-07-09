@@ -12,43 +12,146 @@ use crate::models::*;
 pub async fn fetch_weather(
     http: &reqwest::Client,
     cfg: &WeatherConfig,
-) -> Result<WeatherCurrent, String> {
+) -> Result<WeatherFetch, String> {
     let url = format!(
         "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}\
-&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m\
-&wind_speed_unit=ms&timezone={}",
+&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,snowfall,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m\
+&hourly=temperature_2m,relative_humidity_2m,weather_code,precipitation_probability,wind_speed_10m\
+&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max\
+&temperature_unit=celsius&wind_speed_unit=ms&precipitation_unit=mm&timezone={}",
         cfg.latitude, cfg.longitude, cfg.timezone
     );
-    let resp = http
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = http.get(&url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("open-meteo {}", resp.status()));
     }
     let data: Value = resp.json().await.map_err(|e| e.to_string())?;
     let c = &data["current"];
+    let daily = &data["daily"];
+    let hourly_data = &data["hourly"];
     let num = |k: &str| c[k].as_f64().unwrap_or(0.0);
-    Ok(WeatherCurrent {
+    let opt_num = |k: &str| c[k].as_f64();
+    let daily_num = |k: &str| daily[k].get(0).and_then(Value::as_f64);
+    let daily_str = |k: &str| {
+        daily[k]
+            .get(0)
+            .and_then(Value::as_str)
+            .map(format_weather_time)
+    };
+
+    let current = WeatherCurrent {
         location: cfg.location_label.clone(),
         temperature: num("temperature_2m"),
         apparent_temperature: num("apparent_temperature"),
+        temperature_min: daily_num("temperature_2m_min"),
+        temperature_max: daily_num("temperature_2m_max"),
         humidity: num("relative_humidity_2m"),
         pressure: num("pressure_msl"),
         weather_code: num("weather_code") as i32,
+        precipitation_probability: daily_num("precipitation_probability_max"),
+        precipitation: daily_num("precipitation_sum").or_else(|| opt_num("precipitation")),
+        rain: opt_num("rain"),
+        snowfall: opt_num("snowfall"),
+        cloud_cover: opt_num("cloud_cover"),
+        uv_index: daily_num("uv_index_max"),
         wind_speed: num("wind_speed_10m"),
         wind_direction: num("wind_direction_10m"),
+        wind_gust: opt_num("wind_gusts_10m"),
         is_day: c["is_day"].as_i64().unwrap_or(1) == 1,
+        sunrise: daily_str("sunrise"),
+        sunset: daily_str("sunset"),
+    };
+
+    let hourly = parse_hourly_weather(hourly_data, c["time"].as_str());
+    let mut errors = Vec::new();
+    let overview = if cfg.jma_office.trim().is_empty() {
+        None
+    } else {
+        match fetch_weather_overview(http, &cfg.jma_office).await {
+            Ok(overview) => Some(overview),
+            Err(e) => {
+                errors.push(format!("JMA: {e}"));
+                None
+            }
+        }
+    };
+
+    Ok(WeatherFetch {
+        current,
+        hourly,
+        overview,
+        error: (!errors.is_empty()).then(|| errors.join(", ")),
+    })
+}
+
+fn format_weather_time(value: &str) -> String {
+    value
+        .split('T')
+        .nth(1)
+        .and_then(|hm| hm.get(0..5))
+        .unwrap_or(value)
+        .to_string()
+}
+
+fn hourly_num(hourly: &Value, key: &str, idx: usize) -> Option<f64> {
+    hourly[key].get(idx).and_then(Value::as_f64)
+}
+
+fn parse_hourly_weather(hourly: &Value, current_time: Option<&str>) -> Vec<WeatherHourly> {
+    let Some(times) = hourly["time"].as_array() else {
+        return vec![];
+    };
+    let start = current_time
+        .and_then(|cur| {
+            times
+                .iter()
+                .position(|t| t.as_str().is_some_and(|s| s >= cur))
+        })
+        .unwrap_or(0);
+
+    times
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(6)
+        .filter_map(|(idx, t)| {
+            let time = t.as_str()?;
+            Some(WeatherHourly {
+                time: format_weather_time(time),
+                temperature: hourly_num(hourly, "temperature_2m", idx).unwrap_or(0.0),
+                humidity: hourly_num(hourly, "relative_humidity_2m", idx),
+                weather_code: hourly_num(hourly, "weather_code", idx).map(|v| v as i32),
+                precipitation_probability: hourly_num(hourly, "precipitation_probability", idx),
+                wind_speed: hourly_num(hourly, "wind_speed_10m", idx),
+            })
+        })
+        .collect()
+}
+
+async fn fetch_weather_overview(
+    http: &reqwest::Client,
+    jma_office: &str,
+) -> Result<WeatherOverview, String> {
+    let url = format!(
+        "https://www.jma.go.jp/bosai/forecast/data/overview_forecast/{}.json",
+        jma_office
+    );
+    let resp = http.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("jma {}", resp.status()));
+    }
+    let data: Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(WeatherOverview {
+        publishing_office: data["publishingOffice"].as_str().unwrap_or("").to_string(),
+        report_datetime: data["reportDatetime"].as_str().unwrap_or("").to_string(),
+        target_area: data["targetArea"].as_str().unwrap_or("").to_string(),
+        text: data["text"].as_str().unwrap_or("").to_string(),
     })
 }
 
 // ─── News (RSS, no key) ──────────────────────────────────────────────────────
 
-pub async fn fetch_news(
-    http: &reqwest::Client,
-    cfg: &NewsConfig,
-) -> Result<Vec<NewsItem>, String> {
+pub async fn fetch_news(http: &reqwest::Client, cfg: &NewsConfig) -> Result<Vec<NewsItem>, String> {
     let mut items: Vec<NewsItem> = Vec::new();
     let mut last_err: Option<String> = None;
 
@@ -80,11 +183,7 @@ pub async fn fetch_news(
 fn feed_source_label(feed: &str) -> String {
     if feed.contains("nhk.or.jp") {
         "NHK".to_string()
-    } else if let Some(host) = feed
-        .split("://")
-        .nth(1)
-        .and_then(|s| s.split('/').next())
-    {
+    } else if let Some(host) = feed.split("://").nth(1).and_then(|s| s.split('/').next()) {
         host.trim_start_matches("www.").to_uppercase()
     } else {
         "RSS".to_string()
@@ -156,7 +255,11 @@ pub async fn chat_openai(
 ) -> Result<String, String> {
     let mut messages = vec![json!({"role":"system","content":system_prompt})];
     for m in history {
-        let role = if m.role == "assistant" { "assistant" } else { "user" };
+        let role = if m.role == "assistant" {
+            "assistant"
+        } else {
+            "user"
+        };
         messages.push(json!({"role":role,"content":m.text}));
     }
     let body = json!({ "model": model, "messages": messages, "temperature": 0.7 });
@@ -190,7 +293,11 @@ pub async fn chat_gemini(
 ) -> Result<String, String> {
     let mut contents: Vec<Value> = Vec::new();
     for m in history {
-        let role = if m.role == "assistant" { "model" } else { "user" };
+        let role = if m.role == "assistant" {
+            "model"
+        } else {
+            "user"
+        };
         contents.push(json!({"role":role,"parts":[{"text":m.text}]}));
     }
     let body = json!({
@@ -201,7 +308,12 @@ pub async fn chat_gemini(
         "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
         model, key
     );
-    let resp = http.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
+    let resp = http
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     let status = resp.status();
     let data: Value = resp.json().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
@@ -223,8 +335,8 @@ pub const SPOTIFY_SCOPES: &str =
     "user-read-currently-playing user-read-playback-state user-modify-playback-state";
 
 pub fn spotify_authorize_url(client_id: &str, state: &str) -> Result<String, String> {
-    let mut url = reqwest::Url::parse("https://accounts.spotify.com/authorize")
-        .map_err(|e| e.to_string())?;
+    let mut url =
+        reqwest::Url::parse("https://accounts.spotify.com/authorize").map_err(|e| e.to_string())?;
     url.query_pairs_mut()
         .append_pair("response_type", "code")
         .append_pair("client_id", client_id)
@@ -246,7 +358,10 @@ pub async fn spotify_refresh_token(
     let resp = http
         .post("https://accounts.spotify.com/api/token")
         .header("Authorization", format!("Basic {}", basic))
-        .form(&[("grant_type", "refresh_token"), ("refresh_token", refresh_token)])
+        .form(&[
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token),
+        ])
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -327,6 +442,7 @@ pub async fn spotify_now_playing(
     if item.is_null() {
         return Ok(None);
     }
+    let sampled_at = now_iso();
     let artist = item["artists"]
         .as_array()
         .map(|a| {
@@ -349,6 +465,7 @@ pub async fn spotify_now_playing(
         album_art_url: art,
         duration_ms: item["duration_ms"].as_u64(),
         progress_ms: data["progress_ms"].as_u64(),
+        sampled_at: Some(sampled_at),
         is_playing: data["is_playing"].as_bool().unwrap_or(false),
     }))
 }
@@ -414,7 +531,11 @@ pub async fn fetch_lyrics(
     };
     let Some(best) = results
         .iter()
-        .find(|item| item["syncedLyrics"].as_str().is_some_and(|s| !s.trim().is_empty()))
+        .find(|item| {
+            item["syncedLyrics"]
+                .as_str()
+                .is_some_and(|s| !s.trim().is_empty())
+        })
         .or_else(|| results.first())
     else {
         return Ok(SpotifyLyricsState {
@@ -477,7 +598,7 @@ pub async fn lyrics_for_track(
     previous: Option<SpotifyLyricsState>,
     track: &SpotifyTrack,
 ) -> SpotifyLyricsState {
-    let track_id = spotify_lyrics_key(track);
+    let track_id = spotify_track_key(track);
     if previous
         .as_ref()
         .is_some_and(|lyrics| lyrics.track_id == track_id && lyrics.status != "idle")
@@ -506,7 +627,7 @@ pub async fn lyrics_for_track(
     }
 }
 
-fn spotify_lyrics_key(track: &SpotifyTrack) -> Option<String> {
+pub fn spotify_track_key(track: &SpotifyTrack) -> Option<String> {
     track
         .id
         .clone()
@@ -545,7 +666,11 @@ fn parse_lrc(lrc: &str) -> Vec<LyricLine> {
             });
         }
     }
-    out.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    out.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     out
 }
 

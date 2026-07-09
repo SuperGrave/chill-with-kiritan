@@ -1,44 +1,42 @@
 import { useState, type ReactNode } from "react";
 import "./App.css";
-import TabChat from "./tabs/TabChat";
-import TabTodo from "./tabs/TabTodo";
+import TabHome from "./tabs/TabHome";
 import TabMemo from "./tabs/TabMemo";
 import TabBookmark from "./tabs/TabBookmark";
+import TabPersonalNews from "./tabs/TabPersonalNews";
 import TabSettings from "./tabs/TabSettings";
 import TabStatus from "./tabs/TabStatus";
 import {
-  ChatIcon,
-  TodoIcon,
+  HomeIcon,
   MemoIcon,
   BookmarkIcon,
   SettingsIcon,
   StatusIcon,
 } from "./icons";
 
-type Tab = "chat" | "todo" | "memo" | "bookmark" | "settings" | "status";
+type Tab = "home" | "memo" | "bookmark" | "personalNews" | "settings" | "status";
 
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
-  { id: "chat",     label: "チャット", icon: <ChatIcon /> },
-  { id: "todo",     label: "TODO",     icon: <TodoIcon /> },
+  { id: "home",     label: "ホーム",   icon: <HomeIcon /> },
   { id: "memo",     label: "メモ",     icon: <MemoIcon /> },
   { id: "bookmark", label: "リンク",   icon: <BookmarkIcon /> },
+  { id: "personalNews", label: "ニュース", icon: <BookmarkIcon /> },
   { id: "settings", label: "設定",     icon: <SettingsIcon /> },
   { id: "status",   label: "状態",     icon: <StatusIcon /> },
 ];
 
 // 各タブは hidden で出し分け（アンマウントしない）。
-// タブを切り替えてもチャット履歴や入力途中の内容が保持される。
 const PAGES: { id: Tab; fill?: boolean; node: ReactNode }[] = [
-  { id: "chat",     fill: true, node: <TabChat /> },
-  { id: "todo",     node: <TabTodo /> },
+  { id: "home",     node: <TabHome /> },
   { id: "memo",     node: <TabMemo /> },
   { id: "bookmark", node: <TabBookmark /> },
+  { id: "personalNews", node: <TabPersonalNews /> },
   { id: "settings", node: <TabSettings /> },
   { id: "status",   node: <TabStatus /> },
 ];
 
 function App() {
-  const [active, setActive] = useState<Tab>("chat");
+  const [active, setActive] = useState<Tab>("home");
 
   return (
     <div className="app">

@@ -11,20 +11,84 @@ export type NewsItem = {
   summary?: string;
 };
 
-export type ChatMessage = {
+export type PersonalNewsScriptSummary = {
   id: string;
-  role: 'user' | 'assistant' | 'system';
-  text: string;
-  createdAt: string;
+  title: string;
+  fileName: string;
+  description?: string | null;
+  chapterCount: number;
+  lineCount: number;
+  sourceCount: number;
+  supplementCount?: number;
+  estimatedDurationMs: number;
+  modifiedAt?: string | null;
 };
 
-export type AiState = {
-  provider: 'openai' | 'google' | 'none';
-  status: 'idle' | 'thinking' | 'responding' | 'error';
-  lastUserMessage?: string;
-  lastAssistantMessage?: string;
-  messages: ChatMessage[];
-  error?: string;
+export type PersonalNewsChapter = {
+  id: string;
+  title: string;
+  lineIndex: number;
+  positionMs: number;
+};
+
+export type PersonalNewsLine = {
+  id: string;
+  kind: 'text' | 'wait' | 'source' | string;
+  topic?: string | null;
+  text: string;
+  durationMs: number;
+  sourceId?: string | null;
+  positionMs: number;
+};
+
+export type PersonalNewsSupplement = {
+  id: string;
+  title: string;
+  text: string;
+  url?: string | null;
+  lineIndex: number;
+  chapterIndex: number;
+  positionMs: number;
+  durationMs: number;
+};
+
+export type PersonalNewsSource = {
+  id: string;
+  title: string;
+  url: string;
+  lineIndex: number;
+  chapterIndex: number;
+  positionMs: number;
+};
+
+export type PersonalNewsScript = {
+  id: string;
+  title: string;
+  fileName: string;
+  description?: string | null;
+  chapters: PersonalNewsChapter[];
+  lines: PersonalNewsLine[];
+  supplements?: PersonalNewsSupplement[];
+  sources: PersonalNewsSource[];
+  estimatedDurationMs: number;
+  modifiedAt?: string | null;
+};
+
+export type PersonalNewsState = {
+  scripts: PersonalNewsScriptSummary[];
+  currentScript?: PersonalNewsScript | null;
+  selectedScriptId?: string | null;
+  status: 'idle' | 'playing' | 'paused' | 'finished' | 'error' | string;
+  lineIndex: number;
+  lineStartedAt?: string | null;
+  lineElapsedMs: number;
+  elapsedMs: number;
+  durationMs: number;
+  currentChapterIndex: number;
+  loopEnabled: boolean;
+  scriptDir?: string | null;
+  error?: string | null;
+  updatedAt: string;
 };
 
 export type SpotifyTrack = {
@@ -35,6 +99,7 @@ export type SpotifyTrack = {
   albumArtUrl?: string;
   durationMs?: number;
   progressMs?: number;
+  sampledAt?: string;
   isPlaying?: boolean;
 };
 

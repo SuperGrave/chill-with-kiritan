@@ -44,7 +44,7 @@ const D = (m) => require(path.join(outDir, m));
 const { makeRng } = D('rng.js');
 const { ModeFsm } = D('modeFsm.js');
 const { validateKiritanState } = D('kiritanState.js');
-const { KiritanPoster } = D('kiritanPoster.js');
+const { KiritanPoster, makeFetchTransport } = D('kiritanPoster.js');
 
 // --- tiny harness -----------------------------------------------------------
 let pass = 0;
@@ -90,6 +90,52 @@ function startReceiver() {
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address();
       resolve({ server, port, received });
+    });
+  });
+}
+
+function startAuthReceiver() {
+  const received = [];
+  const postTokens = [];
+  const state = { tokenHits: 0 };
+  const server = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/api/auth/token') {
+      state.tokenHits++;
+      if (state.tokenHits === 1) {
+        res.writeHead(503, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: false }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ token: 'fresh-token' }));
+      return;
+    }
+
+    if (req.method !== 'POST' || req.url !== '/api/kiritan/state') {
+      res.writeHead(404).end();
+      return;
+    }
+
+    const token = req.headers['x-companion-token'];
+    postTokens.push(typeof token === 'string' ? token : '');
+    if (token !== 'fresh-token') {
+      res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: false }));
+      return;
+    }
+
+    let raw = '';
+    req.on('data', (c) => (raw += c));
+    req.on('end', () => {
+      try {
+        received.push(JSON.parse(raw));
+      } catch (e) {
+        received.push({ __parseError: String(e) });
+      }
+      res.writeHead(204).end();
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({ server, port, received, postTokens, state });
     });
   });
 }
@@ -229,6 +275,38 @@ async function main() {
       resolved = true;
       ok(resolved && elapsed < 50, `hung transport: call returns immediately (${elapsed}ms, not awaited)`);
     }
+  }
+
+  // =========================================================================
+  // 3. Auth token retry: failed lookup must not poison the cache forever
+  // =========================================================================
+  section('3. Auth token retry after transient lookup failure');
+  {
+    const { server, port, received, postTokens, state } = await startAuthReceiver();
+    const url = `http://127.0.0.1:${port}/api/kiritan/state`;
+    const fsm = new ModeFsm(makeRng(5), 'work_normal');
+    let errors = 0;
+    const poster = new KiritanPoster({
+      url,
+      heartbeatMs: 30_000,
+      now,
+      transport: makeFetchTransport(1000),
+      onError: () => errors++,
+    });
+
+    clock += 31_000;
+    poster.maybePost(fsm.snapshot(), { nowMs: clock, ambient: null, away: null });
+    await sleep(150);
+
+    clock += 31_000;
+    poster.maybePost(fsm.snapshot(), { nowMs: clock, ambient: null, away: null });
+    await sleep(150);
+
+    ok(state.tokenHits >= 2, `token lookup retried after first failure (${state.tokenHits} hits)`);
+    ok(postTokens[0] === '' && postTokens[1] === 'fresh-token', 'second POST used freshly fetched token');
+    ok(errors === 1, `first 401 was reported once and did not poison later posts (${errors} errors)`);
+    ok(received.length === 1 && validateKiritanState(received[0]).length === 0, 'second authenticated POST landed with valid body');
+    server.close();
   }
 
   // --- summary --------------------------------------------------------------

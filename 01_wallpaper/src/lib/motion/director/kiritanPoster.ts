@@ -71,6 +71,17 @@ async function getCompanionToken(tokenUrl: string, timeoutMs: number): Promise<s
     }
   })();
   tokenCache.set(tokenUrl, p);
+  // Never cache a *failed* lookup permanently. The first post fires right after
+  // the VRM finishes loading, and parsing a ~30 MB VRM can jank the main thread
+  // long enough to blow the token fetch's timeout → null. Without eviction that
+  // null is cached forever, so every later post goes out tokenless → 401 →
+  // Companion shows the wallpaper as 未報告 even though it is very much alive.
+  void p.then(
+    (tok) => {
+      if (!tok) tokenCache.delete(tokenUrl);
+    },
+    () => tokenCache.delete(tokenUrl),
+  );
   return p;
 }
 
@@ -97,6 +108,9 @@ export function makeFetchTransport(timeoutMs = 2000): KiritanPosterTransport {
       keepalive: true,
       ...(signal ? { signal } : {}),
     });
+    // A 401 means the token we sent was stale/missing — drop it so the next post
+    // re-fetches a fresh one instead of repeating the rejected request forever.
+    if (res.status === 401) tokenCache.delete(tokenUrlFor(url));
     if (!res.ok) throw new Error(`kiritan state POST failed: ${res.status}`);
   };
 }

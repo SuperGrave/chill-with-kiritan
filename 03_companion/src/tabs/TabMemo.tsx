@@ -40,10 +40,16 @@ export default function TabMemo() {
       </header>
 
       <form className="add-row" onSubmit={(e) => { e.preventDefault(); add(); }}>
-        <input
-          type="text"
+        <textarea
+          rows={3}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void add();
+            }
+          }}
           placeholder="メモを追加…"
         />
         <button type="submit" disabled={!input.trim()}>

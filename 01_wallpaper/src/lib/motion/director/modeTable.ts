@@ -25,7 +25,7 @@ export const MODE_TABLE: Record<ModeId, ModeSpec> = {
     id: 'work_normal',
     label: '通常作業',
     family: 'A',
-    dwellMin: [8, 25],
+    dwellMin: [15, 30],
     ambientIntervalSec: [25, 70],
     interrupt: 'immediate',
     chatDelayMsRange: [500, 1500],
@@ -34,6 +34,7 @@ export const MODE_TABLE: Record<ModeId, ModeSpec> = {
       { to: 'work_focus', weight: 0.15 },
       { to: 'work_sleepy', weight: 0.1, dcaptSensitive: true },
       { to: 'video_relax', weight: 0.15 },
+      { to: 'sleep_desk', weight: 0.15 },
       { to: 'game_controller', weight: 0.1 },
       { to: 'read_book', weight: 0.08 },
       { to: 'phone_browse', weight: 0.12 },
@@ -129,13 +130,14 @@ export const MODE_TABLE: Record<ModeId, ModeSpec> = {
     id: 'video_relax',
     label: '動画視聴',
     family: "A'",
-    dwellMin: [8, 20],
+    dwellMin: [15, 30],
     ambientIntervalSec: [20, 50],
     interrupt: 'soft',
     chatDelayMsRange: [1000, 2500],
     state: { posture: 'sit_pc_slouch', hands: { l: 'loose', r: 'loose' }, held: [] },
     transitions: [
       { to: 'work_normal', weight: 0.4 },
+      { to: 'sleep_desk', weight: 0.4, dcaptSensitive: true },
       { to: 'work_sleepy', weight: 0.15, dcaptSensitive: true },
       { to: 'game_controller', weight: 0.25 },
       { to: 'snack_break', weight: 0.1 },
@@ -375,7 +377,7 @@ export const MODE_TABLE: Record<ModeId, ModeSpec> = {
     id: 'sleep_desk',
     label: '睡眠（突っ伏し）',
     family: 'special',
-    dwellMin: [10, 30],
+    dwellMin: [15, 30],
     ambientIntervalSec: [30, 90],
     interrupt: 'asleep',
     chatDelayMsRange: null, // 原則無反応
@@ -383,6 +385,7 @@ export const MODE_TABLE: Record<ModeId, ModeSpec> = {
     transitions: [], // 起床は returnTable
     returnTable: [
       { to: 'work_normal', weight: 0.5 },
+      { to: 'video_relax', weight: 0.5 },
       { to: 'away_room', weight: 0.3 },
       { to: 'work_sleepy', weight: 0.2 },
     ],
@@ -440,6 +443,12 @@ export const TRANSITION_TABLE: TransitionChain[] = [
   // a deliberate recline / sit-up rather than an instant crossfade.
   { from: 'work_normal', to: 'video_relax', motions: ['tr_lean_back'] },
   { from: 'video_relax', to: 'work_normal', motions: ['tr_lean_forward'] },
+  // Current primary runtime: the three completed loops can rotate directly.
+  // video→sleep first sits back into the work pose, then folds onto the desk;
+  // sleep→video wakes to sitting, then leans into the viewing pose.
+  { from: 'work_normal', to: 'sleep_desk', motions: ['tr_sit_to_slump'] },
+  { from: 'video_relax', to: 'sleep_desk', motions: ['tr_lean_forward', 'tr_sit_to_slump'] },
+  { from: 'sleep_desk', to: 'video_relax', motions: ['tr_slump_wake', 'tr_lean_back'] },
   { from: 'work_sleepy', to: 'video_relax', motions: ['tr_lean_back'] },
   { from: 'video_relax', to: 'work_sleepy', motions: ['tr_lean_forward'] },
 ];

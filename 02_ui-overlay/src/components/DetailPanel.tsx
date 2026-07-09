@@ -1,8 +1,8 @@
-import { Bot, Captions, Cloud, Music, Newspaper, NotebookPen } from 'lucide-react';
+import { Captions, Cloud, Music, Newspaper, NotebookPen, Timer } from 'lucide-react';
 import SettingsPanel from './panels/SettingsPanel';
 import '../styles/panel.css';
 
-type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'AI' | 'NEWS' | 'MEMO';
+type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'PERSONAL_NEWS' | 'NEWS' | 'MEMO' | 'TIMER';
 
 interface DetailPanelProps {
   layout: { x: number; y: number; width: number; height: number };
@@ -17,7 +17,7 @@ interface DetailPanelProps {
   onReset: () => void;
 }
 
-// The display panels (News/Music/AI/Memo/Weather) are now standalone floating
+// The display panels (News/Music/Lyrics/Memo/Weather/Timer) are now standalone floating
 // modules. This overlay is just the Settings surface, opened from the dock gear.
 const DetailPanel: React.FC<DetailPanelProps> = ({
   layout, open, debugMode, appLayout, appSettings, setLayout, setSettings, panelVisibility, onTogglePanel, onReset,
@@ -26,9 +26,10 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
     { id: 'WEATHER', label: 'WEATHER', icon: <Cloud size={18} strokeWidth={1.5} /> },
     { id: 'MUSIC', label: 'MUSIC', icon: <Music size={18} strokeWidth={1.5} /> },
     { id: 'LYRICS', label: 'LYRICS', icon: <Captions size={18} strokeWidth={1.5} /> },
-    { id: 'AI', label: 'AI', icon: <Bot size={18} strokeWidth={1.5} /> },
+    { id: 'PERSONAL_NEWS', label: 'P-NEWS', icon: <Newspaper size={18} strokeWidth={1.5} /> },
     { id: 'NEWS', label: 'NEWS', icon: <Newspaper size={18} strokeWidth={1.5} /> },
     { id: 'MEMO', label: 'MEMO', icon: <NotebookPen size={18} strokeWidth={1.5} /> },
+    { id: 'TIMER', label: 'TIMER', icon: <Timer size={18} strokeWidth={1.5} /> },
   ];
 
   return (

@@ -16,6 +16,7 @@
 
 import type { SceneProp, Vec3 } from './sceneTypes';
 import type { TransformEntry } from './layoutCalibration';
+import { publicAssetUrl } from '../assetUrl';
 
 export type PropAnchorSlot = 'desk_left' | 'desk_center' | 'desk_right';
 
@@ -127,7 +128,7 @@ export function validatePropLibrary(raw: unknown): PropLibrary | null {
 // Fetch + validate the library. Resolves (never rejects); null = no library.
 export async function loadPropLibrary(): Promise<PropLibrary | null> {
   try {
-    const res = await fetch(LIBRARY_URL);
+    const res = await fetch(publicAssetUrl(LIBRARY_URL));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const library = validatePropLibrary((await res.json()) as unknown);
     if (!library) console.warn('[ITEMS] props.library.json is malformed — small-prop UI disabled');

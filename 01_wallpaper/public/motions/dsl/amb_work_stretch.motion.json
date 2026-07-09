@@ -1,146 +1,224 @@
 {
   "schema": "motion/1",
   "id": "amb_work_stretch",
-  "label": "Ambient: 座って伸び（12原則・頭上ストレッチ）",
-  "notes": "work_normal Ambient。stretch_principles(立ち版)の座る版。両腕をキーボードからゆっくり頭上へ伸ばし、背を反らして見上げ→満足の一拍→キーボードへ戻す。12原則: ①予備動作(t0.6 手を沈め+背を丸めるタメ) ②左右非対称(右腕が約0.15s先行) ③フォロースルー/オーバーシュート(t3.85でsettleを0.1rad越え→settle。旧z±2.13は腕が完全交差=2026-07-04にz±1.48/±1.38へ修正。apexは肩すくめ+胸反りで腕チェーンが内傾するため交差しない垂直相当はz≈∓1.62、それより浅く保つ。実測手間隔≈15cm) ④弧(肩がすくんで上下)。oneshot、開始=終了は loop_work_normal と同じキーボード姿勢=座位ニュートラルなのでクロスフェード継ぎ目ゼロ。手はキーボードから離れるが dsl_amb_work_stretch は WORK_HAND_PIN_POLICIES 未登録＝ピンIK非対象で腕振り付けと干渉しない。指は type_hands のまま(開閉は今後)。呼吸は idleStateMachine が加算。posture=sit_pc_neutral。",
+  "label": "Ambient: 座って伸び（ゆったり伸び test_stretch 移植）",
+  "notes": "work_normal Ambient。座ったまま両腕を頭上へ伸ばす。2026-07-07: master指示で『ゆったり伸び』(test_stretch)を座位へ移植。test_stretchの持ち味＝左右対称・滑らか(sineInOut/cubicInOut)・短めのピーク保持・肘が曲がって伸びる単純カスケード・気持ちよさそうに伸びて『ふっと笑って戻る』を踏襲し、12原則版(stretch_principles流用)の非対称/指の扇状展開/予備動作/もうひと押しは意図的に外して落ち着いた質感に。posture=sit_pc_neutralは腕に触れない＝腕は絶対回転。頭上の左右クロス回避のためアペックスは実測校正 z≈±1.44(手が正中線 x=0 に達するのは|z|≈1.68、それより浅く／到達高さは頭の約35cm上を維持)。開始=終了は loop_work_normal のキーボード姿勢(腕/手/頭-0.12/首-0.08, spine/chest/shoulders 0)に厳密一致でシームレス。ハンドピンは無し。指は type_hands の握りを軽くほどいて test_stretch のリラックスした開いた手に寄せる(左右対称・段差/過カール無し)。",
   "category": "ambient",
-  "tags": ["mode:work_normal", "family:A", "v2-principles"],
+  "tags": ["mode:work_normal", "family:A", "gentle"],
   "posture": "sit_pc_neutral",
-  "duration": 7.0,
+  "duration": 8.8,
   "loop": false,
-  "fadeIn": 0.5,
-  "fadeOut": 0.6,
+  "fadeIn": 0.8,
+  "fadeOut": 0.75,
   "hands": { "left": "type_hands", "right": "type_hands" },
   "tracks": {
     "leftUpperArm": { "keys": [
       { "t": 0.0, "e": [0.9118, -0.8458, 1.49] },
-      { "t": 0.6, "e": [0.96, -0.86, 1.54], "ease": "easeIn" },
-      { "t": 1.1, "e": [0.90, -0.84, 1.44], "ease": "easeOut" },
-      { "t": 2.6, "e": [0.36, -0.55, -0.35], "ease": "sineInOut" },
-      { "t": 3.85, "e": [-0.06, -0.34, -1.48], "ease": "sineInOut" },
-      { "t": 4.6, "e": [0.0, -0.35, -1.38], "ease": "easeOut" },
-      { "t": 5.3, "e": [0.05, -0.4, -1.30], "ease": "easeIn" },
-      { "t": 6.4, "e": [0.6, -0.62, 0.1], "ease": "sineInOut" },
-      { "t": 6.8, "e": [0.94, -0.86, 1.52], "ease": "easeOut" },
-      { "t": 7.0, "e": [0.9118, -0.8458, 1.49] }
+      { "t": 2.0, "e": [0.10, -0.62, -0.35], "ease": "sineInOut" },
+      { "t": 3.2, "e": [-0.05, -0.34, -1.44], "ease": "easeOut" },
+      { "t": 4.9, "e": [-0.05, -0.33, -1.47], "ease": "sineInOut" },
+      { "t": 6.7, "e": [0.30, -0.55, -0.20], "ease": "cubicInOut" },
+      { "t": 7.8, "e": [0.85, -0.83, 1.35], "ease": "sineInOut" },
+      { "t": 8.8, "e": [0.9118, -0.8458, 1.49], "ease": "sineInOut" }
     ] },
     "rightUpperArm": { "keys": [
       { "t": 0.0, "e": [0.9118, 0.8458, -1.49] },
-      { "t": 0.55, "e": [0.96, 0.86, -1.54], "ease": "easeIn" },
-      { "t": 1.0, "e": [0.90, 0.84, -1.44], "ease": "easeOut" },
-      { "t": 2.45, "e": [0.36, 0.55, 0.35], "ease": "sineInOut" },
-      { "t": 3.7, "e": [-0.06, 0.34, 1.48], "ease": "sineInOut" },
-      { "t": 4.5, "e": [0.0, 0.35, 1.38], "ease": "easeOut" },
-      { "t": 5.2, "e": [0.05, 0.4, 1.30], "ease": "easeIn" },
-      { "t": 6.35, "e": [0.6, 0.62, -0.1], "ease": "sineInOut" },
-      { "t": 6.75, "e": [0.94, 0.86, -1.52], "ease": "easeOut" },
-      { "t": 7.0, "e": [0.9118, 0.8458, -1.49] }
+      { "t": 2.0, "e": [0.10, 0.62, 0.35], "ease": "sineInOut" },
+      { "t": 3.2, "e": [-0.05, 0.34, 1.44], "ease": "easeOut" },
+      { "t": 4.9, "e": [-0.05, 0.33, 1.47], "ease": "sineInOut" },
+      { "t": 6.7, "e": [0.30, 0.55, 0.20], "ease": "cubicInOut" },
+      { "t": 7.8, "e": [0.85, 0.83, -1.35], "ease": "sineInOut" },
+      { "t": 8.8, "e": [0.9118, 0.8458, -1.49], "ease": "sineInOut" }
     ] },
     "leftLowerArm": { "keys": [
       { "t": 0.0, "e": [0.2196, -0.2961, -0.1359] },
-      { "t": 0.6, "e": [0.24, -0.30, -0.14], "ease": "easeIn" },
-      { "t": 2.6, "e": [0.08, -0.5, -0.28], "ease": "sineInOut" },
-      { "t": 3.85, "e": [0.0, -0.16, -0.09], "ease": "sineInOut" },
-      { "t": 4.6, "e": [0.0, -0.14, -0.07], "ease": "easeOut" },
-      { "t": 5.3, "e": [0.03, -0.3, -0.16], "ease": "easeIn" },
-      { "t": 6.4, "e": [0.18, -0.32, -0.16], "ease": "sineInOut" },
-      { "t": 7.0, "e": [0.2196, -0.2961, -0.1359] }
+      { "t": 2.0, "e": [0.10, -0.66, -0.34], "ease": "sineInOut" },
+      { "t": 3.2, "e": [-0.02, -0.13, -0.07], "ease": "easeOut" },
+      { "t": 4.9, "e": [-0.02, -0.14, -0.08], "ease": "sineInOut" },
+      { "t": 6.7, "e": [0.08, -0.42, -0.22], "ease": "cubicInOut" },
+      { "t": 7.8, "e": [0.22, -0.30, -0.14], "ease": "sineInOut" },
+      { "t": 8.8, "e": [0.2196, -0.2961, -0.1359], "ease": "sineInOut" }
     ] },
     "rightLowerArm": { "keys": [
       { "t": 0.0, "e": [0.2196, 0.2961, 0.1359] },
-      { "t": 0.55, "e": [0.24, 0.30, 0.14], "ease": "easeIn" },
-      { "t": 2.45, "e": [0.08, 0.5, 0.28], "ease": "sineInOut" },
-      { "t": 3.7, "e": [0.0, 0.16, 0.09], "ease": "sineInOut" },
-      { "t": 4.5, "e": [0.0, 0.14, 0.07], "ease": "easeOut" },
-      { "t": 5.2, "e": [0.03, 0.3, 0.16], "ease": "easeIn" },
-      { "t": 6.35, "e": [0.18, 0.32, 0.16], "ease": "sineInOut" },
-      { "t": 7.0, "e": [0.2196, 0.2961, 0.1359] }
+      { "t": 2.0, "e": [0.10, 0.66, 0.34], "ease": "sineInOut" },
+      { "t": 3.2, "e": [-0.02, 0.13, 0.07], "ease": "easeOut" },
+      { "t": 4.9, "e": [-0.02, 0.14, 0.08], "ease": "sineInOut" },
+      { "t": 6.7, "e": [0.08, 0.42, 0.22], "ease": "cubicInOut" },
+      { "t": 7.8, "e": [0.22, 0.30, 0.14], "ease": "sineInOut" },
+      { "t": 8.8, "e": [0.2196, 0.2961, 0.1359], "ease": "sineInOut" }
     ] },
     "leftHand": { "keys": [
       { "t": 0.0, "e": [-1.04, 0, 0] },
-      { "t": 2.6, "e": [-0.55, 0, 0.06], "ease": "sineInOut" },
-      { "t": 3.85, "e": [-0.18, 0, 0.1], "ease": "sineInOut" },
-      { "t": 4.6, "e": [-0.18, 0, 0.1], "ease": "easeOut" },
-      { "t": 5.3, "e": [-0.4, 0, 0.05], "ease": "easeIn" },
-      { "t": 6.4, "e": [-0.8, 0, 0.02], "ease": "sineInOut" },
-      { "t": 7.0, "e": [-1.04, 0, 0] }
+      { "t": 2.0, "e": [-0.55, 0, 0.04], "ease": "sineInOut" },
+      { "t": 3.2, "e": [-0.18, 0, 0.08], "ease": "easeOut" },
+      { "t": 4.9, "e": [-0.18, 0, 0.08], "ease": "sineInOut" },
+      { "t": 6.7, "e": [-0.45, 0, 0.04], "ease": "cubicInOut" },
+      { "t": 8.8, "e": [-1.04, 0, 0], "ease": "sineInOut" }
     ] },
     "rightHand": { "keys": [
       { "t": 0.0, "e": [-1.04, 0, 0] },
-      { "t": 2.45, "e": [-0.55, 0, -0.06], "ease": "sineInOut" },
-      { "t": 3.7, "e": [-0.18, 0, -0.1], "ease": "sineInOut" },
-      { "t": 4.5, "e": [-0.18, 0, -0.1], "ease": "easeOut" },
-      { "t": 5.2, "e": [-0.4, 0, -0.05], "ease": "easeIn" },
-      { "t": 6.35, "e": [-0.8, 0, -0.02], "ease": "sineInOut" },
-      { "t": 7.0, "e": [-1.04, 0, 0] }
+      { "t": 2.0, "e": [-0.55, 0, -0.04], "ease": "sineInOut" },
+      { "t": 3.2, "e": [-0.18, 0, -0.08], "ease": "easeOut" },
+      { "t": 4.9, "e": [-0.18, 0, -0.08], "ease": "sineInOut" },
+      { "t": 6.7, "e": [-0.45, 0, -0.04], "ease": "cubicInOut" },
+      { "t": 8.8, "e": [-1.04, 0, 0], "ease": "sineInOut" }
     ] },
     "leftShoulder": { "keys": [
       { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 2.6, "e": [0, 0, -0.1], "ease": "sineInOut" },
-      { "t": 3.85, "e": [0, 0, -0.17], "ease": "sineInOut" },
-      { "t": 4.6, "e": [0, 0, -0.16], "ease": "easeOut" },
-      { "t": 5.5, "e": [0, 0, -0.06], "ease": "sineInOut" },
-      { "t": 7.0, "e": [0, 0, 0], "ease": "easeOut" }
+      { "t": 3.2, "e": [0, 0, -0.12], "ease": "sineInOut" },
+      { "t": 4.9, "e": [0, 0, -0.12], "ease": "sineInOut" },
+      { "t": 7.4, "e": [0, 0, 0], "ease": "sineInOut" },
+      { "t": 8.8, "e": [0, 0, 0] }
     ] },
     "rightShoulder": { "keys": [
       { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 2.45, "e": [0, 0, 0.1], "ease": "sineInOut" },
-      { "t": 3.7, "e": [0, 0, 0.17], "ease": "sineInOut" },
-      { "t": 4.5, "e": [0, 0, 0.16], "ease": "easeOut" },
-      { "t": 5.4, "e": [0, 0, 0.06], "ease": "sineInOut" },
-      { "t": 7.0, "e": [0, 0, 0], "ease": "easeOut" }
+      { "t": 3.2, "e": [0, 0, 0.12], "ease": "sineInOut" },
+      { "t": 4.9, "e": [0, 0, 0.12], "ease": "sineInOut" },
+      { "t": 7.4, "e": [0, 0, 0], "ease": "sineInOut" },
+      { "t": 8.8, "e": [0, 0, 0] }
     ] },
     "spine": { "keys": [
       { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 0.6, "e": [0.05, 0, 0.01], "ease": "easeIn" },
-      { "t": 2.2, "e": [-0.06, 0, -0.01], "ease": "sineInOut" },
-      { "t": 3.85, "e": [-0.17, 0, -0.02], "ease": "sineInOut" },
-      { "t": 4.6, "e": [-0.16, 0, -0.02], "ease": "easeOut" },
-      { "t": 5.4, "e": [-0.08, 0, -0.01], "ease": "sineInOut" },
-      { "t": 6.4, "e": [0.02, 0, 0], "ease": "easeIn" },
-      { "t": 7.0, "e": [0, 0, 0], "ease": "easeOut" }
+      { "t": 3.2, "e": [-0.14, 0, 0], "ease": "cubicInOut" },
+      { "t": 4.9, "e": [-0.12, 0, 0], "ease": "sineInOut" },
+      { "t": 7.1, "e": [0.02, 0, 0], "ease": "cubicInOut" },
+      { "t": 8.8, "e": [0, 0, 0], "ease": "sineInOut" }
     ] },
     "chest": { "keys": [
       { "t": 0.0, "e": [0, 0, 0] },
-      { "t": 0.6, "e": [0.03, 0, 0], "ease": "easeIn" },
-      { "t": 3.85, "e": [-0.09, 0, -0.01], "ease": "sineInOut" },
-      { "t": 4.6, "e": [-0.08, 0, -0.01], "ease": "easeOut" },
-      { "t": 5.4, "e": [-0.04, 0, 0], "ease": "sineInOut" },
-      { "t": 6.4, "e": [0.01, 0, 0], "ease": "easeIn" },
-      { "t": 7.0, "e": [0, 0, 0], "ease": "easeOut" }
+      { "t": 3.2, "e": [-0.07, 0, 0], "ease": "cubicInOut" },
+      { "t": 4.9, "e": [-0.06, 0, 0], "ease": "sineInOut" },
+      { "t": 7.1, "e": [0.01, 0, 0], "ease": "cubicInOut" },
+      { "t": 8.8, "e": [0, 0, 0], "ease": "sineInOut" }
     ] },
     "neck": { "keys": [
       { "t": 0.0, "e": [-0.08, 0, 0] },
-      { "t": 0.6, "e": [-0.06, 0, 0], "ease": "easeIn" },
-      { "t": 3.85, "e": [0.02, 0, 0], "ease": "sineInOut" },
-      { "t": 4.6, "e": [0.02, 0, 0], "ease": "easeOut" },
-      { "t": 5.6, "e": [-0.06, 0, 0], "ease": "sineInOut" },
-      { "t": 7.0, "e": [-0.08, 0, 0], "ease": "easeOut" }
+      { "t": 3.2, "e": [-0.16, 0, 0], "ease": "cubicInOut" },
+      { "t": 4.9, "e": [-0.14, 0, 0.02], "ease": "sineInOut" },
+      { "t": 7.1, "e": [-0.04, 0, 0], "ease": "cubicInOut" },
+      { "t": 8.8, "e": [-0.08, 0, 0], "ease": "sineInOut" }
     ] },
     "head": { "keys": [
       { "t": 0.0, "e": [-0.12, 0, 0] },
-      { "t": 0.6, "e": [-0.08, 0, 0], "ease": "easeIn" },
-      { "t": 2.6, "e": [-0.02, 0, 0], "ease": "sineInOut" },
-      { "t": 3.85, "e": [0.06, 0, 0], "ease": "sineInOut" },
-      { "t": 4.6, "e": [0.05, 0, 0], "ease": "easeOut" },
-      { "t": 5.6, "e": [-0.09, 0, 0], "ease": "sineInOut" },
-      { "t": 7.0, "e": [-0.12, 0, 0], "ease": "easeOut" }
+      { "t": 3.2, "e": [-0.30, 0, 0], "ease": "cubicInOut" },
+      { "t": 4.9, "e": [-0.26, 0, 0.03], "ease": "sineInOut" },
+      { "t": 7.1, "e": [-0.04, 0, 0.02], "ease": "cubicInOut" },
+      { "t": 8.8, "e": [-0.12, 0, 0], "ease": "sineInOut" }
+    ] },
+    "leftIndexProximal": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, -0.16], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, -0.16], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "leftIndexIntermediate": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, -0.12], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, -0.12], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "leftMiddleProximal": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, -0.20], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, -0.20], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "leftMiddleIntermediate": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, -0.16], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, -0.16], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "leftRingProximal": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, -0.22], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, -0.22], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "leftRingIntermediate": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, -0.18], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, -0.18], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "leftLittleProximal": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, -0.20], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, -0.20], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "leftLittleIntermediate": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, -0.16], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, -0.16], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "rightIndexProximal": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0.16], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, 0.16], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "rightIndexIntermediate": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0.12], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, 0.12], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "rightMiddleProximal": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0.20], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, 0.20], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "rightMiddleIntermediate": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0.16], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, 0.16], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "rightRingProximal": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0.22], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, 0.22], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "rightRingIntermediate": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0.18], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, 0.18], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "rightLittleProximal": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0.20], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, 0.20], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
+    ] },
+    "rightLittleIntermediate": { "keys": [
+      { "t": 0.0, "e": [0, 0, 0] }, { "t": 2.0, "e": [0, 0, 0] },
+      { "t": 3.2, "e": [0, 0, 0.16], "ease": "easeOut" },
+      { "t": 4.9, "e": [0, 0, 0.16], "ease": "sineInOut" },
+      { "t": 7.0, "e": [0, 0, 0], "ease": "cubicInOut" }, { "t": 8.8, "e": [0, 0, 0] }
     ] }
   },
+  "oscillators": [
+    { "bone": "chest", "axis": "x", "amp": 0.02, "period": 4.8 }
+  ],
   "expressions": {
     "keys": [
       { "t": 0.0, "set": {} },
-      { "t": 2.8, "set": { "blink": 0.3 }, "fade": 0.8 },
-      { "t": 3.9, "set": { "blink": 0.6, "fun": 0.15 }, "fade": 0.6 },
-      { "t": 4.8, "set": { "blink": 0.2, "fun": 0.3 }, "fade": 0.7 },
-      { "t": 6.0, "set": { "fun": 0.2 }, "fade": 0.9 },
-      { "t": 6.8, "set": {}, "fade": 0.8 }
+      { "t": 3.2, "set": { "blink": 0.7, "fun": 0.2 }, "fade": 1.2 },
+      { "t": 4.9, "set": { "blink": 0.7, "fun": 0.2 }, "fade": 0.45 },
+      { "t": 6.9, "set": { "fun": 0.45 }, "fade": 0.9 },
+      { "t": 8.3, "set": {}, "fade": 1.0 }
     ]
   },
   "gaze": { "keys": [
     { "t": 0.0, "to": [0, -10] },
-    { "t": 3.85, "to": [0, 9], "move": 1.2 },
-    { "t": 5.6, "to": [0, -8], "move": 1.0 },
-    { "t": 7.0, "to": [0, -10], "move": 0.8 }
+    { "t": 3.2, "to": [0, 11], "move": 1.4 },
+    { "t": 5.6, "to": [0, -6], "move": 1.0 },
+    { "t": 8.8, "to": [0, -10], "move": 0.85 }
   ] }
 }

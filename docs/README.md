@@ -23,6 +23,7 @@
 | [RELEASE_V0.8.1.md](RELEASE_V0.8.1.md) | v0.8.1 の変更点・検証メモ |
 | [MAINLINE_VERSIONING.md](MAINLINE_VERSIONING.md) | v0.8 系の命名・表示・release生成ルール |
 | [GIT_TREE_POLICY.md](GIT_TREE_POLICY.md) | main / tag / archive branch の運用ルール |
+| [INFO_DISPLAY_UI_STYLE_REPORT_2026-07-09.md](INFO_DISPLAY_UI_STYLE_REPORT_2026-07-09.md) | 情報表示部UIの雰囲気・構成・Companion移植向けスタイルメモ |
 | [MOTION_PIPELINE_RESEARCH_2026-06-11.md](MOTION_PIPELINE_RESEARCH_2026-06-11.md) | モーション・パイプラインの調査 |
 | [model-audit/](model-audit/) | VRMモデルのライセンス／構造監査（md + json） |
 

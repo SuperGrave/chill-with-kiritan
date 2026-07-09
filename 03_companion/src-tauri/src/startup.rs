@@ -26,6 +26,60 @@ pub fn reconcile(config: &StartupConfig) -> io::Result<StartupStatus> {
     Ok(status(config))
 }
 
+pub fn handle_cli_args() -> bool {
+    let mut args = env::args().skip(1);
+    let Some(command) = args.next() else {
+        return false;
+    };
+    if command != "--tohoku-startup-register" {
+        return false;
+    }
+    let highest = matches!(args.next().as_deref(), Some("highest"));
+    if let Err(e) = register_scheduled_task_for_current_exe(highest) {
+        eprintln!("[companion] elevated startup registration failed: {e}");
+        std::process::exit(1);
+    }
+    true
+}
+
+#[cfg(windows)]
+pub fn request_elevated_registration(config: &StartupConfig) -> io::Result<()> {
+    if !config.launch_at_login {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "launchAtLogin is disabled",
+        ));
+    }
+    let exe = env::current_exe()?;
+    let run_level = if config.launch_with_highest_privileges {
+        "highest"
+    } else {
+        "limited"
+    };
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"])
+        .arg(
+            "param([string]$Exe,[string]$Action,[string]$RunLevel) \
+             Start-Process -FilePath $Exe -ArgumentList @($Action,$RunLevel) -Verb RunAs -WindowStyle Hidden",
+        )
+        .arg(exe.display().to_string())
+        .arg("--tohoku-startup-register")
+        .arg(run_level)
+        .output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(command_error("Start-Process -Verb RunAs", &output))
+}
+
+#[cfg(not(windows))]
+pub fn request_elevated_registration(_config: &StartupConfig) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "elevated startup registration is only available on Windows",
+    ))
+}
+
 pub fn status(config: &StartupConfig) -> StartupStatus {
     let task_registered = scheduled_task_exists();
     let run_key_registered = run_key_exists();
@@ -79,6 +133,19 @@ pub fn set_launch_at_login(enabled: bool, highest_privileges: bool) -> io::Resul
 
     let _ = delete_scheduled_task();
     let _ = delete_run_key();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn register_scheduled_task_for_current_exe(highest_privileges: bool) -> io::Result<()> {
+    let exe = env::current_exe()?;
+    create_scheduled_task(&exe.display().to_string(), highest_privileges)?;
+    let _ = delete_run_key();
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn register_scheduled_task_for_current_exe(_highest_privileges: bool) -> io::Result<()> {
     Ok(())
 }
 

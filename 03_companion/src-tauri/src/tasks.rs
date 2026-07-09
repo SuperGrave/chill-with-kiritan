@@ -42,7 +42,15 @@ async fn weather_loop(shared: Shared) {
                 g.state.weather.error = Some(e);
             }
         }
-        sleep(Duration::from_secs(600)).await; // 10 min
+        let retry_secs = {
+            let g = shared.lock().unwrap();
+            if g.state.weather.source == "mock" {
+                60
+            } else {
+                600
+            }
+        };
+        sleep(Duration::from_secs(retry_secs)).await;
     }
 }
 
@@ -52,9 +60,12 @@ async fn news_loop(shared: Shared) {
             let g = shared.lock().unwrap();
             (g.state.settings.news.clone(), g.http.clone())
         };
-        if let Ok(items) = services::fetch_news(&http, &cfg).await {
+        if let Ok(fetch) = services::fetch_news(&http, &cfg).await {
             let mut g = shared.lock().unwrap();
-            g.state.news = items;
+            if !fetch.items.is_empty() || fetch.error.is_none() {
+                g.state.news = fetch.items;
+            }
+            g.state.news_feeds = fetch.feeds;
             g.state.updated_at = now_iso();
             g.persist();
         }

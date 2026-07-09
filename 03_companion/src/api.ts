@@ -130,6 +130,12 @@ export type StartupStatus = {
   taskName: string;
   exePath: string;
 };
+export type StartupElevatedRepairResult = {
+  ok: boolean;
+  launched: boolean;
+  status: StartupStatus;
+  error?: string;
+};
 export type TimerState = {
   mode: string;
   phase: string;
@@ -140,6 +146,24 @@ export type TimerState = {
   startedAt?: string | null;
   updatedAt?: string | null;
   commandSeq: number;
+};
+
+export type NewsItem = {
+  id: string;
+  title: string;
+  source?: string | null;
+  url: string;
+  publishedAt?: string | null;
+  summary?: string | null;
+};
+
+export type NewsFeedState = {
+  feedUrl: string;
+  source: string;
+  status: string;
+  items: NewsItem[];
+  error?: string | null;
+  updatedAt?: string | null;
 };
 
 export type PersonalNewsScriptSummary = {
@@ -245,6 +269,7 @@ export const api = {
   putSettings: (partial: any) => put("/settings", partial),
   startupStatus: () => req<{ ok: boolean; status: StartupStatus }>("/startup/status"),
   startupRepair: () => post<{ ok: boolean; status: StartupStatus; error?: string }>("/startup/repair"),
+  startupRepairElevated: () => post<StartupElevatedRepairResult>("/startup/repair-elevated"),
   secretsStatus: () => req<SecretsStatus>("/secrets/status"),
   putSecrets: (secrets: Record<string, string>) => put("/secrets", secrets),
 
@@ -262,7 +287,9 @@ export const api = {
   timer: () => req<TimerState>("/timer"),
   timerControl: (action: "start" | "pause" | "reset" | "toggle" | "next") =>
     post("/timer/control", { action }),
-  newsRefresh: () => post("/news/refresh"),
+  news: () => req<NewsItem[]>("/news"),
+  newsFeeds: () => req<NewsFeedState[]>("/news/feeds"),
+  newsRefresh: () => post<{ ok: boolean; count: number; news: NewsItem[]; newsFeeds: NewsFeedState[]; error?: string }>("/news/refresh"),
   personalNews: () => req<PersonalNewsState>("/personal-news"),
   personalNewsReload: () => post("/personal-news/reload"),
   personalNewsSelect: (scriptId: string) => post("/personal-news/select", { scriptId }),

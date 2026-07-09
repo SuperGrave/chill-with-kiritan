@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "0.8.0",
+  [string]$Version = "0.8.1",
   [switch]$SkipWallpaperBuild,
   [switch]$SkipCompanionBuild,
   [switch]$IncludeLocalVrmForPersonalUse
@@ -11,7 +11,7 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptRoot
 $VersionText = $Version.Trim()
 if ([string]::IsNullOrWhiteSpace($VersionText)) {
-  throw "Version is required, for example: 0.8.0"
+  throw "Version is required, for example: 0.8.1"
 }
 $VersionTag = if ($VersionText.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
   $VersionText

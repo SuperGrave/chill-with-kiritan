@@ -641,6 +641,95 @@ button svg { width: 15px; height: 15px; }
   }
 }
 
+/* ── RSS News ────────────────────────────────────────────────── */
+.news-tab { gap: 12px; }
+
+.news-feed-list,
+.news-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.news-feed-button {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.news-feed-button.active {
+  border-color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.news-feed-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--accent-text);
+}
+
+.news-feed-text,
+.news-item-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.news-feed-text strong,
+.news-item-body strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.news-feed-text small,
+.news-item-body small {
+  color: var(--text-dim);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.news-feed-detail input.mono {
+  font-size: 10.5px;
+}
+
+.news-item-button {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  background: var(--surface-2);
+  text-align: left;
+}
+
+.news-item-index {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.news-item-button svg {
+  color: var(--text-faint);
+}
+
 /* ── Memo ─────────────────────────────────────────────────────── */
 .memo-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 

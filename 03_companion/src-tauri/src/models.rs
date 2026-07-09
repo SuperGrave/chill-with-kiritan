@@ -15,6 +15,8 @@ pub struct WallpaperState {
     pub weather: WeatherState,
     pub news: Vec<NewsItem>,
     #[serde(default)]
+    pub news_feeds: Vec<NewsFeedState>,
+    #[serde(default)]
     pub personal_news: PersonalNewsState,
     pub notifications: Vec<NotificationItem>,
     #[serde(default)]
@@ -42,6 +44,7 @@ impl Default for WallpaperState {
             spotify: SpotifyState::default(),
             weather: WeatherState::default(),
             news: vec![],
+            news_feeds: vec![],
             personal_news: PersonalNewsState::default(),
             notifications: vec![],
             timer: TimerState::default(),
@@ -847,6 +850,25 @@ pub struct NewsItem {
     pub url: String,
     pub published_at: Option<String>,
     pub summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewsFeedState {
+    pub feed_url: String,
+    pub source: String,
+    pub status: String, // "ok" | "empty" | "error"
+    #[serde(default)]
+    pub items: Vec<NewsItem>,
+    pub error: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewsFetch {
+    pub items: Vec<NewsItem>,
+    pub feeds: Vec<NewsFeedState>,
+    pub error: Option<String>,
 }
 
 // ─── Personal News script player ─────────────────────────────────────────────

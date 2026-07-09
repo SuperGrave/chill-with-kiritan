@@ -29,6 +29,10 @@ fn show_and_focus(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if startup::handle_cli_args() {
+        return;
+    }
+
     // Load persisted data; the shared state is owned by Tauri and cloned for
     // the HTTP server + background pollers.
     let shared: Shared = Arc::new(Mutex::new(AppState::load()));

@@ -6,8 +6,8 @@
 
 ## 現在の本流
 
-現在の開発本流は **v0.8.0**。以前 `v4` と呼んでいた積み上げを
-`v0.8.0` として扱い、今後の小さな更新は `v0.8.1`, `v0.8.2` のように
+現在の開発本流は **v0.8.1**。以前 `v4` と呼んでいた積み上げを
+`v0.8.0` として扱い、以後の小さな更新は `v0.8.1`, `v0.8.2` のように
 v0.8 系で進める。`v2` / `v3` など過去の版名はレガシー版としてそのまま残す。
 
 Companion の表示バージョンは `03_companion/src-tauri/Cargo.toml` の
@@ -52,16 +52,16 @@ http://localhost:5173/
 Wallpaper Engine 用のWeb壁紙フォルダ、zip、Companionインストーラをまとめて作る。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/package_release.ps1 -Version 0.8.0
+powershell -ExecutionPolicy Bypass -File tools/package_release.ps1 -Version 0.8.1
 ```
 
-出力先は `release/v0.8.0/`。このフォルダは生成物なのでGit管理しない。
-次の小更新は `-Version 0.8.1` のように指定する。
+出力先は `release/v0.8.1/`。このフォルダは生成物なのでGit管理しない。
+次の小更新は `-Version 0.8.2` のように指定する。
 
-- `release/v0.8.0/wallpaper-engine/Chill with Kiritan/`: Wallpaper Engineへ取り込むフォルダ
-- `release/v0.8.0/Chill-with-Kiritan-WallpaperEngine-v0.8.0.zip`: 共有用zip
-- `release/v0.8.0/companion/`: Companionのexe/installer
-- `release/v0.8.0/Chill-with-Kiritan-v0.8.0-release.zip`: まとめzip
+- `release/v0.8.1/wallpaper-engine/Chill with Kiritan/`: Wallpaper Engineへ取り込むフォルダ
+- `release/v0.8.1/Chill-with-Kiritan-WallpaperEngine-v0.8.1.zip`: 共有用zip
+- `release/v0.8.1/companion/`: Companionのexe/installer
+- `release/v0.8.1/Chill-with-Kiritan-v0.8.1-release.zip`: まとめzip
 
 配布用パッケージには `kiritan.vrm` と `.vrma` を入れない。自分のPCだけで使う場合は、
 Wallpaper Engineに取り込んだフォルダへ手元の `kiritan.vrm` を

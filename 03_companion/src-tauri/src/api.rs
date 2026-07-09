@@ -120,6 +120,7 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/settings", get(get_settings).put(put_settings))
         .route("/api/startup/status", get(startup_status))
         .route("/api/startup/repair", post(startup_repair))
+        .route("/api/startup/repair-elevated", post(startup_repair_elevated))
         .route("/api/secrets/status", get(secrets_status))
         .route("/api/secrets", put(put_secrets))
         // ── Memo ─────────────────────────────────────────────────────
@@ -133,6 +134,7 @@ pub fn build_router(shared: Shared) -> Router {
         )
         // ── News / Weather / Spotify ─────────────────────────────────
         .route("/api/news", get(get_news))
+        .route("/api/news/feeds", get(get_news_feeds))
         .route("/api/news/refresh", post(news_refresh))
         .route("/api/personal-news", get(get_personal_news))
         .route("/api/personal-news/reload", post(personal_news_reload))
@@ -290,6 +292,7 @@ async fn get_runtime_state(State(s): State<Shared>) -> Json<Value> {
     let personal_news = crate::personal_news::materialize_personal_news(&g.state.personal_news);
     Json(json!({
         "news": g.state.news.clone(),
+        "newsFeeds": g.state.news_feeds.clone(),
         "personalNews": personal_news,
         "spotify": g.state.spotify.clone(),
         "weather": g.state.weather.clone(),
@@ -806,6 +809,23 @@ async fn startup_repair(State(s): State<Shared>) -> Json<Value> {
     }
 }
 
+async fn startup_repair_elevated(State(s): State<Shared>) -> Json<Value> {
+    let config = s.lock().unwrap().state.settings.startup.clone();
+    match startup::request_elevated_registration(&config) {
+        Ok(()) => Json(json!({
+            "ok": true,
+            "launched": true,
+            "status": startup::status(&config),
+        })),
+        Err(e) => Json(json!({
+            "ok": false,
+            "launched": false,
+            "error": e.to_string(),
+            "status": startup::status(&config),
+        })),
+    }
+}
+
 async fn secrets_status(State(s): State<Shared>) -> Json<Value> {
     let g = s.lock().unwrap();
     let sec = &g.secrets;
@@ -962,17 +982,30 @@ async fn get_news(State(s): State<Shared>) -> Json<Vec<NewsItem>> {
     Json(s.lock().unwrap().state.news.clone())
 }
 
+async fn get_news_feeds(State(s): State<Shared>) -> Json<Vec<NewsFeedState>> {
+    Json(s.lock().unwrap().state.news_feeds.clone())
+}
+
 async fn news_refresh(State(s): State<Shared>) -> Json<Value> {
     let (cfg, http) = {
         let g = s.lock().unwrap();
         (g.state.settings.news.clone(), g.http.clone())
     };
     match services::fetch_news(&http, &cfg).await {
-        Ok(items) => {
+        Ok(fetch) => {
             let mut g = s.lock().unwrap();
-            g.state.news = items.clone();
+            if !fetch.items.is_empty() || fetch.error.is_none() {
+                g.state.news = fetch.items.clone();
+            }
+            g.state.news_feeds = fetch.feeds.clone();
             touch(&mut g);
-            Json(json!({ "ok": true, "count": items.len(), "news": items }))
+            Json(json!({
+                "ok": fetch.error.is_none(),
+                "count": g.state.news.len(),
+                "news": g.state.news.clone(),
+                "newsFeeds": g.state.news_feeds.clone(),
+                "error": fetch.error,
+            }))
         }
         Err(e) => Json(json!({ "ok": false, "error": e })),
     }

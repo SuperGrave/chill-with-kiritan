@@ -3,6 +3,7 @@ import "./App.css";
 import TabHome from "./tabs/TabHome";
 import TabMemo from "./tabs/TabMemo";
 import TabBookmark from "./tabs/TabBookmark";
+import TabNews from "./tabs/TabNews";
 import TabPersonalNews from "./tabs/TabPersonalNews";
 import TabSettings from "./tabs/TabSettings";
 import TabStatus from "./tabs/TabStatus";
@@ -14,13 +15,14 @@ import {
   StatusIcon,
 } from "./icons";
 
-type Tab = "home" | "memo" | "bookmark" | "personalNews" | "settings" | "status";
+type Tab = "home" | "memo" | "bookmark" | "news" | "personalNews" | "settings" | "status";
 
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: "home",     label: "ホーム",   icon: <HomeIcon /> },
   { id: "memo",     label: "メモ",     icon: <MemoIcon /> },
   { id: "bookmark", label: "リンク",   icon: <BookmarkIcon /> },
-  { id: "personalNews", label: "ニュース", icon: <BookmarkIcon /> },
+  { id: "news",     label: "RSS",      icon: <BookmarkIcon /> },
+  { id: "personalNews", label: "個人", icon: <BookmarkIcon /> },
   { id: "settings", label: "設定",     icon: <SettingsIcon /> },
   { id: "status",   label: "状態",     icon: <StatusIcon /> },
 ];
@@ -30,6 +32,7 @@ const PAGES: { id: Tab; fill?: boolean; node: ReactNode }[] = [
   { id: "home",     node: <TabHome /> },
   { id: "memo",     node: <TabMemo /> },
   { id: "bookmark", node: <TabBookmark /> },
+  { id: "news",     node: <TabNews /> },
   { id: "personalNews", node: <TabPersonalNews /> },
   { id: "settings", node: <TabSettings /> },
   { id: "status",   node: <TabStatus /> },

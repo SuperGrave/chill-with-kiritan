@@ -151,33 +151,83 @@ async fn fetch_weather_overview(
 
 // ─── News (RSS, no key) ──────────────────────────────────────────────────────
 
-pub async fn fetch_news(http: &reqwest::Client, cfg: &NewsConfig) -> Result<Vec<NewsItem>, String> {
+const MAX_NEWS_ITEMS_PER_FEED: usize = 30;
+
+pub async fn fetch_news(http: &reqwest::Client, cfg: &NewsConfig) -> Result<NewsFetch, String> {
     let mut items: Vec<NewsItem> = Vec::new();
-    let mut last_err: Option<String> = None;
+    let mut feeds: Vec<NewsFeedState> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
 
     for feed in &cfg.feeds {
+        let source = feed_source_label(feed);
+        let updated_at = Some(now_iso());
         match http.get(feed).send().await {
-            Ok(resp) => match resp.text().await {
-                Ok(body) => {
-                    let source = feed_source_label(feed);
-                    items.extend(parse_rss(&body, &source));
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let error = format!("rss {}", resp.status());
+                    errors.push(format!("{source}: {error}"));
+                    feeds.push(NewsFeedState {
+                        feed_url: feed.clone(),
+                        source,
+                        status: "error".to_string(),
+                        items: vec![],
+                        error: Some(error),
+                        updated_at,
+                    });
+                    continue;
                 }
-                Err(e) => last_err = Some(e.to_string()),
-            },
-            Err(e) => last_err = Some(e.to_string()),
-        }
-    }
-
-    if items.is_empty() {
-        if let Some(e) = last_err {
-            return Err(e);
+                match resp.text().await {
+                Ok(body) => {
+                    let mut feed_items = parse_rss(&body, &source);
+                    let status = if feed_items.is_empty() { "empty" } else { "ok" };
+                    feed_items.truncate(MAX_NEWS_ITEMS_PER_FEED);
+                    items.extend(feed_items.iter().cloned());
+                    feeds.push(NewsFeedState {
+                        feed_url: feed.clone(),
+                        source,
+                        status: status.to_string(),
+                        items: feed_items,
+                        error: None,
+                        updated_at,
+                    });
+                }
+                Err(e) => {
+                    let error = e.to_string();
+                    errors.push(format!("{source}: {error}"));
+                    feeds.push(NewsFeedState {
+                        feed_url: feed.clone(),
+                        source,
+                        status: "error".to_string(),
+                        items: vec![],
+                        error: Some(error),
+                        updated_at,
+                    });
+                }
+                }
+            }
+            Err(e) => {
+                let error = e.to_string();
+                errors.push(format!("{source}: {error}"));
+                feeds.push(NewsFeedState {
+                    feed_url: feed.clone(),
+                    source,
+                    status: "error".to_string(),
+                    items: vec![],
+                    error: Some(error),
+                    updated_at,
+                });
+            }
         }
     }
 
     // newest first by published_at string (RFC822/ISO both sort poorly as
     // strings, so keep feed order which is already newest-first for NHK).
     items.truncate(cfg.max_items.max(1));
-    Ok(items)
+    Ok(NewsFetch {
+        items,
+        feeds,
+        error: (!errors.is_empty()).then(|| errors.join("; ")),
+    })
 }
 
 fn feed_source_label(feed: &str) -> String {

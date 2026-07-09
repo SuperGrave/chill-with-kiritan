@@ -204,6 +204,37 @@ export default function TabSettings() {
     }
   };
 
+  const repairStartupElevated = async () => {
+    setRefreshStatus("自動起動設定を保存中…");
+    if (!(await save())) {
+      setRefreshStatus("管理者権限登録前の設定保存に失敗しました");
+      return;
+    }
+    setRefreshStatus("Windowsの管理者権限を要求しています…");
+    try {
+      const res = await api.startupRepairElevated();
+      setStartupStatus(res.status);
+      if (!res.ok) {
+        setRefreshStatus(`管理者権限登録を開始できませんでした: ${res.error ?? "UACを確認してください"}`);
+        return;
+      }
+      setRefreshStatus("UACを承認した場合は登録中です…");
+      window.setTimeout(async () => {
+        try {
+          const status = await api.startupStatus();
+          setStartupStatus(status.status);
+          setRefreshStatus(status.status.taskRegistered
+            ? "Task Schedulerへの登録を確認しました"
+            : "登録確認待ちです。UACをキャンセルした場合は未登録のままです");
+        } catch {
+          setRefreshStatus("登録後の状態確認に失敗しました");
+        }
+      }, 3500);
+    } catch {
+      setRefreshStatus("管理者権限登録の要求に失敗しました");
+    }
+  };
+
   const checkSpotify = async () => {
     setSpotifyCheck("設定を保存中…");
     if (!(await save())) {
@@ -341,7 +372,16 @@ export default function TabSettings() {
           <RefreshIcon />
           登録状態を確認
         </button>
-        <p className="hint">Wallpaper Engineを自動起動にしている場合でも、Companion側の情報取得APIを先に立ち上げます。最高権限の登録に失敗した場合は通常権限のタスクへフォールバックします。</p>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={settings.startup?.launchAtLogin !== true}
+          onClick={() => { void repairStartupElevated(); }}
+        >
+          <ServerIcon />
+          管理者権限で登録
+        </button>
+        <p className="hint">Wallpaper Engineを自動起動にしている場合でも、Companion側の情報取得APIを先に立ち上げます。通常保存で最高権限タスクを作れない場合はRun keyへフォールバックします。最高権限タスクにしたい時だけ「管理者権限で登録」を使います。</p>
       </div>
 
       <div className="settings-group">

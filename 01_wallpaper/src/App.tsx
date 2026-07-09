@@ -157,6 +157,11 @@ const transformEqual = (a: TransformEntry, b: TransformEntry): boolean =>
   a.rotation.every((v, i) => v === b.rotation[i]) &&
   a.scale.every((v, i) => v === b.scale[i]);
 
+const isIdentityTransform = (entry: TransformEntry): boolean =>
+  entry.position.every((v) => v === 0) &&
+  entry.rotation.every((v) => v === 0) &&
+  entry.scale.every((v) => v === 1);
+
 const objectLayoutTargets = ['character', 'desk', 'chair', 'laptop'] as const;
 const IDENTITY_TRANSFORM: TransformEntry = {
   position: [0, 0, 0],
@@ -195,7 +200,11 @@ function applyItemLayout(base: ItemTransforms, value: unknown): ItemTransforms {
   return changed ? next : base;
 }
 
-function normalizeTransformMap(defaults: Record<string, unknown>, value: unknown): Record<string, TransformEntry> {
+function normalizeTransformMap(
+  defaults: Record<string, unknown>,
+  value: unknown,
+  repairIdentityReset = false,
+): Record<string, TransformEntry> {
   const src = isRecord(value) ? value : {};
   const next: Record<string, TransformEntry> = {};
   for (const [id, fallbackRaw] of Object.entries(defaults)) {
@@ -205,6 +214,15 @@ function normalizeTransformMap(defaults: Record<string, unknown>, value: unknown
   for (const [id, raw] of Object.entries(src)) {
     if (next[id] || !isRecord(raw)) continue;
     next[id] = normalizeTransform(raw, IDENTITY_TRANSFORM);
+  }
+  if (repairIdentityReset) {
+    const defaultIds = Object.keys(defaults);
+    const looksReset =
+      defaultIds.length > 0 &&
+      defaultIds.every((id) => isIdentityTransform(next[id]));
+    if (looksReset) {
+      return normalizeTransformMap(defaults, defaults, false);
+    }
   }
   return next;
 }
@@ -243,8 +261,8 @@ function normalizeWallpaperSettings(value: unknown): WallpaperSettings {
     cameraYaw: cameraLooksReset ? defaults.cameraYaw : camera.yaw,
     cameraPitch: cameraLooksReset ? defaults.cameraPitch : camera.pitch,
     cameraRoll: cameraLooksReset ? defaults.cameraRoll : camera.roll,
-    objectLayout: normalizeTransformMap(defaults.objectLayout, raw.objectLayout ?? defaults.objectLayout) as unknown as WallpaperSettings['objectLayout'],
-    itemLayout: normalizeTransformMap(defaults.itemLayout, raw.itemLayout ?? defaults.itemLayout) as unknown as WallpaperSettings['itemLayout'],
+    objectLayout: normalizeTransformMap(defaults.objectLayout, raw.objectLayout ?? defaults.objectLayout, true) as unknown as WallpaperSettings['objectLayout'],
+    itemLayout: normalizeTransformMap(defaults.itemLayout, raw.itemLayout ?? defaults.itemLayout, true) as unknown as WallpaperSettings['itemLayout'],
   };
 }
 

@@ -3,7 +3,7 @@
 ## Current Mainline
 
 The active development line started at **v0.8.0**. The current mainline build is
-**v0.8.1**.
+**v0.8.2**.
 
 What used to be called `v4` is now treated as `v0.8.0`. Older folders and notes
 named `v2` or `v3` remain legacy releases and do not need to be renamed.

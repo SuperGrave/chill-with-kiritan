@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BookmarkIcon, RefreshIcon } from "../icons";
+import {
+  BookmarkIcon,
+  NextIcon,
+  PauseIcon,
+  PlayIcon,
+  PrevIcon,
+  RefreshIcon,
+  RepeatIcon,
+  StopIcon,
+} from "../icons";
+import { IconButton } from "../controls";
 import { api, type PersonalNewsState, type PersonalNewsSupplement } from "../api";
 
 const formatMs = (ms: number) => {
@@ -149,6 +159,17 @@ export default function TabPersonalNews() {
   }, [script, state]);
   const supplements = useMemo(() => supplementsFor(state), [state]);
   const supplement = useMemo(() => currentSupplement(state, supplements), [state, supplements]);
+  // Defensive dedup: older backends could list the same script id twice when a
+  // scripts folder resolved via multiple search paths. Keep the first of each id
+  // so the <option> keys stay unique even before the backend is rebuilt.
+  const uniqueScripts = useMemo(() => {
+    const seen = new Set<string>();
+    return (state?.scripts ?? []).filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [state?.scripts]);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -196,10 +217,10 @@ export default function TabPersonalNews() {
           <select
             value={state?.selectedScriptId ?? ""}
             onChange={(e) => { void selectScript(e.target.value); }}
-            disabled={busy || !state?.scripts.length}
+            disabled={busy || uniqueScripts.length === 0}
           >
             <option value="">未選択</option>
-            {state?.scripts.map((item) => (
+            {uniqueScripts.map((item) => (
               <option key={item.id} value={item.id}>{item.title}</option>
             ))}
           </select>
@@ -225,27 +246,26 @@ export default function TabPersonalNews() {
         </div>
       </div>
 
-      <div className="personal-news-controls">
-        <button type="button" className="secondary-btn" disabled={busy} onClick={() => control("restart")}>最初から</button>
-        <button type="button" className="secondary-btn" disabled={busy} onClick={() => control("previousChapter")}>前章</button>
-        <button type="button" className="primary-btn" disabled={busy} onClick={() => control("toggle")}>{playing ? "一時停止" : "再生"}</button>
-        <button type="button" className="secondary-btn" disabled={busy} onClick={() => control("nextChapter")}>次章</button>
-        <button type="button" className="secondary-btn" disabled={busy} onClick={() => control("stop")}>停止</button>
+      <div className="pn-transport">
+        <IconButton label="最初から" icon={<RefreshIcon />} disabled={busy} onClick={() => control("restart")} />
+        <IconButton label="前の章" icon={<PrevIcon />} disabled={busy} onClick={() => control("previousChapter")} />
+        <IconButton
+          size="lg"
+          label={playing ? "一時停止" : "再生"}
+          icon={playing ? <PauseIcon /> : <PlayIcon />}
+          disabled={busy}
+          onClick={() => control("toggle")}
+        />
+        <IconButton label="次の章" icon={<NextIcon />} disabled={busy} onClick={() => control("nextChapter")} />
+        <IconButton label="停止" icon={<StopIcon />} disabled={busy} onClick={() => control("stop")} />
+        <IconButton
+          label={state?.loopEnabled ? "リピート ON" : "リピート OFF"}
+          icon={<RepeatIcon />}
+          active={state?.loopEnabled ?? false}
+          disabled={busy}
+          onClick={() => control("setLoop", !(state?.loopEnabled ?? false))}
+        />
       </div>
-
-      <button
-        type="button"
-        className={`home-toggle ${state?.loopEnabled ? "active" : ""}`}
-        onClick={() => control("setLoop", !(state?.loopEnabled ?? false))}
-        onDoubleClick={(e) => e.preventDefault()}
-      >
-        <span className="home-toggle-icon"><RefreshIcon /></span>
-        <span className="home-toggle-text">
-          <strong>リピート</strong>
-          <small>最後まで行ったら最初に戻る</small>
-        </span>
-        <span className={`pill ${state?.loopEnabled ? "ok" : "warn"}`}>{state?.loopEnabled ? "ON" : "OFF"}</span>
-      </button>
 
       {script && script.chapters.length > 0 && (
         <div className="settings-group">

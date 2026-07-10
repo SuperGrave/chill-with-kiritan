@@ -273,6 +273,16 @@ export const api = {
   secretsStatus: () => req<SecretsStatus>("/secrets/status"),
   putSecrets: (secrets: Record<string, string>) => put("/secrets", secrets),
 
+  // Wallpaper-reported kiritan runtime state (null until the wallpaper posts).
+  kiritanState: () => req<{ receivedAt?: string } | null>("/kiritan/state"),
+
+  // Data folder / backup
+  dataDir: () => req<{ ok: boolean; path: string }>("/data-dir"),
+  exportBackup: (includeSecrets: boolean) =>
+    post<{ ok: boolean; path?: string; fileName?: string; error?: string }>("/backup/export", { includeSecrets }),
+  importBackup: (bundle: unknown) =>
+    post<{ ok: boolean; applied?: string[]; error?: string }>("/backup/import", bundle),
+
   memos: () => req<Memo[]>("/memos"),
   addMemo: (text: string) => post("/memos", { text }),
   updateMemo: (id: string, patchBody: Partial<Memo>) => patch(`/memos/${id}`, patchBody),

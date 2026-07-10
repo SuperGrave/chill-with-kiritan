@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckIcon, PlusIcon, RefreshIcon, XIcon } from "../icons";
-import { api, type BackgroundMediaItem, type BackgroundUploadKind, type UiPreset, type UiState } from "../api";
+import {
+  AvatarIcon,
+  CameraIcon,
+  CheckIcon,
+  GearIcon,
+  ImageIcon,
+  LayoutIcon,
+  MotionIcon,
+  PlusIcon,
+  RefreshIcon,
+  VideoIcon,
+  XIcon,
+} from "../icons";
+import { API_BASE, api, type BackgroundMediaItem, type BackgroundUploadKind, type UiPreset, type UiState } from "../api";
+import { InfoHint } from "../controls";
 import { overlayLayout as defaultLayout } from "../../../02_ui-overlay/src/config/layout";
 import {
   lyricsPanelDefaults,
@@ -88,6 +101,17 @@ const objectPlacementLabels: Array<{ bucket: "objectLayout" | "itemLayout"; id: 
   { bucket: "itemLayout", id: "item:cup", label: "カップ" },
 ];
 
+// STUDIO 左ペインの対象一覧。1つ選ぶと右のエディタにその対象だけを出す。
+type StudioObj = "kiritan" | "bg" | "layout" | "camera" | "motion" | "system";
+const STUDIO_OBJECTS: { id: StudioObj; label: string; icon: ReactNode }[] = [
+  { id: "kiritan", label: "きりたん", icon: <AvatarIcon /> },
+  { id: "bg", label: "背景", icon: <ImageIcon /> },
+  { id: "layout", label: "レイアウト", icon: <LayoutIcon /> },
+  { id: "camera", label: "カメラ", icon: <CameraIcon /> },
+  { id: "motion", label: "モーション", icon: <MotionIcon /> },
+  { id: "system", label: "システム", icon: <GearIcon /> },
+];
+
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
 function isObject(v: unknown): v is JsonMap {
@@ -152,6 +176,13 @@ function normalizeBackgroundOverlays(value: unknown): BackgroundOverlayItem[] {
       fit: item.fit === "contain" ? "contain" : "cover",
     }];
   });
+}
+
+// Companion runs on the Vite/Tauri origin, so server-relative media paths
+// (/api/backgrounds/…) must be resolved against the Companion API origin.
+const API_ORIGIN = API_BASE.replace(/\/api$/, "");
+function resolveMediaUrl(url: string): string {
+  return url.startsWith("/") ? `${API_ORIGIN}${url}` : url;
 }
 
 function backgroundKindForFile(file: File): Exclude<BackgroundUploadKind, "overlay"> {
@@ -301,8 +332,14 @@ function DisplaySection({ title, children, open = false }: { title: string; chil
   );
 }
 
+const VRM_STALE_MS = 90_000;
+
 export default function TabDisplay({ embedded = false }: { embedded?: boolean }) {
   const [ui, setUi] = useState<UiState | null>(null);
+  const [studioObj, setStudioObj] = useState<StudioObj>("kiritan");
+  // Wallpaper reports kiritan state only while a VRM is loaded, so a stale/missing
+  // report means camera/placement edits won't visibly apply until the next sync.
+  const [kiritanReceivedAt, setKiritanReceivedAt] = useState<string | null>(null);
   const [presets, setPresets] = useState<UiPreset[]>([]);
   const initial = defaultsWith(null);
   const [draftLayout, setDraftLayout] = useState<JsonMap>(initial.layout);
@@ -343,6 +380,12 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
       setError(null);
     } catch {
       setError("APIに接続できませんでした（Companion が起動しているか確認）");
+    }
+    try {
+      const k = await api.kiritanState();
+      setKiritanReceivedAt(k?.receivedAt ?? null);
+    } catch {
+      // VRM badge stays in its last state if the poll misses once.
     }
   };
 
@@ -462,6 +505,12 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
     setSettingValue("wallpaper", "backgroundOverlays", overlays);
   };
 
+  const removeBackgroundQueueItem = (index: number) => {
+    const queue = normalizeBackgroundQueue(draftSettings.wallpaper?.backgroundQueue);
+    queue.splice(index, 1);
+    setSettingValue("wallpaper", "backgroundQueue", queue);
+  };
+
   const setBaseResolution = (value: string) => {
     const [width, height] = parseResolution(value);
     setDraftSettings((prev) => ({ ...prev, baseResolution: value }));
@@ -522,6 +571,67 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
 
   const [canvasW, canvasH] = parseResolution(draftSettings.baseResolution ?? "1920x1080");
   const hasLiveUi = ui && ui.settings && Object.keys(ui.settings).length > 0;
+  const kiritanMs = kiritanReceivedAt ? Date.parse(kiritanReceivedAt) : NaN;
+  const vrmLive = Number.isFinite(kiritanMs) && Date.now() - kiritanMs <= VRM_STALE_MS;
+  const vrmBadge = (
+    <span
+      className={`pill ${vrmLive ? "ok" : "warn"}`}
+      title={vrmLive
+        ? "壁紙がきりたんの状態を報告しています。カメラ・配置の調整が見た目に反映されます。"
+        : "壁紙からきりたんの状態が届いていません。Wallpaper Engine 側で models/kiritan.vrm が読み込まれているか確認してください。届くまでカメラ・配置の変更は見た目に反映されません（設定自体は保存されます）。"}
+    >
+      {vrmLive ? "VRM 読込済" : "VRM 未報告"}
+    </span>
+  );
+
+  // どのパネルを触っているか掴むための目安プレビュー。draft値でライブ更新される。
+  const layoutPreviewPanels: { section: string; label: string }[] = [
+    { section: "clock", label: "時計" },
+    { section: "weatherCompact", label: "天気" },
+    { section: "newsPanel", label: "ニュース" },
+    { section: "musicPanel", label: "音楽" },
+    { section: "lyricsPanel", label: "歌詞" },
+    { section: "personalNewsPanel", label: "個人" },
+    { section: "memoPanel", label: "メモ" },
+    { section: "timerPanel", label: "タイマー" },
+  ];
+  const previewPanelVisible = (section: string): boolean => {
+    const s = draftSettings[section] ?? {};
+    if (section === "clock") return s.showClock !== false;
+    if (section === "weatherCompact") return s.showCompactWeather !== false;
+    return s.show !== false;
+  };
+  const layoutPreview = (
+    <div
+      className="layout-preview"
+      style={{ aspectRatio: `${canvasW} / ${canvasH}` }}
+      aria-label={`レイアウトプレビュー ${canvasW}x${canvasH}`}
+    >
+      {layoutPreviewPanels.map((p) => {
+        const rect = draftLayout[p.section] ?? {};
+        const x = Number(rect.x ?? 0);
+        const y = Number(rect.y ?? 0);
+        const w = Number(rect.width ?? 300);
+        const h = Number(rect.height ?? 140);
+        const visible = previewPanelVisible(p.section);
+        return (
+          <span
+            key={p.section}
+            className={`layout-preview-panel ${visible ? "" : "hidden"}`}
+            style={{
+              left: `${(x / canvasW) * 100}%`,
+              top: `${(y / canvasH) * 100}%`,
+              width: `${(w / canvasW) * 100}%`,
+              height: `${(h / canvasH) * 100}%`,
+            }}
+            title={`${p.label} ${visible ? "" : "(非表示)"} x:${x} y:${y} w:${w} h:${h}`}
+          >
+            {p.label}
+          </span>
+        );
+      })}
+    </div>
+  );
   const syncLabel = saving === "saving" ? "自動反映中..." : saving === "saved" ? "反映済み" : dirty ? "反映待ち" : "反映済み";
 
   useEffect(() => {
@@ -717,6 +827,7 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
       <header className="panel-head">
         <h2>表示設定</h2>
         <span className="panel-sub">位置・サイズは変更すると自動で反映</span>
+        <InfoHint text="スライダーを動かすとCompanionへ自動保存され、壁紙側が短い間隔で取り込みます。プリセットの保存・上書きは、いまこの画面で編集中の内容を使います。" />
       </header>
 
       {!hasLiveUi && (
@@ -738,10 +849,6 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
           再読込
         </button>
         <button className="secondary-btn" onClick={resetDraft}>既定値</button>
-      </div>
-
-      <div className="display-save-state">
-        <span className="hint">スライダーを動かすとCompanionへ自動保存され、壁紙側が短い間隔で取り込みます。プリセット保存/上書きは、現在この画面で編集中の内容を使います。</span>
       </div>
 
       <form className="add-row" onSubmit={(e) => { e.preventDefault(); saveCurrent(); }}>
@@ -791,8 +898,25 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
         </ul>
       )}
 
-      <div className="display-editor">
-        <DisplaySection title="3Dモデル・背景設定" open>
+      <div className="studio">
+        <div className="studio-objlist">
+          {STUDIO_OBJECTS.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className={`studio-obj ${studioObj === o.id ? "active" : ""}`}
+              onClick={() => setStudioObj(o.id)}
+              aria-pressed={studioObj === o.id}
+            >
+              {o.icon}
+              <span>{o.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="studio-editor">
+        {studioObj === "kiritan" && (
+        <div className="display-editor">
+          <div className="studio-ed-head">{vrmBadge}</div>
           <div className="control-grid">
             <CheckControl label="3Dモデルを表示" checked={wallpaper.modelVisible !== false} onChange={(v) => setSettingValue("wallpaper", "modelVisible", v)} />
             <NumberControl label="3D明るさ" value={wallpaper.modelLightScale ?? 1} min={0} max={3} step={0.05} onChange={(v) => setSettingValue("wallpaper", "modelLightScale", v)} />
@@ -811,8 +935,11 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
               {objectPlacementLabels.map((item) => renderTransformControls(item.bucket, item.id, item.label))}
             </div>
           </DisplaySection>
-
-          <div className="settings-divider" />
+        </div>
+        )}
+        {studioObj === "camera" && (
+        <div className="display-editor">
+          <div className="studio-ed-head">{vrmBadge}</div>
           <div className="control-grid">
             <CheckControl label="Companionからカメラを調整" checked={wallpaper.cameraAdjustmentEnabled === true} onChange={(v) => setSettingValue("wallpaper", "cameraAdjustmentEnabled", v)} />
             <button type="button" className="secondary-btn" onClick={() => patchSettingSection("wallpaper", { cameraX: 0, cameraY: 0, cameraZ: 0, cameraYaw: 0, cameraPitch: 0, cameraRoll: 0 })}>
@@ -855,8 +982,10 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
             </div>
           </div>
           <p className="hint">0がidealカメラそのものです。カメラを細かくずらしたい時だけオンにして、いつものカメラからの差分として調整してください。</p>
-
-          <div className="settings-divider" />
+        </div>
+        )}
+        {studioObj === "bg" && (
+        <div className="display-editor">
           <div className="control-grid">
             <CheckControl label="背景画像" checked={wallpaper.backgroundImageEnabled !== false} onChange={(v) => setSettingValue("wallpaper", "backgroundImageEnabled", v)} />
             <SelectControl
@@ -921,6 +1050,33 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
           </div>
           <p className="hint">背景ファイルはCompanion内の backgrounds フォルダへ保存し、設定には軽いURLだけを残します。動画モードでは動画終了ごとに次へ進めて最後から先頭へ戻します。現在のキュー: {backgroundQueue.length}件（画像 {backgroundQueue.filter((item) => item.type === "image").length} / 動画 {backgroundQueue.filter((item) => item.type === "video").length}）、オーバーレイ: {backgroundOverlays.length}件。</p>
 
+          {backgroundQueue.length > 0 && (
+            <div className="bg-thumbs">
+              {backgroundQueue.map((item, index) => (
+                <div
+                  className="bg-thumb"
+                  key={`${item.url}:${index}`}
+                  title={item.name ?? item.fileName ?? item.url}
+                >
+                  {item.type === "image" ? (
+                    <img src={resolveMediaUrl(item.url)} alt={item.name ?? `背景 ${index + 1}`} loading="lazy" />
+                  ) : (
+                    <span className="bg-thumb-video"><VideoIcon /></span>
+                  )}
+                  <span className="bg-thumb-tag">{item.type === "image" ? "IMG" : "MOV"}</span>
+                  <button
+                    type="button"
+                    className="bg-thumb-remove"
+                    aria-label={`${item.name ?? `背景 ${index + 1}`} をキューから削除`}
+                    onClick={() => removeBackgroundQueueItem(index)}
+                  >
+                    <XIcon />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {backgroundOverlays.length > 0 && (
             <div className="background-overlay-list">
               {backgroundOverlays.map((overlay, index) => (
@@ -959,8 +1115,10 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
               ))}
             </div>
           )}
-
-          <div className="settings-divider" />
+        </div>
+        )}
+        {studioObj === "motion" && (
+        <div className="display-editor">
           <div className="control-grid">
             <SelectControl
               label="きりたんの動き方"
@@ -1035,9 +1193,11 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
               ))}
             </div>
           </DisplaySection>
-        </DisplaySection>
-
+        </div>
+        )}
+        {studioObj === "layout" && (
         <DisplaySection title="情報表示部設定" open>
+          {layoutPreview}
           <div className="display-editor">
             <DisplaySection title="時計 / 左上情報" open>
               <div className="control-grid">
@@ -1261,7 +1421,8 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
             </DisplaySection>
           </div>
         </DisplaySection>
-
+        )}
+        {studioObj === "system" && (
         <DisplaySection title="システム設定" open>
           <div className="control-grid">
             <CheckControl label="デバッグ枠" checked={draftSettings.debugMode === true} onChange={(v) => setRootSetting("debugMode", v)} />
@@ -1269,6 +1430,8 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
             <NumberControl label="FPS制限" value={overlay.fpsLimit ?? 30} min={15} max={60} step={1} onChange={(v) => setSettingValue("overlay", "fpsLimit", v)} />
           </div>
         </DisplaySection>
+        )}
+        </div>
       </div>
     </section>
   );

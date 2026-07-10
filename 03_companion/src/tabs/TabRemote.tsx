@@ -1,0 +1,181 @@
+import { useEffect, useState, type ReactNode } from "react";
+import { api, type TimerState, type UiState } from "../api";
+import { Button, Card, IconButton, ToggleTile } from "../controls";
+import {
+  BroadcastIcon,
+  ClockIcon,
+  CloudIcon,
+  LyricsIcon,
+  MemoIcon,
+  MusicIcon,
+  NextIcon,
+  PauseIcon,
+  PlayIcon,
+  RefreshIcon,
+  RssIcon,
+  TimerIcon,
+} from "../icons";
+import { uiSettings as defaultSettings } from "../../../02_ui-overlay/src/config/uiSettings";
+
+type PanelSwitch = { section: string; keyName: string; label: string; icon: ReactNode };
+
+const PANELS: PanelSwitch[] = [
+  { section: "clock", keyName: "showClock", label: "時計", icon: <ClockIcon /> },
+  { section: "weatherCompact", keyName: "showCompactWeather", label: "天気", icon: <CloudIcon /> },
+  { section: "newsPanel", keyName: "show", label: "ニュース", icon: <RssIcon /> },
+  { section: "musicPanel", keyName: "show", label: "音楽", icon: <MusicIcon /> },
+  { section: "lyricsPanel", keyName: "show", label: "歌詞", icon: <LyricsIcon /> },
+  { section: "personalNewsPanel", keyName: "show", label: "個人ニュース", icon: <BroadcastIcon /> },
+  { section: "memoPanel", keyName: "show", label: "メモ", icon: <MemoIcon /> },
+  { section: "timerPanel", keyName: "show", label: "タイマー", icon: <TimerIcon /> },
+];
+
+const formatClock = (ms: number) => {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+};
+
+function timerTitle(timer: TimerState | null, s: any): string {
+  if (!timer) return "Pomodoro";
+  if (timer.mode === "timer") return s.timerTitle ?? "Countdown";
+  if (timer.phase === "shortBreak") return s.shortBreakTitle ?? "Rest";
+  if (timer.phase === "longBreak") return s.longBreakTitle ?? "Long Rest";
+  return s.focusTitle ?? "Pomodoro";
+}
+
+function timerLabel(timer: TimerState | null, s: any): string {
+  if (!timer) return "IDLE";
+  if (timer.mode === "timer") return s.timerLabel ?? "TIMER";
+  if (timer.phase === "shortBreak") return s.shortBreakLabel ?? "BREAK";
+  if (timer.phase === "longBreak") return s.longBreakLabel ?? "LONG BREAK";
+  return s.focusLabel ?? "FOCUS";
+}
+
+export default function TabRemote() {
+  const [ui, setUi] = useState<UiState | null>(null);
+  const [timer, setTimer] = useState<TimerState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState("");
+
+  const load = async () => {
+    try {
+      const [next, state] = await Promise.all([api.getUi(), api.timer().catch(() => null)]);
+      setUi(next);
+      if (state) setTimer(state);
+      setError(null);
+    } catch {
+      setError("表示設定APIに接続できませんでした");
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const id = window.setInterval(async () => {
+      try {
+        setTimer(await api.timer());
+      } catch {
+        // Toggles stay usable even if a timer poll misses.
+      }
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const settings: any = { ...defaultSettings, ...(ui?.settings ?? {}) };
+  const timerSettings = settings.timerPanel ?? {};
+  const timerRunning = timer?.status === "running";
+
+  const togglePanel = async (item: PanelSwitch) => {
+    const section = { ...(settings[item.section] ?? {}) };
+    const visible = section[item.keyName] !== false;
+    const nextSettings = { ...settings, [item.section]: { ...section, [item.keyName]: !visible } };
+    try {
+      const nextUi = (await api.putUi(ui?.layout ?? {}, nextSettings)) as UiState;
+      setUi(nextUi);
+    } catch {
+      setError("壁紙への反映に失敗しました");
+    }
+  };
+
+  const controlTimer = async (action: "toggle" | "reset" | "next") => {
+    try {
+      const result = (await api.timerControl(action)) as { timer?: TimerState };
+      if (result.timer) setTimer(result.timer);
+    } catch {
+      setStatus("タイマー操作に失敗しました");
+    }
+  };
+
+  const refresh = async (kind: "weather" | "news" | "all") => {
+    setStatus(kind === "all" ? "全データを更新中…" : kind === "weather" ? "天気を更新中…" : "ニュースを更新中…");
+    try {
+      if (kind === "all") {
+        await Promise.allSettled([api.newsRefresh(), api.weatherRefresh(), api.spotifyRefresh()]);
+      } else if (kind === "weather") {
+        await api.weatherRefresh();
+      } else {
+        await api.newsRefresh();
+      }
+      setStatus("更新しました");
+    } catch {
+      setStatus("更新に失敗しました");
+    }
+  };
+
+  const cycleLabel =
+    timer && timer.mode !== "timer" ? ` · SET ${String(Math.max(1, timer.cycle)).padStart(2, "0")}` : "";
+
+  return (
+    <section className="tab-panel">
+      {error && <p className="error-banner">⚠ {error}</p>}
+
+      <div className="sec-label">パネル表示</div>
+      <div className="remote-tiles">
+        {PANELS.map((item) => {
+          const section = settings[item.section] ?? {};
+          const on = section[item.keyName] !== false;
+          return (
+            <ToggleTile
+              key={`${item.section}.${item.keyName}`}
+              icon={item.icon}
+              name={item.label}
+              on={on}
+              onClick={() => { void togglePanel(item); }}
+            />
+          );
+        })}
+      </div>
+
+      <div className="remote-two">
+        <Card className="remote-timer">
+          <div className="remote-timer-meta">
+            <span className="eyebrow">{timerLabel(timer, timerSettings)}{cycleLabel}</span>
+            <strong>{timerTitle(timer, timerSettings)}</strong>
+          </div>
+          <div className="remote-readout">{formatClock(timer?.remainingMs ?? 0)}</div>
+          <div className="remote-transport">
+            <IconButton
+              size="lg"
+              label={timerRunning ? "一時停止" : "開始"}
+              icon={timerRunning ? <PauseIcon /> : <PlayIcon />}
+              onClick={() => { void controlTimer("toggle"); }}
+            />
+            <IconButton label="リセット" icon={<RefreshIcon />} onClick={() => { void controlTimer("reset"); }} />
+            <IconButton label="次へ" icon={<NextIcon />} onClick={() => { void controlTimer("next"); }} />
+          </div>
+        </Card>
+
+        <Card className="remote-refresh">
+          <span className="eyebrow">いま更新</span>
+          <div className="remote-refresh-btns">
+            <Button onClick={() => { void refresh("weather"); }}><CloudIcon />天気</Button>
+            <Button onClick={() => { void refresh("news"); }}><RssIcon />ニュース</Button>
+            <Button onClick={() => { void refresh("all"); }}><RefreshIcon />全部</Button>
+          </div>
+          {status && <p className="remote-status">{status}</p>}
+        </Card>
+      </div>
+    </section>
+  );
+}

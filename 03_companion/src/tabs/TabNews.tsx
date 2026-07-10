@@ -88,6 +88,7 @@ export default function TabNews() {
         RSSを再取得
       </button>
 
+      <div className="rss-2pane">
       <div className="news-feed-list">
         {feeds.map((feed) => (
           <button
@@ -135,6 +136,7 @@ export default function TabNews() {
           </div>
         </div>
       )}
+      </div>
     </section>
   );
 }

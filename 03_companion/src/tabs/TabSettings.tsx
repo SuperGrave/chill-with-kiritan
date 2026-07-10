@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { CheckIcon, CloudIcon, MusicIcon, RefreshIcon, ServerIcon } from "../icons";
+import { useEffect, useRef, useState } from "react";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
+import { CheckIcon, CloudIcon, ExportIcon, FolderIcon, ImportIcon, MusicIcon, RefreshIcon, ServerIcon } from "../icons";
 import { api, type AppSettings, type SecretsStatus, type StartupStatus } from "../api";
+import { InfoHint } from "../controls";
 import TabDisplay from "./TabDisplay";
 
 type WeatherPreset = {
@@ -131,7 +132,7 @@ const withPresetJmaOffice = (settings: AppSettings): AppSettings => {
   };
 };
 
-export default function TabSettings() {
+export default function TabSettings({ showDisplay = true }: { showDisplay?: boolean }) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [secStatus, setSecStatus] = useState<SecretsStatus | null>(null);
   const [startupStatus, setStartupStatus] = useState<StartupStatus | null>(null);
@@ -144,6 +145,12 @@ export default function TabSettings() {
   const [error, setError] = useState<string | null>(null);
   const [spotifyCheck, setSpotifyCheck] = useState<string>("");
   const [refreshStatus, setRefreshStatus] = useState<string>("");
+
+  // Backup / restore
+  const [includeSecrets, setIncludeSecrets] = useState(false);
+  const [backupStatus, setBackupStatus] = useState("");
+  const [lastBackup, setLastBackup] = useState<string | null>(() => localStorage.getItem("kw-last-backup"));
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => setError("APIに接続できませんでした"));
@@ -314,13 +321,65 @@ export default function TabSettings() {
     }
   };
 
+  const runExport = async () => {
+    setBackupStatus("書き出し中…");
+    try {
+      const res = await api.exportBackup(includeSecrets);
+      if (res.ok) {
+        const stamp = new Date().toLocaleString("ja-JP");
+        localStorage.setItem("kw-last-backup", stamp);
+        setLastBackup(stamp);
+        setBackupStatus(`書き出しました: ${res.fileName ?? "backups フォルダ"}`);
+      } else {
+        setBackupStatus(`書き出しに失敗: ${res.error ?? "Companion APIを確認してください"}`);
+      }
+    } catch {
+      setBackupStatus("書き出しに失敗しました（Companion APIを確認）");
+    }
+  };
+
+  const runImport = async (file: File | undefined) => {
+    if (!file) return;
+    setBackupStatus("読み込み中…");
+    try {
+      const bundle = JSON.parse(await file.text());
+      const res = await api.importBackup(bundle);
+      if (res.ok) {
+        setBackupStatus(`読み込みました（${(res.applied ?? []).join(" / ") || "0件"}）。Companion と壁紙を再読込すると確実に反映されます`);
+        api.getSettings().then(setSettings).catch(() => {});
+        api.secretsStatus().then(setSecStatus).catch(() => {});
+      } else {
+        setBackupStatus(`読み込みに失敗: ${res.error ?? "ファイル形式を確認してください"}`);
+      }
+    } catch {
+      setBackupStatus("読み込みに失敗しました（JSONファイルを確認）");
+    }
+  };
+
+  const openDataFolder = async () => {
+    try {
+      const res = await api.dataDir();
+      if (res.ok && res.path) {
+        await openPath(res.path);
+      } else {
+        setBackupStatus("データフォルダの場所を取得できませんでした");
+      }
+    } catch {
+      setBackupStatus("フォルダを開けませんでした");
+    }
+  };
+
   if (!settings) {
     return (
       <section className="tab-panel">
         <header className="panel-head"><h2>設定</h2></header>
         {error ? <p className="error-banner">⚠ {error}</p> : <p className="note">読み込み中…</p>}
-        <div className="settings-divider" />
-        <TabDisplay embedded />
+        {showDisplay && (
+          <>
+            <div className="settings-divider" />
+            <TabDisplay embedded />
+          </>
+        )}
       </section>
     );
   }
@@ -346,6 +405,7 @@ export default function TabSettings() {
         <div className="group-head">
           <span className="group-icon"><ServerIcon /></span>
           <h3>起動</h3>
+          <InfoHint text="Wallpaper Engineを自動起動にしている場合でも、Companion側の情報取得APIを先に立ち上げます。通常保存で最高権限タスクを作れない場合はRun keyへフォールバックします。最高権限タスクにしたい時だけ「管理者権限で登録」を使ってください。" />
         </div>
         <label className="display-check">
           <span>Windowsを起動したときにCompanionも起動する</span>
@@ -381,13 +441,13 @@ export default function TabSettings() {
           <ServerIcon />
           管理者権限で登録
         </button>
-        <p className="hint">Wallpaper Engineを自動起動にしている場合でも、Companion側の情報取得APIを先に立ち上げます。通常保存で最高権限タスクを作れない場合はRun keyへフォールバックします。最高権限タスクにしたい時だけ「管理者権限で登録」を使います。</p>
       </div>
 
       <div className="settings-group">
         <div className="group-head">
           <span className="group-icon"><MusicIcon /></span>
           <h3>Spotify</h3>
+          <InfoHint text="user-read-currently-playing スコープの refresh_token を取得して貼り付けてください。認証情報は Companion 内のローカルファイルにのみ保存され、壁紙側へは送信されません。" />
         </div>
         <label className="field">
           <span>Client ID</span>
@@ -404,7 +464,6 @@ export default function TabSettings() {
           <input type="password" className="mono" value={spotifyRefresh}
             onChange={(e) => setSpotifyRefresh(e.target.value)} placeholder="(変更時のみ入力)" />
         </label>
-        <p className="hint">user-read-currently-playing スコープの refresh_token を取得して貼り付け</p>
         <button type="button" className="secondary-btn" onClick={connectSpotify}>Spotify認証を開く</button>
         <button type="button" className="secondary-btn" onClick={checkSpotify}>Spotify接続確認</button>
         {spotifyCheck && <p className="hint">{spotifyCheck}</p>}
@@ -472,6 +531,44 @@ export default function TabSettings() {
         </button>
       </div>
 
+      <div className="settings-group">
+        <div className="group-head">
+          <span className="group-icon"><FolderIcon /></span>
+          <h3>データ / バックアップ</h3>
+        </div>
+        <div className="backup-actions">
+          <button type="button" className="secondary-btn" onClick={runExport}>
+            <ExportIcon />
+            書き出し
+          </button>
+          <button type="button" className="secondary-btn" onClick={() => importInputRef.current?.click()}>
+            <ImportIcon />
+            読み込み
+          </button>
+          <button type="button" className="secondary-btn" onClick={openDataFolder}>
+            <FolderIcon />
+            フォルダを開く
+          </button>
+        </div>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => { void runImport(e.target.files?.[0]); e.currentTarget.value = ""; }}
+        />
+        <label className="display-check">
+          <span>APIキーも含める（機微情報・共有時は注意）</span>
+          <input type="checkbox" checked={includeSecrets} onChange={(e) => setIncludeSecrets(e.target.checked)} />
+        </label>
+        <p className="hint">
+          設定・プリセット・メモ・リンクを Companion の backups フォルダに書き出します。
+          {lastBackup ? ` 最終バックアップ: ${lastBackup}。` : " まだバックアップしていません。"}
+          読み込むと現在のデータを .bak に退避してから置き換えます。
+        </p>
+        {backupStatus && <p className="hint">{backupStatus}</p>}
+      </div>
+
       {error && <p className="error-banner">⚠ {error}</p>}
       {refreshStatus && <p className="hint">{refreshStatus}</p>}
 
@@ -483,8 +580,12 @@ export default function TabSettings() {
       </div>
       <p className="note">※ 認証情報は Companion 内のローカルファイルにのみ保存され、壁紙側へは送信されません</p>
 
-      <div className="settings-divider" />
-      <TabDisplay embedded />
+      {showDisplay && (
+        <>
+          <div className="settings-divider" />
+          <TabDisplay embedded />
+        </>
+      )}
     </section>
   );
 }

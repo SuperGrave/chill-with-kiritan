@@ -12,6 +12,11 @@ const SCRIPT_DIR_NAME: &str = "personal_news_scripts";
 const DEFAULT_LINE_MS: u64 = 10_000;
 const MIN_LINE_MS: u64 = 1_000;
 const DEFAULT_SUPPLEMENT_MS: u64 = 5_000;
+// Plain text lines are timed from their visible length so the overlay ticker
+// moves at a steady reading pace (~5.6 chars/sec, matching the hand-tuned news
+// scripts) instead of a flat 10s that crawls on short lines and rushes long ones.
+const CHAR_MS: u64 = 180;
+const MIN_TEXT_LINE_MS: u64 = 2_000;
 
 #[derive(Debug, Clone)]
 struct ParsedSupplement {
@@ -34,6 +39,12 @@ pub fn load_personal_news_state(
     let preferred =
         preferred_script_id.or_else(|| previous.and_then(|p| p.selected_script_id.as_deref()));
 
+    // Search dirs are fallbacks that can resolve to the same physical folder via
+    // different path spellings (e.g. `cwd/..` vs `manifest/..`), so the same file
+    // may be visited more than once. Dedup by the stable script id — first dir in
+    // priority order wins — so the scripts list never carries duplicate ids
+    // (which would collide as React keys on the client).
+    let mut seen_ids = HashSet::new();
     for dir in &dirs {
         let Ok(entries) = std::fs::read_dir(dir) else {
             continue;
@@ -45,6 +56,9 @@ pub fn load_personal_news_state(
             }
             match parse_script_file(&path) {
                 Ok(script) => {
+                    if !seen_ids.insert(script.id.clone()) {
+                        continue;
+                    }
                     if first_script.is_none() {
                         first_script = Some(script.clone());
                     }
@@ -411,7 +425,11 @@ fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, Stri
             continue;
         }
 
-        let (text, duration_ms) = parse_text_line(line, default_line_ms);
+        let (text, explicit_ms) = parse_text_line(line);
+        // Estimate from the visible characters only (inline supplement markers
+        // and their URLs must not inflate the reading time).
+        let duration_ms =
+            explicit_ms.unwrap_or_else(|| estimate_line_ms(stripped_char_count(&text)));
         let text = extract_inline_supplements(
             &text,
             total_ms,
@@ -466,14 +484,31 @@ fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, Stri
     })
 }
 
-fn parse_text_line(line: &str, default_line_ms: u64) -> (String, u64) {
+fn parse_text_line(line: &str) -> (String, Option<u64>) {
     if let Some(rest) = line.strip_prefix("[Line:") {
         if let Some((duration, text)) = rest.split_once(']') {
-            let duration_ms = parse_seconds_ms(duration.trim()).unwrap_or(default_line_ms);
-            return (text.trim().to_string(), duration_ms);
+            return (text.trim().to_string(), parse_seconds_ms(duration.trim()));
         }
     }
-    (line.to_string(), default_line_ms)
+    (line.to_string(), None)
+}
+
+fn estimate_line_ms(chars: usize) -> u64 {
+    (chars as u64 * CHAR_MS).max(MIN_TEXT_LINE_MS)
+}
+
+/// Visible character count with inline supplement markers removed. Mirrors the
+/// cleanup in `extract_inline_supplements` so the estimate matches the text the
+/// overlay actually renders.
+fn stripped_char_count(text: &str) -> usize {
+    let mut cleaned = String::new();
+    let mut cursor = 0usize;
+    while let Some(marker) = find_inline_supplement(text, cursor) {
+        cleaned.push_str(&text[cursor..marker.start]);
+        cursor = marker.end;
+    }
+    cleaned.push_str(&text[cursor..]);
+    cleaned.trim().chars().count()
 }
 
 fn bracket_body(line: &str, tag: &str) -> Option<String> {
@@ -758,14 +793,42 @@ Plain second line.
         assert_eq!(script.lines[0].duration_ms, 7_500);
         assert_eq!(script.lines[0].text, "First line.");
         assert_eq!(script.lines[1].kind, "wait");
-        assert_eq!(script.lines[2].duration_ms, 9_000);
+        // "Plain second line." has no [Line:] so it is timed from its 18 visible
+        // chars (18 × CHAR_MS = 3240ms), not the legacy flat default.
+        assert_eq!(script.lines[2].duration_ms, 3_240);
         assert_eq!(script.supplements[0].text, "Inline note");
         assert!(script.supplements[0].position_ms > 0);
         assert_eq!(
             script.supplements[1].url.as_deref(),
             Some("https://example.com/article")
         );
-        assert_eq!(script.estimated_duration_ms, 18_000);
+        assert_eq!(script.estimated_duration_ms, 12_240);
+    }
+
+    #[test]
+    fn plain_line_duration_scales_with_length_and_ignores_markers() {
+        let script = parse_script_text(
+            Path::new("prose.txt"),
+            r#"## Scenario
+short
+This is a much longer plain line that should take proportionally more time to read.
+with marker [Supplement: note | https://example.com/very/long/url/that/should/not/count | 3.0] tail
+"#,
+        )
+        .expect("prose script parses");
+
+        // 5 chars → floor of 2s applies.
+        assert_eq!(script.lines[0].duration_ms, MIN_TEXT_LINE_MS);
+        // Long lines get proportionally more time (chars × CHAR_MS).
+        let long_chars = script.lines[1].text.chars().count() as u64;
+        assert_eq!(script.lines[1].duration_ms, long_chars * CHAR_MS);
+        assert!(script.lines[1].duration_ms > 4 * MIN_TEXT_LINE_MS);
+        // Marker body/URL is stripped before counting: only "with marker" + "tail"
+        // remain visible, so the URL must not inflate the duration.
+        let visible_chars = script.lines[2].text.chars().count() as u64;
+        assert_eq!(script.lines[2].duration_ms, visible_chars * CHAR_MS);
+        assert!(script.lines[2].duration_ms < script.lines[1].duration_ms / 3);
+        assert_eq!(script.supplements.len(), 1);
     }
 
     #[test]
@@ -775,7 +838,7 @@ Plain second line.
             scripts: vec![summary_for(&script)],
             current_script: Some(script),
             selected_script_id: Some("sample-news-txt".to_string()),
-            duration_ms: 18_000,
+            duration_ms: 12_240,
             ..PersonalNewsState::default()
         };
 

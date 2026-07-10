@@ -123,6 +123,10 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/startup/repair-elevated", post(startup_repair_elevated))
         .route("/api/secrets/status", get(secrets_status))
         .route("/api/secrets", put(put_secrets))
+        // ── Data folder / backup ─────────────────────────────────────
+        .route("/api/data-dir", get(get_data_dir))
+        .route("/api/backup/export", post(backup_export))
+        .route("/api/backup/import", post(backup_import))
         // ── Memo ─────────────────────────────────────────────────────
         .route("/api/memos", get(list_memos).post(create_memo))
         .route("/api/memos/:id", patch(update_memo).delete(delete_memo))
@@ -855,6 +859,131 @@ async fn put_secrets(State(s): State<Shared>, Json(body): Json<Value>) -> Json<V
     g.spotify_token = None; // force re-auth on next poll
     touch(&mut g);
     ok()
+}
+
+/// Location of the Companion data folder (settings, backups, backgrounds).
+/// The UI uses this to reveal the folder in the OS file manager.
+async fn get_data_dir(State(s): State<Shared>) -> Json<Value> {
+    let path = s.lock().unwrap().data_dir.to_string_lossy().to_string();
+    Json(json!({ "ok": true, "path": path }))
+}
+
+/// Write a settings backup into `<data_dir>/backups/`. Secrets (API keys) are
+/// excluded unless `includeSecrets` is explicitly true, so a shared backup does
+/// not leak credentials by default. Returns the written file path.
+async fn backup_export(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    let include_secrets = body
+        .get("includeSecrets")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let (bundle, backups_dir) = {
+        let g = s.lock().unwrap();
+        let mut bundle = json!({
+            "app": "tohoku-companion",
+            "kind": "companion-backup",
+            "version": env!("CARGO_PKG_VERSION"),
+            "exportedAt": now_iso(),
+            "includeSecrets": include_secrets,
+            "data": {
+                "ui": g.state.ui,
+                "settings": g.state.settings,
+                "memos": g.state.memos,
+                "bookmarks": g.state.bookmarks,
+                "timer": g.state.timer,
+                "todos": g.state.todos,
+            },
+        });
+        if include_secrets {
+            bundle["secrets"] = serde_json::to_value(&g.secrets).unwrap_or(json!({}));
+        }
+        (bundle, g.data_dir.join("backups"))
+    };
+
+    if let Err(e) = std::fs::create_dir_all(&backups_dir) {
+        return Json(json!({ "ok": false, "error": format!("フォルダを作成できませんでした: {e}") }));
+    }
+    let stamp = now_iso().replace(':', "-").replace('.', "-");
+    let file_name = format!("kiritan-companion-backup-{stamp}.json");
+    let path = backups_dir.join(&file_name);
+    match serde_json::to_string_pretty(&bundle) {
+        Ok(text) => match std::fs::write(&path, text) {
+            Ok(()) => Json(json!({
+                "ok": true,
+                "path": path.to_string_lossy(),
+                "fileName": file_name,
+                "includeSecrets": include_secrets,
+            })),
+            Err(e) => Json(json!({ "ok": false, "error": format!("書き込みに失敗しました: {e}") })),
+        },
+        Err(e) => Json(json!({ "ok": false, "error": format!("シリアライズに失敗しました: {e}") })),
+    }
+}
+
+/// Restore a settings backup produced by `backup_export`. Accepts the full
+/// bundle (`{ data: {...}, secrets? }`) or a bare data object. The current data
+/// is written to `.bak` by `persist()` before being replaced, so a bad import
+/// can be rolled back. Secrets are only touched when present in the bundle.
+async fn backup_import(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    let data = body.get("data").cloned().unwrap_or_else(|| body.clone());
+    let mut applied: Vec<&str> = Vec::new();
+    let startup_config;
+    {
+        let mut g = s.lock().unwrap();
+        if let Some(v) = data.get("ui") {
+            if let Ok(x) = serde_json::from_value(v.clone()) {
+                g.state.ui = x;
+                applied.push("ui");
+            }
+        }
+        if let Some(v) = data.get("settings") {
+            if let Ok(x) = serde_json::from_value(v.clone()) {
+                g.state.settings = x;
+                applied.push("settings");
+            }
+        }
+        if let Some(v) = data.get("memos") {
+            if let Ok(x) = serde_json::from_value(v.clone()) {
+                g.state.memos = x;
+                applied.push("memos");
+            }
+        }
+        if let Some(v) = data.get("bookmarks") {
+            if let Ok(x) = serde_json::from_value(v.clone()) {
+                g.state.bookmarks = x;
+                applied.push("bookmarks");
+            }
+        }
+        if let Some(v) = data.get("timer") {
+            if let Ok(x) = serde_json::from_value(v.clone()) {
+                g.state.timer = x;
+                applied.push("timer");
+            }
+        }
+        if let Some(v) = data.get("todos") {
+            if let Ok(x) = serde_json::from_value(v.clone()) {
+                g.state.todos = x;
+                applied.push("todos");
+            }
+        }
+        if let Some(v) = body.get("secrets") {
+            if let Ok(x) = serde_json::from_value(v.clone()) {
+                g.secrets = x;
+                applied.push("secrets");
+            }
+        }
+        if applied.is_empty() {
+            return Json(json!({ "ok": false, "error": "有効なバックアップデータが見つかりません" }));
+        }
+        g.state.ai.provider = g.state.settings.ai.provider.clone();
+        touch(&mut g);
+        startup_config = g.state.settings.startup.clone();
+    }
+
+    if let Err(e) = startup::reconcile(&startup_config) {
+        eprintln!("[companion] startup reconcile after import failed: {e}");
+    }
+    Json(json!({ "ok": true, "applied": applied }))
 }
 
 // ─── Memo ────────────────────────────────────────────────────────────────────────

@@ -19,6 +19,7 @@
 
 | ファイル | 内容 |
 |----------|------|
+| [V0.8.X_IMPROVEMENT_FEATURE_PLAN_2026-07-10.md](V0.8.X_IMPROVEMENT_FEATURE_PLAN_2026-07-10.md) | v0.8.2調査にもとづく次期実装の候補計画（A系=修正 / B系=新機能、選定待ち） |
 | [STATUS_REPORT_2026-06-10.md](STATUS_REPORT_2026-06-10.md) | プロジェクト全体の現状スナップショット |
 | [RELEASE_V0.8.1.md](RELEASE_V0.8.1.md) | v0.8.1 の変更点・検証メモ |
 | [MAINLINE_VERSIONING.md](MAINLINE_VERSIONING.md) | v0.8 系の命名・表示・release生成ルール |

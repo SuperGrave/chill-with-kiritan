@@ -171,6 +171,70 @@ export async function fetchCompanionUi(): Promise<CompanionUi | null> {
   }
 }
 
+// ── Shared /api/ui poller ─────────────────────────────────────────────────
+// The integrated wallpaper page has TWO consumers of the display settings
+// (the wallpaper app itself + the embedded overlay). Each used to run its own
+// interval; this store runs ONE polling loop per page and fans each result
+// out to every subscriber. Subscribers receive every tick (CompanionUi, or
+// null while the Companion is offline) and do their own cheap change
+// detection — the overlay keeps its adopt/echo signature logic, the
+// wallpaper gates on a settings signature so an unchanged payload never
+// re-renders its tree.
+
+export type CompanionUiListener = (ui: CompanionUi | null) => void;
+
+const UI_POLL_MS = 700;
+const uiListeners = new Set<CompanionUiListener>();
+let uiPollTimer: number | undefined;
+let uiPollInFlight = false;
+let uiLastResult: { ui: CompanionUi | null } | null = null;
+
+async function pollCompanionUiOnce(): Promise<void> {
+  if (uiPollInFlight) return;
+  uiPollInFlight = true;
+  try {
+    const ui = await fetchCompanionUi();
+    uiLastResult = { ui };
+    for (const listener of [...uiListeners]) listener(ui);
+  } finally {
+    uiPollInFlight = false;
+  }
+}
+
+function scheduleUiPoll(): void {
+  if (uiPollTimer !== undefined || uiListeners.size === 0) return;
+  uiPollTimer = window.setTimeout(async () => {
+    uiPollTimer = undefined;
+    await pollCompanionUiOnce();
+    scheduleUiPoll();
+  }, UI_POLL_MS);
+}
+
+/**
+ * Subscribe to the shared poll. The latest known result (if any) is delivered
+ * on a microtask so a subscribing effect never sets React state synchronously;
+ * fresh results follow every ~700ms. Returns the unsubscribe function.
+ */
+export function subscribeCompanionUi(listener: CompanionUiListener): () => void {
+  uiListeners.add(listener);
+  if (uiLastResult) {
+    const snapshot = uiLastResult.ui;
+    queueMicrotask(() => {
+      if (uiListeners.has(listener)) listener(snapshot);
+    });
+  }
+  if (uiListeners.size === 1) {
+    void pollCompanionUiOnce().then(scheduleUiPoll);
+  }
+  return () => {
+    uiListeners.delete(listener);
+    if (uiListeners.size === 0 && uiPollTimer !== undefined) {
+      window.clearTimeout(uiPollTimer);
+      uiPollTimer = undefined;
+    }
+  };
+}
+
 /** Persist the overlay's current layout+settings to the Companion (best effort). */
 export async function pushCompanionUi(layout: any, settings: any): Promise<boolean> {
   try {

@@ -9,7 +9,7 @@ import type { SceneBackground } from './lib/scene/sceneTypes';
 import { getDaypart } from './lib/scene/daypart';
 import type { Daypart } from './lib/scene/daypart';
 import { uiSettings as defaultUiSettings } from '../../02_ui-overlay/src/config/uiSettings';
-import { fetchCompanionUi } from '../../02_ui-overlay/src/services/companionClient';
+import { subscribeCompanionUi } from '../../02_ui-overlay/src/services/companionClient';
 // Expression Preset System 0.1
 import { EXPRESSION_PRESETS, EXPRESSION_PRESET_IDS } from './lib/expression/expressionPresets';
 import type { ExpressionOverlayDebug } from './lib/expression/expressionPresetEvaluator';
@@ -516,11 +516,18 @@ function App() {
     wallpaperSettingsRef.current = wallpaperSettings;
   }, [wallpaperSettings]);
 
+  // Companion display settings, via the page-wide shared poller (one /api/ui
+  // loop feeds both this app and the embedded overlay). The signature gate is
+  // load-bearing: the poll ticks ~every 0.7s and an unchanged snapshot must
+  // not call the setters below — each of those built fresh objects, so before
+  // the gate the whole tree (VrmViewer + overlay) re-rendered every tick.
+  const companionSettingsSignatureRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    let alive = true;
-    const tick = async () => {
-      const ui = await fetchCompanionUi();
-      if (!alive || !ui?.settings) return;
+    return subscribeCompanionUi((ui) => {
+      if (!ui?.settings) return; // offline → keep the last adopted settings
+      const signature = JSON.stringify(ui.settings);
+      if (signature === companionSettingsSignatureRef.current) return;
+      companionSettingsSignatureRef.current = signature;
       const wp = normalizeWallpaperSettings(ui.settings.wallpaper);
       setWallpaperSettings(wp);
       setMotionSettings({ ...defaultUiSettings.motion, ...(ui.settings.motion ?? {}) });
@@ -543,13 +550,7 @@ function App() {
       });
       const nextFps = Number(ui.settings.overlay?.fpsLimit);
       if (Number.isFinite(nextFps)) setFpsLimit(clamp(nextFps, 15, 60));
-    };
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => {
-      alive = false;
-      window.clearInterval(id);
-    };
+    });
   }, []);
 
   useEffect(() => {

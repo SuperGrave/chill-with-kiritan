@@ -17,7 +17,7 @@ import DebugGuide from './components/DebugGuide';
 import { useWeatherData } from './hooks/useWeatherData';
 import { useCompanionData } from './hooks/useCompanionData';
 import {
-  fetchCompanionUi,
+  subscribeCompanionUi,
   pushCompanionUi,
   sendSpotifyControl,
   sendTimerControl,
@@ -167,10 +167,9 @@ function App({ productionMode = false }: OverlayAppProps) {
   );
 
   useEffect(() => {
-    let alive = true;
-    const tick = async () => {
-      const ui = await fetchCompanionUi();
-      if (!alive) return;
+    // Fed by the page-wide shared poller (companionClient) — the integrated
+    // wallpaper subscribes too, so only ONE /api/ui request loop runs per page.
+    return subscribeCompanionUi((ui) => {
       if (!ui) { setCompanionConnected(false); return; }
       setCompanionConnected(true);
       const hasSettings = ui.settings && Object.keys(ui.settings).length > 0;
@@ -190,10 +189,7 @@ function App({ productionMode = false }: OverlayAppProps) {
       }
       companionSync.current.adopted = true;
       companionSync.current.lastSignature = signature;
-    };
-    tick();
-    const id = setInterval(tick, 700);
-    return () => { alive = false; clearInterval(id); };
+    });
   }, []);
 
   // Debounced push of local layout/settings to the Companion.

@@ -81,6 +81,7 @@ impl AppState {
         }
 
         repair_ui_state(&mut state.ui);
+        crate::personal_news::ensure_bundled_samples(&data_dir);
         state.personal_news = crate::personal_news::load_personal_news_state(&data_dir, None, None);
 
         AppState {

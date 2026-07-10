@@ -57,6 +57,8 @@ $CompanionRelease = Join-Path $ReleaseRoot "companion"
 $WallpaperOutputRoot = Join-Path $ReleaseRoot "wallpaper-engine\Chill with Kiritan"
 $StartGuideSource = Join-Path $RepoRoot "docs\START_GUIDE_JP.md"
 $StartGuideRelease = Join-Path $ReleaseRoot "START_GUIDE_JP.md"
+$DistributionReadmeSource = Join-Path $RepoRoot "README_DISTRIBUTION_JP.md"
+$DistributionReadmeRelease = Join-Path $ReleaseRoot "README_DISTRIBUTION_JP.md"
 $WallpaperZipName = if ($IncludeLocalVrmForPersonalUse) {
   "Chill-with-Kiritan-WallpaperEngine-$VersionTag-local-personal.zip"
 } else {
@@ -86,6 +88,9 @@ if ($IncludeLocalVrmForPersonalUse) { $wallpaperArgs.IncludeLocalVrmForPersonalU
 
 if (Test-Path $StartGuideSource) {
   Copy-Item -LiteralPath $StartGuideSource -Destination $StartGuideRelease -Force
+}
+if (Test-Path $DistributionReadmeSource) {
+  Copy-Item -LiteralPath $DistributionReadmeSource -Destination $DistributionReadmeRelease -Force
 }
 
 if (-not $SkipCompanionBuild) {
@@ -150,6 +155,7 @@ other local user data.
 
 ## Start Guide
 
+- Quick start: README_DISTRIBUTION_JP.md
 - Japanese manual: START_GUIDE_JP.md
 "@ | Set-Content -LiteralPath (Join-Path $ReleaseRoot "README_RELEASE.md") -Encoding UTF8
 
@@ -160,6 +166,7 @@ $archiveItems = @(
   $WallpaperOutputRoot,
   $WallpaperZipPath,
   $CompanionRelease,
+  $DistributionReadmeRelease,
   $StartGuideRelease,
   (Join-Path $ReleaseRoot "README_RELEASE.md")
 ) | Where-Object { Test-Path -LiteralPath $_ }

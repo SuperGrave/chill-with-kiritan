@@ -1,6 +1,6 @@
 [package]
 name = "tohoku-companion"
-version = "0.8.3"
+version = "0.8.4"
 description = "Tohoku Wallpaper Companion App"
 authors = []
 edition = "2021"

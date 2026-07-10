@@ -125,7 +125,34 @@ impl Default for UiState {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuiltInUiPresetPack {
+    default_preset_id: String,
+    presets: Vec<UiPreset>,
+}
+
 fn default_ui_state() -> UiState {
+    let pack =
+        serde_json::from_str::<BuiltInUiPresetPack>(include_str!("built_in_ui_presets.json"));
+    if let Ok(pack) = pack {
+        if let Some(default_preset) = pack
+            .presets
+            .iter()
+            .find(|preset| preset.id == pack.default_preset_id)
+        {
+            return UiState {
+                layout: default_preset.layout.clone(),
+                settings: default_preset.settings.clone(),
+                presets: pack.presets,
+                active_preset_id: Some(pack.default_preset_id),
+            };
+        }
+    }
+    legacy_default_ui_state()
+}
+
+fn legacy_default_ui_state() -> UiState {
     let id = "builtin-1920x1200-sample".to_string();
     let created_at = "2026-07-07T00:00:00Z".to_string();
     let layout = json!({
@@ -812,6 +839,8 @@ pub struct PersonalNewsState {
     pub duration_ms: u64,
     pub current_chapter_index: usize,
     pub loop_enabled: bool,
+    #[serde(default)]
+    pub auto_play_active: bool,
     pub script_dir: Option<String>,
     pub error: Option<String>,
     pub updated_at: String,
@@ -830,7 +859,8 @@ impl Default for PersonalNewsState {
             elapsed_ms: 0,
             duration_ms: 0,
             current_chapter_index: 0,
-            loop_enabled: false,
+            loop_enabled: true,
+            auto_play_active: false,
             script_dir: None,
             error: None,
             updated_at: now_iso(),
@@ -1005,6 +1035,27 @@ impl From<KiritanStatePost> for KiritanRuntimeState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_ui_defaults_start_with_1080_and_offer_both_samples() {
+        let ui = UiState::default();
+        assert_eq!(
+            ui.active_preset_id.as_deref(),
+            Some("builtin-1920x1080-sample")
+        );
+        assert_eq!(ui.settings["baseResolution"], json!("1920x1080"));
+        assert_eq!(ui.layout["canvas"]["width"], json!(1920));
+        assert_eq!(ui.layout["canvas"]["height"], json!(1080));
+        assert_eq!(ui.presets.len(), 2);
+        assert!(ui.presets.iter().any(|preset| {
+            preset.id == "builtin-1920x1200-sample"
+                && preset.settings["baseResolution"] == json!("1920x1200")
+        }));
+        assert!(ui.presets.iter().any(|preset| {
+            preset.id == "builtin-1920x1080-sample"
+                && preset.settings["baseResolution"] == json!("1920x1080")
+        }));
+    }
 
     #[test]
     fn repair_ui_state_restores_wallpaper_camera_and_layout_defaults() {

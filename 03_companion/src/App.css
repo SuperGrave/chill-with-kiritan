@@ -69,7 +69,7 @@ body {
 
 /* 左レール */
 .rail {
-  width: 84px;
+  width: 64px;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -1274,6 +1274,7 @@ button svg { width: 15px; height: 15px; }
 .remote-refresh { display: flex; flex-direction: column; gap: 12px; }
 .remote-refresh-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 .remote-refresh-btns .ctl-btn { min-width: 0; padding: 0 8px; }
+.remote-refresh .ctl-tile { width: 100%; margin-top: auto; }
 .remote-status { font-size: 11px; color: var(--text-dim); }
 
 .content-seg { margin-bottom: 14px; }

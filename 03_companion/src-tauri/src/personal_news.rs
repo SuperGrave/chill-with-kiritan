@@ -18,6 +18,17 @@ const DEFAULT_SUPPLEMENT_MS: u64 = 5_000;
 const CHAR_MS: u64 = 180;
 const MIN_TEXT_LINE_MS: u64 = 2_000;
 
+const BUNDLED_SAMPLES: &[(&str, &str)] = &[
+    (
+        "aozora_銀河鉄道の夜_冒頭.txt",
+        include_str!("../../personal_news_scripts/aozora_銀河鉄道の夜_冒頭.txt"),
+    ),
+    (
+        "サンプル_本日のニュース_2026-07-10.txt",
+        include_str!("../../personal_news_scripts/サンプル_本日のニュース_2026-07-10.txt"),
+    ),
+];
+
 #[derive(Debug, Clone)]
 struct ParsedSupplement {
     title: String,
@@ -88,7 +99,7 @@ pub fn load_personal_news_state(
         .find(|p| p.exists())
         .or_else(|| dirs.first())
         .map(|p| p.to_string_lossy().to_string());
-    let loop_enabled = previous.is_some_and(|p| p.loop_enabled);
+    let loop_enabled = previous.map_or(true, |p| p.loop_enabled);
 
     PersonalNewsState {
         scripts,
@@ -102,6 +113,7 @@ pub fn load_personal_news_state(
         duration_ms,
         current_chapter_index: 0,
         loop_enabled,
+        auto_play_active: false,
         script_dir,
         error: if duration_ms == 0 {
             if errors.is_empty() {
@@ -116,6 +128,35 @@ pub fn load_personal_news_state(
         },
         updated_at: now_iso(),
     }
+}
+
+/// Materialize the two distributable samples into the user's data directory.
+/// Existing files are never overwritten, so edited copies remain user-owned.
+pub fn ensure_bundled_samples(data_dir: &Path) {
+    let dir = data_dir.join(SCRIPT_DIR_NAME);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    for (file_name, contents) in BUNDLED_SAMPLES {
+        let path = dir.join(file_name);
+        if !path.exists() {
+            let _ = std::fs::write(path, contents);
+        }
+    }
+}
+
+/// Start the fallback from its current position exactly once when it becomes
+/// visible, then pause at that position when lyrics become available again.
+pub fn reconcile_auto_play(state: &PersonalNewsState, auto_active: bool) -> PersonalNewsState {
+    let mut out = materialize_personal_news(state);
+    if auto_active && !out.auto_play_active {
+        out = control_personal_news(&out, "play", None, None);
+        out.auto_play_active = true;
+    } else if !auto_active && out.auto_play_active {
+        out = control_personal_news(&out, "pause", None, None);
+        out.auto_play_active = false;
+    }
+    out
 }
 
 pub fn materialize_personal_news(state: &PersonalNewsState) -> PersonalNewsState {
@@ -854,26 +895,11 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
     }
 
     #[test]
-    fn bundled_trial_script_stays_close_to_five_minutes() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join(SCRIPT_DIR_NAME)
-            .join("2026-07-05_俺流興味ニュース.txt");
-        let script = parse_script_file(&path).expect("bundled trial script parses");
-
-        assert_eq!(script.chapters.len(), 6);
-        assert_eq!(script.sources.len(), 7);
-        assert_eq!(script.supplements.len(), 7);
-        assert!(script.estimated_duration_ms >= 250_000);
-        assert!(script.estimated_duration_ms <= 300_000);
-    }
-
-    #[test]
-    fn bundled_scripts_all_parse() {
+    fn exactly_two_bundled_samples_parse() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join(SCRIPT_DIR_NAME);
-        let mut parsed = 0usize;
+        let mut parsed = Vec::new();
 
         for entry in std::fs::read_dir(&dir).expect("bundled script directory exists") {
             let path = entry.expect("script entry").path();
@@ -883,9 +909,61 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
             let script = parse_script_file(&path).expect("bundled script parses");
             assert!(!script.title.trim().is_empty());
             assert!(!script.lines.is_empty());
-            parsed += 1;
+            parsed.push(script.file_name);
         }
 
-        assert!(parsed >= 5);
+        parsed.sort();
+        assert_eq!(
+            parsed,
+            vec![
+                "aozora_銀河鉄道の夜_冒頭.txt".to_string(),
+                "サンプル_本日のニュース_2026-07-10.txt".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn auto_visibility_resumes_then_pauses_without_rewinding() {
+        let script = sample_script();
+        let state = PersonalNewsState {
+            scripts: vec![summary_for(&script)],
+            current_script: Some(script),
+            selected_script_id: Some("sample-news-txt".to_string()),
+            status: "paused".to_string(),
+            line_index: 2,
+            line_elapsed_ms: 900,
+            ..PersonalNewsState::default()
+        };
+
+        let playing = reconcile_auto_play(&state, true);
+        assert_eq!(playing.status, "playing");
+        assert!(playing.auto_play_active);
+        assert_eq!(playing.line_index, 2);
+        assert!(playing.line_elapsed_ms >= 900);
+
+        let paused = reconcile_auto_play(&playing, false);
+        assert_eq!(paused.status, "paused");
+        assert!(!paused.auto_play_active);
+        assert_eq!(paused.line_index, 2);
+        assert!(paused.line_elapsed_ms >= 900);
+    }
+
+    #[test]
+    fn clean_data_dir_receives_only_the_two_samples() {
+        let dir = std::env::temp_dir().join(format!(
+            "tohoku-companion-personal-news-samples-{}",
+            uuid::Uuid::new_v4()
+        ));
+        ensure_bundled_samples(&dir);
+        let mut names = std::fs::read_dir(dir.join(SCRIPT_DIR_NAME))
+            .expect("sample directory exists")
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"aozora_銀河鉄道の夜_冒頭.txt".to_string()));
+        assert!(names.contains(&"サンプル_本日のニュース_2026-07-10.txt".to_string()));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

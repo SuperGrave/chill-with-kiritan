@@ -292,11 +292,21 @@ async fn get_state(State(s): State<Shared>) -> Json<WallpaperState> {
 }
 
 async fn get_runtime_state(State(s): State<Shared>) -> Json<Value> {
-    let g = s.lock().unwrap();
+    let mut g = s.lock().unwrap();
     let mut ui = g.state.ui.clone();
     repair_ui_state(&mut ui);
     let timer = materialize_timer(&g.state.timer, &ui.settings);
-    let personal_news = crate::personal_news::materialize_personal_news(&g.state.personal_news);
+    let personal_news_settings = ui.settings.get("personalNewsPanel");
+    let auto_enabled = personal_news_settings
+        .and_then(|panel| panel.get("autoShowWhenLyricsUnavailable"))
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let lyrics_available = !g.state.spotify.lyrics.lines.is_empty();
+    let auto_active =
+        auto_enabled && !lyrics_available && g.state.personal_news.current_script.is_some();
+    let personal_news =
+        crate::personal_news::reconcile_auto_play(&g.state.personal_news, auto_active);
+    g.state.personal_news = personal_news.clone();
     Json(json!({
         "news": g.state.news.clone(),
         "newsFeeds": g.state.news_feeds.clone(),

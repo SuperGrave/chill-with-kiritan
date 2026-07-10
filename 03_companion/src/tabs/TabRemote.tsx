@@ -126,6 +126,8 @@ export default function TabRemote() {
   const settings: any = { ...defaultSettings, ...(ui?.settings ?? {}) };
   const timerSettings = settings.timerPanel ?? {};
   const timerRunning = timer?.status === "running";
+  const personalNewsSettings = settings.personalNewsPanel ?? {};
+  const autoPersonalNews = personalNewsSettings.autoShowWhenLyricsUnavailable !== false;
 
   const togglePanel = async (item: PanelSwitch) => {
     const section = { ...(settings[item.section] ?? {}) };
@@ -262,6 +264,17 @@ export default function TabRemote() {
             <Button onClick={() => { void refresh("all"); }}><RefreshIcon />全部</Button>
           </div>
           {status && <p className="remote-status">{status}</p>}
+          <ToggleTile
+            icon={<BroadcastIcon />}
+            name="歌詞なし時は個人ニュース"
+            on={autoPersonalNews}
+            onClick={() => { void togglePanel({
+              section: "personalNewsPanel",
+              keyName: "autoShowWhenLyricsUnavailable",
+              label: "歌詞なし時は個人ニュース",
+              icon: <BroadcastIcon />,
+            }); }}
+          />
         </Card>
       </div>
     </section>

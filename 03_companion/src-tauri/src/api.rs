@@ -749,7 +749,6 @@ async fn put_settings(State(s): State<Shared>, Json(body): Json<Value>) -> Json<
                 weather_refresh = Some((parsed.weather.clone(), g.http.clone()));
             }
             g.state.settings = parsed;
-            g.state.ai.provider = g.state.settings.ai.provider.clone();
         }
         touch(&mut g);
         g.state.settings.clone()
@@ -891,7 +890,6 @@ async fn backup_export(State(s): State<Shared>, Json(body): Json<Value>) -> Json
                 "memos": g.state.memos,
                 "bookmarks": g.state.bookmarks,
                 "timer": g.state.timer,
-                "todos": g.state.todos,
             },
         });
         if include_secrets {
@@ -960,12 +958,6 @@ async fn backup_import(State(s): State<Shared>, Json(body): Json<Value>) -> Json
                 applied.push("timer");
             }
         }
-        if let Some(v) = data.get("todos") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.todos = x;
-                applied.push("todos");
-            }
-        }
         if let Some(v) = body.get("secrets") {
             if let Ok(x) = serde_json::from_value(v.clone()) {
                 g.secrets = x;
@@ -975,7 +967,6 @@ async fn backup_import(State(s): State<Shared>, Json(body): Json<Value>) -> Json
         if applied.is_empty() {
             return Json(json!({ "ok": false, "error": "有効なバックアップデータが見つかりません" }));
         }
-        g.state.ai.provider = g.state.settings.ai.provider.clone();
         touch(&mut g);
         startup_config = g.state.settings.startup.clone();
     }

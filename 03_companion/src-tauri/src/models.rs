@@ -7,8 +7,6 @@ use serde_json::{json, Map, Value};
 #[serde(rename_all = "camelCase")]
 pub struct WallpaperState {
     pub clock: ClockState,
-    pub ai: AiState,
-    pub todos: Vec<TodoItem>,
     pub memos: Vec<MemoItem>,
     pub bookmarks: Vec<BookmarkItem>,
     pub spotify: SpotifyState,
@@ -23,7 +21,7 @@ pub struct WallpaperState {
     pub timer: TimerState,
     /// Display settings (layout/settings/presets) owned by the companion.
     pub ui: UiState,
-    /// Public (non-secret) configuration for weather/news/ai/spotify.
+    /// Public (non-secret) configuration for weather/news/spotify.
     pub settings: AppSettings,
     /// Latest kiritanState the wallpaper POSTed (mode/presence/sleepiness).
     /// `None` until the wallpaper has reported at least once. Memory-only —
@@ -37,8 +35,6 @@ impl Default for WallpaperState {
     fn default() -> Self {
         Self {
             clock: ClockState::default(),
-            ai: AiState::default(),
-            todos: vec![],
             memos: vec![],
             bookmarks: vec![],
             spotify: SpotifyState::default(),
@@ -493,7 +489,6 @@ pub struct UiPreset {
 pub struct AppSettings {
     pub weather: WeatherConfig,
     pub news: NewsConfig,
-    pub ai: AiConfig,
     pub spotify: SpotifyConfig,
     pub startup: StartupConfig,
 }
@@ -503,7 +498,6 @@ impl Default for AppSettings {
         Self {
             weather: WeatherConfig::default(),
             news: NewsConfig::default(),
-            ai: AiConfig::default(),
             spotify: SpotifyConfig::default(),
             startup: StartupConfig::default(),
         }
@@ -571,25 +565,6 @@ impl Default for NewsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AiConfig {
-    pub provider: String, // "openai" | "google" | "none"
-    pub model: String,
-    pub system_prompt: String,
-}
-
-impl Default for AiConfig {
-    fn default() -> Self {
-        Self {
-            provider: "none".to_string(),
-            model: "gpt-4o-mini".to_string(),
-            system_prompt: "あなたは東北きりたん。やさしく、少し砕けた口調で短めに返事をします。"
-                .to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SpotifyConfig {
     pub client_id: String, // public part only; secret lives in Secrets
 }
@@ -607,59 +582,8 @@ impl Default for SpotifyConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Secrets {
-    pub openai_key: String,
-    pub google_key: String,
     pub spotify_client_secret: String,
     pub spotify_refresh_token: String,
-}
-
-// ─── AI ───────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiState {
-    pub provider: String, // "openai" | "google" | "none"
-    pub status: String,   // "idle" | "thinking" | "responding" | "error"
-    pub last_user_message: Option<String>,
-    pub last_assistant_message: Option<String>,
-    pub messages: Vec<ChatMessage>,
-    pub error: Option<String>,
-}
-
-impl Default for AiState {
-    fn default() -> Self {
-        Self {
-            provider: "none".to_string(),
-            status: "idle".to_string(),
-            last_user_message: None,
-            last_assistant_message: None,
-            messages: vec![],
-            error: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatMessage {
-    pub id: String,
-    pub role: String, // "user" | "assistant" | "system"
-    pub text: String,
-    pub created_at: String,
-}
-
-// ─── TODO ─────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TodoItem {
-    pub id: String,
-    pub title: String,
-    pub done: bool,
-    pub priority: Option<String>, // "low" | "normal" | "high"
-    pub due_at: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
 }
 
 // ─── Memo ─────────────────────────────────────────────────────────────────────

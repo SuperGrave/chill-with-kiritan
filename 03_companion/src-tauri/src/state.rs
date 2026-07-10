@@ -35,10 +35,8 @@ struct Persist {
     // Backward-compatible read path only. New writes go to secrets.json.
     #[serde(skip_serializing)]
     secrets: Option<Secrets>,
-    todos: Vec<TodoItem>,
     memos: Vec<MemoItem>,
     bookmarks: Vec<BookmarkItem>,
-    chat: Vec<ChatMessage>,
     timer: Option<TimerState>,
 }
 
@@ -68,10 +66,8 @@ impl AppState {
                     state.settings = settings;
                 }
                 legacy_secrets = p.secrets;
-                state.todos = p.todos;
                 state.memos = p.memos;
                 state.bookmarks = p.bookmarks;
-                state.ai.messages = p.chat;
                 if let Some(timer) = p.timer {
                     state.timer = timer;
                 }
@@ -86,8 +82,6 @@ impl AppState {
 
         repair_ui_state(&mut state.ui);
         state.personal_news = crate::personal_news::load_personal_news_state(&data_dir, None, None);
-
-        state.ai.provider = state.settings.ai.provider.clone();
 
         AppState {
             state,
@@ -117,10 +111,8 @@ impl AppState {
             ui: Some(self.state.ui.clone()),
             settings: Some(self.state.settings.clone()),
             secrets: None,
-            todos: self.state.todos.clone(),
             memos: self.state.memos.clone(),
             bookmarks: self.state.bookmarks.clone(),
-            chat: self.state.ai.messages.clone(),
             timer: Some(self.state.timer.clone()),
         };
         let Ok(text) = serde_json::to_string_pretty(&p) else {
@@ -242,10 +234,7 @@ fn persist_secrets(data_dir: &Path, secrets: &Secrets) {
 }
 
 fn secrets_has_any(secrets: &Secrets) -> bool {
-    !secrets.openai_key.is_empty()
-        || !secrets.google_key.is_empty()
-        || !secrets.spotify_client_secret.is_empty()
-        || !secrets.spotify_refresh_token.is_empty()
+    !secrets.spotify_client_secret.is_empty() || !secrets.spotify_refresh_token.is_empty()
 }
 
 fn sanitize_legacy_secret_fields(data_dir: &Path) {
@@ -354,19 +343,17 @@ mod tests {
     fn second_persist_backs_up_the_previous_content() {
         let dir = temp_dir("second");
         let mut app = AppState::load_from(dir.clone());
-        app.state.todos.push(TodoItem {
+        app.state.memos.push(MemoItem {
             id: "1".into(),
-            title: "first save".into(),
-            done: false,
-            priority: None,
-            due_at: None,
+            text: "first save".into(),
+            pinned: false,
             created_at: now_iso(),
             updated_at: now_iso(),
         });
         app.persist();
         let first_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
 
-        app.state.todos[0].title = "second save".into();
+        app.state.memos[0].text = "second save".into();
         app.persist();
         let second_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
         let bak_text = std::fs::read_to_string(dir.join("companion-data.json.bak")).unwrap();
@@ -415,21 +402,21 @@ mod tests {
     fn secrets_are_persisted_to_a_separate_file_only() {
         let dir = temp_dir("separate-secrets");
         let mut app = AppState::load_from(dir.clone());
-        app.secrets.openai_key = "sk-separated".into();
+        app.secrets.spotify_client_secret = "cs-separated".into();
         app.secrets.spotify_refresh_token = "spotify-refresh".into();
         app.persist();
 
         let data_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
         let secrets_text = std::fs::read_to_string(dir.join("secrets.json")).unwrap();
         assert!(
-            !data_text.contains("sk-separated") && !data_text.contains("\"secrets\""),
+            !data_text.contains("cs-separated") && !data_text.contains("\"secrets\""),
             "normal data file must not contain secrets"
         );
-        assert!(secrets_text.contains("sk-separated"));
+        assert!(secrets_text.contains("cs-separated"));
         assert!(secrets_text.contains("spotify-refresh"));
 
         let reloaded = AppState::load_from(dir.clone());
-        assert_eq!(reloaded.secrets.openai_key, "sk-separated");
+        assert_eq!(reloaded.secrets.spotify_client_secret, "cs-separated");
         assert_eq!(reloaded.secrets.spotify_refresh_token, "spotify-refresh");
 
         let _ = std::fs::remove_dir_all(dir);
@@ -443,11 +430,16 @@ mod tests {
             dir.join("companion-data.json"),
             serde_json::to_string_pretty(&serde_json::json!({
                 "secrets": {
-                    "openaiKey": "sk-legacy",
+                    // Retired fields (pre-v0.8.3 AI scaffolding) must parse
+                    // harmlessly and vanish with the embedded secrets object.
+                    "openaiKey": "sk-retired",
                     "googleKey": "",
                     "spotifyClientSecret": "spotify-secret",
                     "spotifyRefreshToken": ""
                 },
+                // Retired top-level fields tolerated on read, dropped on save.
+                "todos": [],
+                "chat": [],
                 "memos": [{
                     "id": "m1",
                     "text": "legacy memo",
@@ -462,7 +454,7 @@ mod tests {
         std::fs::write(
             dir.join("companion-data.json.bak"),
             serde_json::to_string_pretty(&serde_json::json!({
-                "secrets": { "openaiKey": "sk-backup" },
+                "secrets": { "spotifyClientSecret": "cs-backup" },
                 "todos": []
             }))
             .unwrap(),
@@ -470,19 +462,19 @@ mod tests {
         .unwrap();
 
         let app = AppState::load_from(dir.clone());
-        assert_eq!(app.secrets.openai_key, "sk-legacy");
         assert_eq!(app.secrets.spotify_client_secret, "spotify-secret");
         assert_eq!(app.state.memos[0].text, "legacy memo");
 
         let secrets_text = std::fs::read_to_string(dir.join("secrets.json")).unwrap();
-        assert!(secrets_text.contains("sk-legacy"));
         assert!(secrets_text.contains("spotify-secret"));
+        assert!(!secrets_text.contains("sk-retired"));
 
         let data_text = std::fs::read_to_string(dir.join("companion-data.json")).unwrap();
         let bak_text = std::fs::read_to_string(dir.join("companion-data.json.bak")).unwrap();
-        assert!(!data_text.contains("sk-legacy"));
+        assert!(!data_text.contains("spotify-secret"));
+        assert!(!data_text.contains("sk-retired"));
         assert!(!data_text.contains("\"secrets\""));
-        assert!(!bak_text.contains("sk-backup"));
+        assert!(!bak_text.contains("cs-backup"));
         assert!(!bak_text.contains("\"secrets\""));
 
         let _ = std::fs::remove_dir_all(dir);

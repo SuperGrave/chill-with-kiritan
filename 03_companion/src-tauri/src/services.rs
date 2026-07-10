@@ -3,7 +3,7 @@
 // await → lock → write result, without holding the lock across `.await`.
 
 use base64::Engine;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::models::*;
 
@@ -292,90 +292,6 @@ fn clean(s: &str) -> String {
         .replace("&quot;", "\"")
         .replace("&#39;", "'");
     s.trim().to_string()
-}
-
-// ─── AI chat ─────────────────────────────────────────────────────────────────
-
-pub async fn chat_openai(
-    http: &reqwest::Client,
-    key: &str,
-    model: &str,
-    system_prompt: &str,
-    history: &[ChatMessage],
-) -> Result<String, String> {
-    let mut messages = vec![json!({"role":"system","content":system_prompt})];
-    for m in history {
-        let role = if m.role == "assistant" {
-            "assistant"
-        } else {
-            "user"
-        };
-        messages.push(json!({"role":role,"content":m.text}));
-    }
-    let body = json!({ "model": model, "messages": messages, "temperature": 0.7 });
-    let resp = http
-        .post("https://api.openai.com/v1/chat/completions")
-        .bearer_auth(key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    let status = resp.status();
-    let data: Value = resp.json().await.map_err(|e| e.to_string())?;
-    if !status.is_success() {
-        return Err(data["error"]["message"]
-            .as_str()
-            .unwrap_or("OpenAI error")
-            .to_string());
-    }
-    data["choices"][0]["message"]["content"]
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "OpenAI: empty response".to_string())
-}
-
-pub async fn chat_gemini(
-    http: &reqwest::Client,
-    key: &str,
-    model: &str,
-    system_prompt: &str,
-    history: &[ChatMessage],
-) -> Result<String, String> {
-    let mut contents: Vec<Value> = Vec::new();
-    for m in history {
-        let role = if m.role == "assistant" {
-            "model"
-        } else {
-            "user"
-        };
-        contents.push(json!({"role":role,"parts":[{"text":m.text}]}));
-    }
-    let body = json!({
-        "system_instruction": {"parts":[{"text":system_prompt}]},
-        "contents": contents,
-    });
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        model, key
-    );
-    let resp = http
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    let status = resp.status();
-    let data: Value = resp.json().await.map_err(|e| e.to_string())?;
-    if !status.is_success() {
-        return Err(data["error"]["message"]
-            .as_str()
-            .unwrap_or("Gemini error")
-            .to_string());
-    }
-    data["candidates"][0]["content"]["parts"][0]["text"]
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "Gemini: empty response".to_string())
 }
 
 // ─── Spotify ─────────────────────────────────────────────────────────────────

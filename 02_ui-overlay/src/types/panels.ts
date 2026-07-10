@@ -86,6 +86,7 @@ export type PersonalNewsState = {
   durationMs: number;
   currentChapterIndex: number;
   loopEnabled: boolean;
+  autoPlayActive?: boolean;
   scriptDir?: string | null;
   error?: string | null;
   updatedAt: string;

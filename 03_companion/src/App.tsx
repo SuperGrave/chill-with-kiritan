@@ -85,16 +85,16 @@ function App() {
               className={`rail-btn ${active === s.id ? "active" : ""}`}
               onClick={() => setActive(s.id)}
               aria-pressed={active === s.id}
+              aria-label={s.label}
+              title={s.label}
             >
               {s.icon}
-              <span>{s.label}</span>
             </button>
           ))}
         </div>
         <div className="rail-bottom">
-          <button className="rail-btn" onClick={() => { void refreshAll(); }} title="全データを更新">
+          <button className="rail-btn" onClick={() => { void refreshAll(); }} title="全データを更新" aria-label="更新">
             <RefreshIcon />
-            <span>更新</span>
           </button>
           {/* /api/health is the single version source (Cargo.toml) — no hardcoded
               fallback string to forget at release time; show a dash until it loads. */}

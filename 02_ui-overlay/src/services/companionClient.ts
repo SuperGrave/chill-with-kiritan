@@ -102,7 +102,7 @@ const defaultPersonalNewsState = (): PersonalNewsState => ({
   elapsedMs: 0,
   durationMs: 0,
   currentChapterIndex: 0,
-  loopEnabled: false,
+  loopEnabled: true,
   scriptDir: null,
   error: null,
   updatedAt: new Date().toISOString(),

@@ -104,10 +104,10 @@ const objectPlacementLabels: Array<{ bucket: "objectLayout" | "itemLayout"; id: 
 // STUDIO 左ペインの対象一覧。1つ選ぶと右のエディタにその対象だけを出す。
 type StudioObj = "kiritan" | "bg" | "layout" | "camera" | "motion" | "system";
 const STUDIO_OBJECTS: { id: StudioObj; label: string; icon: ReactNode }[] = [
-  { id: "kiritan", label: "きりたん", icon: <AvatarIcon /> },
+  { id: "kiritan", label: "3Dモデル", icon: <AvatarIcon /> },
   { id: "bg", label: "背景", icon: <ImageIcon /> },
-  { id: "layout", label: "レイアウト", icon: <LayoutIcon /> },
-  { id: "camera", label: "カメラ", icon: <CameraIcon /> },
+  { id: "layout", label: "パネル表示", icon: <LayoutIcon /> },
+  { id: "camera", label: "視点", icon: <CameraIcon /> },
   { id: "motion", label: "モーション", icon: <MotionIcon /> },
   { id: "system", label: "システム", icon: <GearIcon /> },
 ];
@@ -547,6 +547,10 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
   };
 
   const overwrite = async (id: string) => {
+    const presetName = presets.find((preset) => preset.id === id)?.name ?? "このプリセット";
+    if (!window.confirm(`「${presetName}」を現在の表示設定で上書きします。よろしいですか？`)) {
+      return;
+    }
     try {
       await api.overwritePreset(id, draftLayout, draftSettings);
       await load(false);

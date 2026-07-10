@@ -1,0 +1,981 @@
+{
+  "defaultPresetId": "builtin-1920x1080-sample",
+  "presets": [
+    {
+      "id": "builtin-1920x1200-sample",
+      "name": "1920×1200用サンプル",
+      "layout": {
+        "canvas": {
+          "height": 1200,
+          "width": 1920
+        },
+        "clock": {
+          "dateSize": 76,
+          "timeSize": 129,
+          "width": 642,
+          "x": 0,
+          "y": 0
+        },
+        "detailPanel": {
+          "height": 900,
+          "width": 420,
+          "x": 1320,
+          "y": 70
+        },
+        "lyricsPanel": {
+          "height": 225,
+          "width": 896,
+          "x": 1020,
+          "y": 921
+        },
+        "memoPanel": {
+          "height": 225,
+          "width": 500,
+          "x": 514,
+          "y": 921
+        },
+        "musicPanel": {
+          "height": 305,
+          "width": 520,
+          "x": 1396,
+          "y": 611
+        },
+        "newsPanel": {
+          "height": 600,
+          "width": 520,
+          "x": 1396,
+          "y": 6
+        },
+        "personalNewsPanel": {
+          "height": 225,
+          "width": 896,
+          "x": 1020,
+          "y": 921
+        },
+        "rightDock": {
+          "gap": 16,
+          "width": 110,
+          "x": 1789,
+          "y": 100
+        },
+        "safeArea": {
+          "padding": 40
+        },
+        "timerPanel": {
+          "height": 225,
+          "width": 500,
+          "x": 8,
+          "y": 921
+        },
+        "weatherCompact": {
+          "barHeight": 22,
+          "fontSize": 24,
+          "rowGap": 10,
+          "width": 531,
+          "x": 16,
+          "y": 216
+        }
+      },
+      "settings": {
+        "baseResolution": "1920x1200",
+        "clock": {
+          "backgroundOpacity": 0.28,
+          "customHumidity": "HUMID 62%",
+          "customLocation": "SAPPORO",
+          "customWeatherDesc": "CLOUDY",
+          "customWeatherTemp": "18°C",
+          "dateOffsetX": 10,
+          "paddingX": 0,
+          "paddingY": 0,
+          "showBackground": false,
+          "showClock": true,
+          "showDate": true,
+          "showHumidity": true,
+          "showLocation": true,
+          "showSeconds": true,
+          "showWeather": true
+        },
+        "debugMode": false,
+        "lyricsPanel": {
+          "align": "center",
+          "backgroundOpacity": 0.34,
+          "contentTopGap": 6,
+          "currentMaxLines": 2,
+          "currentSize": 38,
+          "lineGap": 3,
+          "lineOverflowMode": "ellipsis",
+          "metaSize": 12,
+          "show": true,
+          "showBackground": true,
+          "showHeader": true,
+          "showStatus": true,
+          "showTrack": true,
+          "sideMaxLines": 1,
+          "sideOpacity": 0.45,
+          "sideSize": 18
+        },
+        "memoPanel": {
+          "backgroundOpacity": 0.4,
+          "cardGap": 14,
+          "cardPadding": 6,
+          "contentTopGap": 9,
+          "dateSize": 12,
+          "maxItems": 0,
+          "maxLines": 0,
+          "show": true,
+          "showBackground": true,
+          "showDates": false,
+          "showFooter": false,
+          "showHeader": true,
+          "showPinnedSection": true,
+          "textSize": 21
+        },
+        "motion": {
+          "directorMode": "auto",
+          "disabledModes": [],
+          "disabledMotions": [],
+          "fixedMode": "work_normal",
+          "modeMaxMinutes": 30,
+          "modeMinMinutes": 15,
+          "motionMaxSeconds": 240,
+          "motionMinSeconds": 90
+        },
+        "musicPanel": {
+          "artistSize": 16,
+          "artworkCornerSize": 149,
+          "artworkMode": "topRight",
+          "artworkProgressGap": 13,
+          "artworkScale": 1,
+          "artworkTopGap": 12,
+          "backgroundOpacity": 0.4,
+          "barHeight": 19,
+          "controlSize": 24,
+          "gap": 20,
+          "pattern": "diagonal",
+          "show": true,
+          "showAlbum": true,
+          "showArtwork": true,
+          "showBackground": true,
+          "showControls": false,
+          "showFooter": false,
+          "showHeader": true,
+          "showMarker": true,
+          "showTimeCodes": true,
+          "timeSize": 15,
+          "titleSize": 34
+        },
+        "newsPanel": {
+          "backgroundOpacity": 0.4,
+          "contentTopGap": 12,
+          "footerSize": 15,
+          "highlightLatest": true,
+          "indexSize": 26,
+          "itemGap": 18,
+          "maxItems": 4,
+          "maxSummaryLines": 2,
+          "maxTitleLines": 2,
+          "metaPlacement": "separate",
+          "show": true,
+          "showBackground": true,
+          "showDivider": true,
+          "showFooter": false,
+          "showHeader": true,
+          "showIndex": true,
+          "showSource": true,
+          "showSummary": true,
+          "showTime": true,
+          "singleLineTitle": true,
+          "summarySize": 13,
+          "timeSize": 15,
+          "titleSize": 17
+        },
+        "overlay": {
+          "fpsLimit": 60,
+          "opacity": 1
+        },
+        "personalNewsPanel": {
+          "autoShowWhenLyricsUnavailable": true,
+          "backgroundOpacity": 0.34,
+          "contentTopGap": 18,
+          "hideLyricsWhenAutoShown": true,
+          "personalNewsBodySize": 35,
+          "personalNewsGap": 12,
+          "personalNewsProgressHeight": 10,
+          "personalNewsScrollSpeed": 1,
+          "personalNewsShowBody": true,
+          "personalNewsShowChapterMarks": true,
+          "personalNewsShowProgress": false,
+          "personalNewsShowSource": true,
+          "personalNewsShowTitle": false,
+          "personalNewsShowTopic": true,
+          "personalNewsSourceSize": 12,
+          "personalNewsSupplementColor": "#b8dcff",
+          "personalNewsTitleSize": 15,
+          "personalNewsTopicSize": 24,
+          "show": false,
+          "showBackground": true,
+          "showHeader": true,
+          "showStatus": false
+        },
+        "timerPanel": {
+          "backgroundOpacity": 0.4,
+          "barHeight": 20,
+          "contentTopGap": 18,
+          "focusLabel": "FOCUS",
+          "focusTitle": "Pomodoro",
+          "itemGap": 6,
+          "longBreakLabel": "LONG BREAK",
+          "longBreakMinutes": 15,
+          "longBreakTitle": "Long Rest",
+          "metaSize": 13,
+          "mode": "pomodoro",
+          "pomodoroMinutes": 25,
+          "shortBreakLabel": "BREAK",
+          "shortBreakMinutes": 5,
+          "shortBreakTitle": "Rest",
+          "show": true,
+          "showBackground": true,
+          "showControls": false,
+          "showCycle": true,
+          "showHeader": true,
+          "timeSize": 53,
+          "timerLabel": "TIMER",
+          "timerMinutes": 10,
+          "timerPresets": [],
+          "timerTitle": "Countdown",
+          "titleSize": 15
+        },
+        "wallpaper": {
+          "backgroundFit": "cover",
+          "backgroundImageDataUrl": "/backgrounds/sample-kobe-night.jpg",
+          "backgroundImageEnabled": true,
+          "backgroundMode": "single",
+          "backgroundOverlays": [],
+          "backgroundQueue": [],
+          "backgroundQueueFadeSeconds": 1,
+          "backgroundQueueIntervalSeconds": 60,
+          "backgroundTransition": "fade",
+          "backgroundVideoMuted": true,
+          "cameraAdjustmentEnabled": true,
+          "cameraMoveStep": 0.05,
+          "cameraPitch": -2,
+          "cameraRoll": 0,
+          "cameraRotateStep": 1,
+          "cameraX": -0.25,
+          "cameraY": 0,
+          "cameraYaw": -2,
+          "cameraZ": -0.04999999999999992,
+          "itemLayout": {
+            "item:book": {
+              "position": [
+                -0.5,
+                0.7511,
+                0.28
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.23976,
+                0.23976,
+                0.23976
+              ]
+            },
+            "item:controller": {
+              "position": [
+                0.31,
+                0.74,
+                0.36
+              ],
+              "rotation": [
+                0,
+                2.35,
+                1.53
+              ],
+              "scale": [
+                0.017,
+                0.016,
+                0.017
+              ]
+            },
+            "item:cup": {
+              "position": [
+                0.28,
+                0.73,
+                0.2
+              ],
+              "rotation": [
+                0,
+                3.13,
+                0
+              ],
+              "scale": [
+                0.037,
+                0.037,
+                0.037
+              ]
+            },
+            "item:headphones": {
+              "position": [
+                -0.6214,
+                0.7363,
+                0.52
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.17767,
+                0.17767,
+                0.17767
+              ]
+            },
+            "item:phone": {
+              "position": [
+                0.39,
+                0.73,
+                0.21
+              ],
+              "rotation": [
+                0,
+                0.6,
+                0
+              ],
+              "scale": [
+                0.66578,
+                0.66578,
+                0.66578
+              ]
+            },
+            "item:snack_plate": {
+              "position": [
+                0.1208,
+                0.7271,
+                0.1475
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.48711,
+                0.48711,
+                0.48711
+              ]
+            }
+          },
+          "modelLightScale": 2.45,
+          "modelVisible": true,
+          "objectLayout": {
+            "chair": {
+              "position": [
+                -9.066,
+                0,
+                5.627
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.027,
+                0.027,
+                0.027
+              ]
+            },
+            "character": {
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            },
+            "desk": {
+              "position": [
+                0,
+                0,
+                0.47
+              ],
+              "rotation": [
+                0,
+                3.14,
+                0
+              ],
+              "scale": [
+                0.927,
+                0.927,
+                0.927
+              ]
+            },
+            "laptop": {
+              "position": [
+                -0.03,
+                0.72,
+                0.24
+              ],
+              "rotation": [
+                0,
+                1.569,
+                0
+              ],
+              "scale": [
+                0.34,
+                0.34,
+                0.34
+              ]
+            }
+          },
+          "propControllerVisible": true,
+          "propCupVisible": true,
+          "propPhoneVisible": true,
+          "vrmModelPath": ""
+        },
+        "weatherCompact": {
+          "backgroundOpacity": 0.28,
+          "displayMode": "compact",
+          "infoRowPosition": "top",
+          "pattern": "diagonal",
+          "showBackground": false,
+          "showCompactWeather": true,
+          "showCurrentMarker": true,
+          "showCurrentTriangle": true,
+          "showHumidity": true,
+          "showLocation": true,
+          "showMinMaxLabels": false,
+          "showPressure": true,
+          "showTemperature": true,
+          "showWeather": true,
+          "temperaturePadding": 5
+        },
+        "weatherDetail": {
+          "backgroundOpacity": 0.4,
+          "compassSize": 91,
+          "feelsLikeSize": 23,
+          "fontSize": 1,
+          "footerSize": 20,
+          "gap": 10,
+          "mainIconSize": 92,
+          "mainTempSize": 88,
+          "maxNoteLines": 0,
+          "metricLabelSize": 19,
+          "metricValueSize": 19,
+          "minMaxTempSize": 35,
+          "noteSize": 21,
+          "paddingBottom": 7,
+          "paddingTop": 16,
+          "paddingX": 11,
+          "pattern": "dot",
+          "showBackground": false,
+          "sunIconSize": 37,
+          "windSunSize": 34
+        }
+      },
+      "createdAt": "2026-07-10T13:18:40Z",
+      "updatedAt": "2026-07-10T13:29:19Z"
+    },
+    {
+      "id": "builtin-1920x1080-sample",
+      "name": "1920×1080用サンプル",
+      "layout": {
+        "canvas": {
+          "height": 1080,
+          "width": 1920
+        },
+        "clock": {
+          "dateSize": 76,
+          "timeSize": 129,
+          "width": 642,
+          "x": 0,
+          "y": 0
+        },
+        "detailPanel": {
+          "height": 900,
+          "width": 420,
+          "x": 1320,
+          "y": 70
+        },
+        "lyricsPanel": {
+          "height": 225,
+          "width": 896,
+          "x": 1020,
+          "y": 780
+        },
+        "memoPanel": {
+          "height": 225,
+          "width": 500,
+          "x": 514,
+          "y": 780
+        },
+        "musicPanel": {
+          "height": 305,
+          "width": 520,
+          "x": 1396,
+          "y": 468
+        },
+        "newsPanel": {
+          "height": 458,
+          "width": 520,
+          "x": 1396,
+          "y": 6
+        },
+        "personalNewsPanel": {
+          "height": 225,
+          "width": 896,
+          "x": 1020,
+          "y": 780
+        },
+        "rightDock": {
+          "gap": 16,
+          "width": 110,
+          "x": 1789,
+          "y": 100
+        },
+        "safeArea": {
+          "padding": 40
+        },
+        "timerPanel": {
+          "height": 225,
+          "width": 500,
+          "x": 8,
+          "y": 780
+        },
+        "weatherCompact": {
+          "barHeight": 22,
+          "fontSize": 24,
+          "rowGap": 10,
+          "width": 531,
+          "x": 16,
+          "y": 216
+        }
+      },
+      "settings": {
+        "baseResolution": "1920x1080",
+        "clock": {
+          "backgroundOpacity": 0.28,
+          "customHumidity": "HUMID 62%",
+          "customLocation": "SAPPORO",
+          "customWeatherDesc": "CLOUDY",
+          "customWeatherTemp": "18°C",
+          "dateOffsetX": 10,
+          "paddingX": 0,
+          "paddingY": 0,
+          "showBackground": false,
+          "showClock": true,
+          "showDate": true,
+          "showHumidity": true,
+          "showLocation": true,
+          "showSeconds": true,
+          "showWeather": true
+        },
+        "debugMode": false,
+        "lyricsPanel": {
+          "align": "center",
+          "backgroundOpacity": 0.34,
+          "contentTopGap": 6,
+          "currentMaxLines": 2,
+          "currentSize": 38,
+          "lineGap": 3,
+          "lineOverflowMode": "ellipsis",
+          "metaSize": 12,
+          "show": true,
+          "showBackground": true,
+          "showHeader": true,
+          "showStatus": true,
+          "showTrack": true,
+          "sideMaxLines": 1,
+          "sideOpacity": 0.45,
+          "sideSize": 18
+        },
+        "memoPanel": {
+          "backgroundOpacity": 0.4,
+          "cardGap": 14,
+          "cardPadding": 6,
+          "contentTopGap": 9,
+          "dateSize": 12,
+          "maxItems": 0,
+          "maxLines": 0,
+          "show": true,
+          "showBackground": true,
+          "showDates": false,
+          "showFooter": false,
+          "showHeader": true,
+          "showPinnedSection": true,
+          "textSize": 21
+        },
+        "motion": {
+          "directorMode": "auto",
+          "disabledModes": [],
+          "disabledMotions": [],
+          "fixedMode": "work_normal",
+          "modeMaxMinutes": 30,
+          "modeMinMinutes": 15,
+          "motionMaxSeconds": 240,
+          "motionMinSeconds": 90
+        },
+        "musicPanel": {
+          "artistSize": 16,
+          "artworkCornerSize": 149,
+          "artworkMode": "topRight",
+          "artworkProgressGap": 13,
+          "artworkScale": 1,
+          "artworkTopGap": 12,
+          "backgroundOpacity": 0.4,
+          "barHeight": 19,
+          "controlSize": 24,
+          "gap": 20,
+          "pattern": "diagonal",
+          "show": true,
+          "showAlbum": true,
+          "showArtwork": true,
+          "showBackground": true,
+          "showControls": false,
+          "showFooter": false,
+          "showHeader": true,
+          "showMarker": true,
+          "showTimeCodes": true,
+          "timeSize": 15,
+          "titleSize": 34
+        },
+        "newsPanel": {
+          "backgroundOpacity": 0.4,
+          "contentTopGap": 12,
+          "footerSize": 15,
+          "highlightLatest": true,
+          "indexSize": 26,
+          "itemGap": 18,
+          "maxItems": 3,
+          "maxSummaryLines": 2,
+          "maxTitleLines": 2,
+          "metaPlacement": "separate",
+          "show": true,
+          "showBackground": true,
+          "showDivider": true,
+          "showFooter": false,
+          "showHeader": true,
+          "showIndex": true,
+          "showSource": true,
+          "showSummary": true,
+          "showTime": true,
+          "singleLineTitle": true,
+          "summarySize": 13,
+          "timeSize": 15,
+          "titleSize": 17
+        },
+        "overlay": {
+          "fpsLimit": 60,
+          "opacity": 1
+        },
+        "personalNewsPanel": {
+          "autoShowWhenLyricsUnavailable": true,
+          "backgroundOpacity": 0.34,
+          "contentTopGap": 18,
+          "hideLyricsWhenAutoShown": true,
+          "personalNewsBodySize": 35,
+          "personalNewsGap": 12,
+          "personalNewsProgressHeight": 10,
+          "personalNewsScrollSpeed": 1,
+          "personalNewsShowBody": true,
+          "personalNewsShowChapterMarks": true,
+          "personalNewsShowProgress": false,
+          "personalNewsShowSource": true,
+          "personalNewsShowTitle": false,
+          "personalNewsShowTopic": true,
+          "personalNewsSourceSize": 12,
+          "personalNewsSupplementColor": "#b8dcff",
+          "personalNewsTitleSize": 15,
+          "personalNewsTopicSize": 24,
+          "show": false,
+          "showBackground": true,
+          "showHeader": true,
+          "showStatus": false
+        },
+        "timerPanel": {
+          "backgroundOpacity": 0.4,
+          "barHeight": 20,
+          "contentTopGap": 18,
+          "focusLabel": "FOCUS",
+          "focusTitle": "Pomodoro",
+          "itemGap": 6,
+          "longBreakLabel": "LONG BREAK",
+          "longBreakMinutes": 15,
+          "longBreakTitle": "Long Rest",
+          "metaSize": 13,
+          "mode": "pomodoro",
+          "pomodoroMinutes": 25,
+          "shortBreakLabel": "BREAK",
+          "shortBreakMinutes": 5,
+          "shortBreakTitle": "Rest",
+          "show": true,
+          "showBackground": true,
+          "showControls": false,
+          "showCycle": true,
+          "showHeader": true,
+          "timeSize": 53,
+          "timerLabel": "TIMER",
+          "timerMinutes": 10,
+          "timerPresets": [],
+          "timerTitle": "Countdown",
+          "titleSize": 15
+        },
+        "wallpaper": {
+          "backgroundFit": "cover",
+          "backgroundImageDataUrl": "/backgrounds/sample-kobe-night.jpg",
+          "backgroundImageEnabled": true,
+          "backgroundMode": "single",
+          "backgroundOverlays": [],
+          "backgroundQueue": [],
+          "backgroundQueueFadeSeconds": 1,
+          "backgroundQueueIntervalSeconds": 60,
+          "backgroundTransition": "fade",
+          "backgroundVideoMuted": true,
+          "cameraAdjustmentEnabled": true,
+          "cameraMoveStep": 0.05,
+          "cameraPitch": -2,
+          "cameraRoll": 0,
+          "cameraRotateStep": 1,
+          "cameraX": -0.25,
+          "cameraY": -0.05,
+          "cameraYaw": -2,
+          "cameraZ": -0.04999999999999992,
+          "itemLayout": {
+            "item:book": {
+              "position": [
+                -0.5,
+                0.7511,
+                0.28
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.23976,
+                0.23976,
+                0.23976
+              ]
+            },
+            "item:controller": {
+              "position": [
+                0.31,
+                0.74,
+                0.36
+              ],
+              "rotation": [
+                0,
+                2.35,
+                1.53
+              ],
+              "scale": [
+                0.017,
+                0.016,
+                0.017
+              ]
+            },
+            "item:cup": {
+              "position": [
+                0.28,
+                0.73,
+                0.2
+              ],
+              "rotation": [
+                0,
+                3.13,
+                0
+              ],
+              "scale": [
+                0.037,
+                0.037,
+                0.037
+              ]
+            },
+            "item:headphones": {
+              "position": [
+                -0.6214,
+                0.7363,
+                0.52
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.17767,
+                0.17767,
+                0.17767
+              ]
+            },
+            "item:phone": {
+              "position": [
+                0.39,
+                0.73,
+                0.21
+              ],
+              "rotation": [
+                0,
+                0.6,
+                0
+              ],
+              "scale": [
+                0.66578,
+                0.66578,
+                0.66578
+              ]
+            },
+            "item:snack_plate": {
+              "position": [
+                0.1208,
+                0.7271,
+                0.1475
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.48711,
+                0.48711,
+                0.48711
+              ]
+            }
+          },
+          "modelLightScale": 2.45,
+          "modelVisible": true,
+          "objectLayout": {
+            "chair": {
+              "position": [
+                -9.066,
+                0,
+                5.627
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                0.027,
+                0.027,
+                0.027
+              ]
+            },
+            "character": {
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            },
+            "desk": {
+              "position": [
+                0,
+                0,
+                0.47
+              ],
+              "rotation": [
+                0,
+                3.14,
+                0
+              ],
+              "scale": [
+                0.927,
+                0.927,
+                0.927
+              ]
+            },
+            "laptop": {
+              "position": [
+                -0.03,
+                0.72,
+                0.24
+              ],
+              "rotation": [
+                0,
+                1.569,
+                0
+              ],
+              "scale": [
+                0.34,
+                0.34,
+                0.34
+              ]
+            }
+          },
+          "propControllerVisible": true,
+          "propCupVisible": true,
+          "propPhoneVisible": true,
+          "vrmModelPath": ""
+        },
+        "weatherCompact": {
+          "backgroundOpacity": 0.28,
+          "displayMode": "compact",
+          "infoRowPosition": "top",
+          "pattern": "diagonal",
+          "showBackground": false,
+          "showCompactWeather": true,
+          "showCurrentMarker": true,
+          "showCurrentTriangle": true,
+          "showHumidity": true,
+          "showLocation": true,
+          "showMinMaxLabels": false,
+          "showPressure": true,
+          "showTemperature": true,
+          "showWeather": true,
+          "temperaturePadding": 5
+        },
+        "weatherDetail": {
+          "backgroundOpacity": 0.4,
+          "compassSize": 91,
+          "feelsLikeSize": 23,
+          "fontSize": 1,
+          "footerSize": 20,
+          "gap": 10,
+          "mainIconSize": 92,
+          "mainTempSize": 88,
+          "maxNoteLines": 0,
+          "metricLabelSize": 19,
+          "metricValueSize": 19,
+          "minMaxTempSize": 35,
+          "noteSize": 21,
+          "paddingBottom": 7,
+          "paddingTop": 16,
+          "paddingX": 11,
+          "pattern": "dot",
+          "showBackground": false,
+          "sunIconSize": 37,
+          "windSunSize": 34
+        }
+      },
+      "createdAt": "2026-07-10T13:18:40Z",
+      "updatedAt": "2026-07-10T13:29:19Z"
+    }
+  ]
+}

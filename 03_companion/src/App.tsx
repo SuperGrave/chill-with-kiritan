@@ -96,7 +96,9 @@ function App() {
             <RefreshIcon />
             <span>更新</span>
           </button>
-          <div className="rail-ver">{health?.version ? `v${health.version}` : "v0.8.2"}</div>
+          {/* /api/health is the single version source (Cargo.toml) — no hardcoded
+              fallback string to forget at release time; show a dash until it loads. */}
+          <div className="rail-ver">{health?.version ? `v${health.version}` : "—"}</div>
         </div>
       </nav>
 

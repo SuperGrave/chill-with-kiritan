@@ -1,5 +1,6 @@
 param(
-  [string]$Version = "0.8.1",
+  # Omit to package the version the code actually declares (Cargo.toml).
+  [string]$Version = "",
   [switch]$SkipWallpaperBuild,
   [switch]$SkipCompanionBuild,
   [switch]$IncludeLocalVrmForPersonalUse
@@ -9,9 +10,42 @@ $ErrorActionPreference = "Stop"
 
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptRoot
+
+# ── Version consistency gate ──────────────────────────────────────────────────
+# Cargo.toml is the canonical version (/api/health serves it). Everything else
+# (three package.json + tauri.conf.json + the -Version argument, if given) must
+# agree, so a release can never ship mixed version stamps.
+$CargoTomlPath = Join-Path $RepoRoot "03_companion\src-tauri\Cargo.toml"
+$cargoMatch = Select-String -LiteralPath $CargoTomlPath -Pattern '^version = "([^"]+)"' | Select-Object -First 1
+if (-not $cargoMatch) { throw "Could not read package.version from $CargoTomlPath" }
+$CanonicalVersion = $cargoMatch.Matches[0].Groups[1].Value
+
 $VersionText = $Version.Trim()
 if ([string]::IsNullOrWhiteSpace($VersionText)) {
-  throw "Version is required, for example: 0.8.1"
+  $VersionText = $CanonicalVersion
+}
+
+$versionMismatches = @()
+if ($VersionText.TrimStart("v") -ne $CanonicalVersion) {
+  $versionMismatches += "requested -Version $VersionText but Cargo.toml declares $CanonicalVersion"
+}
+foreach ($rel in @("01_wallpaper\package.json", "02_ui-overlay\package.json", "03_companion\package.json", "03_companion\src-tauri\tauri.conf.json")) {
+  $json = Get-Content -LiteralPath (Join-Path $RepoRoot $rel) -Raw | ConvertFrom-Json
+  if ($json.version -ne $CanonicalVersion) {
+    $versionMismatches += "$rel = $($json.version)"
+  }
+}
+if ($versionMismatches.Count -gt 0) {
+  throw "Version stamps disagree with Cargo.toml ($CanonicalVersion):`n  " + ($versionMismatches -join "`n  ")
+}
+
+# ── cargo fmt gate ────────────────────────────────────────────────────────────
+Push-Location (Join-Path $RepoRoot "03_companion\src-tauri")
+try {
+  cargo fmt --check
+  if ($LASTEXITCODE -ne 0) { throw "cargo fmt --check failed - run 'cargo fmt' in 03_companion/src-tauri first." }
+} finally {
+  Pop-Location
 }
 $VersionTag = if ($VersionText.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
   $VersionText

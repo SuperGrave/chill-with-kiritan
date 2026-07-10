@@ -177,32 +177,32 @@ pub async fn fetch_news(http: &reqwest::Client, cfg: &NewsConfig) -> Result<News
                     continue;
                 }
                 match resp.text().await {
-                Ok(body) => {
-                    let mut feed_items = parse_rss(&body, &source);
-                    let status = if feed_items.is_empty() { "empty" } else { "ok" };
-                    feed_items.truncate(MAX_NEWS_ITEMS_PER_FEED);
-                    items.extend(feed_items.iter().cloned());
-                    feeds.push(NewsFeedState {
-                        feed_url: feed.clone(),
-                        source,
-                        status: status.to_string(),
-                        items: feed_items,
-                        error: None,
-                        updated_at,
-                    });
-                }
-                Err(e) => {
-                    let error = e.to_string();
-                    errors.push(format!("{source}: {error}"));
-                    feeds.push(NewsFeedState {
-                        feed_url: feed.clone(),
-                        source,
-                        status: "error".to_string(),
-                        items: vec![],
-                        error: Some(error),
-                        updated_at,
-                    });
-                }
+                    Ok(body) => {
+                        let mut feed_items = parse_rss(&body, &source);
+                        let status = if feed_items.is_empty() { "empty" } else { "ok" };
+                        feed_items.truncate(MAX_NEWS_ITEMS_PER_FEED);
+                        items.extend(feed_items.iter().cloned());
+                        feeds.push(NewsFeedState {
+                            feed_url: feed.clone(),
+                            source,
+                            status: status.to_string(),
+                            items: feed_items,
+                            error: None,
+                            updated_at,
+                        });
+                    }
+                    Err(e) => {
+                        let error = e.to_string();
+                        errors.push(format!("{source}: {error}"));
+                        feeds.push(NewsFeedState {
+                            feed_url: feed.clone(),
+                            source,
+                            status: "error".to_string(),
+                            items: vec![],
+                            error: Some(error),
+                            updated_at,
+                        });
+                    }
                 }
             }
             Err(e) => {

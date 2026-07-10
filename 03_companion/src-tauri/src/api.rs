@@ -120,7 +120,10 @@ pub fn build_router(shared: Shared) -> Router {
         .route("/api/settings", get(get_settings).put(put_settings))
         .route("/api/startup/status", get(startup_status))
         .route("/api/startup/repair", post(startup_repair))
-        .route("/api/startup/repair-elevated", post(startup_repair_elevated))
+        .route(
+            "/api/startup/repair-elevated",
+            post(startup_repair_elevated),
+        )
         .route("/api/secrets/status", get(secrets_status))
         .route("/api/secrets", put(put_secrets))
         // ── Data folder / backup ─────────────────────────────────────
@@ -899,7 +902,9 @@ async fn backup_export(State(s): State<Shared>, Json(body): Json<Value>) -> Json
     };
 
     if let Err(e) = std::fs::create_dir_all(&backups_dir) {
-        return Json(json!({ "ok": false, "error": format!("フォルダを作成できませんでした: {e}") }));
+        return Json(
+            json!({ "ok": false, "error": format!("フォルダを作成できませんでした: {e}") }),
+        );
     }
     let stamp = now_iso().replace(':', "-").replace('.', "-");
     let file_name = format!("kiritan-companion-backup-{stamp}.json");
@@ -965,7 +970,9 @@ async fn backup_import(State(s): State<Shared>, Json(body): Json<Value>) -> Json
             }
         }
         if applied.is_empty() {
-            return Json(json!({ "ok": false, "error": "有効なバックアップデータが見つかりません" }));
+            return Json(
+                json!({ "ok": false, "error": "有効なバックアップデータが見つかりません" }),
+            );
         }
         touch(&mut g);
         startup_config = g.state.settings.startup.clone();

@@ -41,6 +41,7 @@ Assert-UnderPath $OutputRoot $ReleaseRoot "OutputRoot"
 
 $WallpaperRoot = Join-Path $RepoRoot "01_wallpaper"
 $DistRoot = Join-Path $WallpaperRoot "dist"
+$StartGuideSource = Join-Path $RepoRoot "docs\START_GUIDE_JP.md"
 $DefaultZipName = if ($IncludeLocalVrmForPersonalUse) {
   "Chill-with-Kiritan-WallpaperEngine-local-personal.zip"
 } else {
@@ -79,6 +80,9 @@ if (Test-Path $OutputRoot) {
 New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
 
 Copy-Item -Path (Join-Path $DistRoot "*") -Destination $OutputRoot -Recurse -Force
+if (Test-Path $StartGuideSource) {
+  Copy-Item -LiteralPath $StartGuideSource -Destination (Join-Path $OutputRoot "START_GUIDE_JP.md") -Force
+}
 
 $project = [ordered]@{
   title = "Chill with Kiritan"
@@ -119,6 +123,8 @@ This folder is generated from `01_wallpaper/dist` for Wallpaper Engine.
 2. Use "Open from File" or "Create Wallpaper" for a web wallpaper.
 3. Select this folder's `project.json` or `index.html`.
 4. Run `Tohoku Companion` separately if you want live weather, news, Spotify, memos, settings, or personal news.
+
+Japanese start guide: `START_GUIDE_JP.md`
 
 ## Model File
 

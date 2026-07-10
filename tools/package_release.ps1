@@ -55,6 +55,8 @@ $VersionTag = if ($VersionText.StartsWith("v", [System.StringComparison]::Ordina
 $ReleaseRoot = Join-Path $RepoRoot "release\$VersionTag"
 $CompanionRelease = Join-Path $ReleaseRoot "companion"
 $WallpaperOutputRoot = Join-Path $ReleaseRoot "wallpaper-engine\Chill with Kiritan"
+$StartGuideSource = Join-Path $RepoRoot "docs\START_GUIDE_JP.md"
+$StartGuideRelease = Join-Path $ReleaseRoot "START_GUIDE_JP.md"
 $WallpaperZipName = if ($IncludeLocalVrmForPersonalUse) {
   "Chill-with-Kiritan-WallpaperEngine-$VersionTag-local-personal.zip"
 } else {
@@ -81,6 +83,10 @@ if ($SkipWallpaperBuild) { $wallpaperArgs.SkipBuild = $true }
 if ($IncludeLocalVrmForPersonalUse) { $wallpaperArgs.IncludeLocalVrmForPersonalUse = $true }
 
 & (Join-Path $ScriptRoot "package_wallpaper_engine.ps1") @wallpaperArgs
+
+if (Test-Path $StartGuideSource) {
+  Copy-Item -LiteralPath $StartGuideSource -Destination $StartGuideRelease -Force
+}
 
 if (-not $SkipCompanionBuild) {
   Push-Location (Join-Path $RepoRoot "03_companion")
@@ -141,6 +147,10 @@ $WallpaperModelNote
 Companion stores live user data under `%APPDATA%\tohoku-companion`; this release
 folder does not include Spotify credentials, memos, UI presets, API keys, or
 other local user data.
+
+## Start Guide
+
+- Japanese manual: START_GUIDE_JP.md
 "@ | Set-Content -LiteralPath (Join-Path $ReleaseRoot "README_RELEASE.md") -Encoding UTF8
 
 if (Test-Path $ReleaseZipPath) {
@@ -150,6 +160,7 @@ $archiveItems = @(
   $WallpaperOutputRoot,
   $WallpaperZipPath,
   $CompanionRelease,
+  $StartGuideRelease,
   (Join-Path $ReleaseRoot "README_RELEASE.md")
 ) | Where-Object { Test-Path -LiteralPath $_ }
 Compress-Archive -LiteralPath $archiveItems -DestinationPath $ReleaseZipPath -Force

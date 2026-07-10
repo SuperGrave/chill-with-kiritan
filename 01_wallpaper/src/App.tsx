@@ -6,7 +6,7 @@ import { IDLE_STATES, IDLE_STATE_LABELS } from './lib/motion/idleStateMachine';
 import type { ExternalMotionDebug } from './lib/motion/externalMotionController';
 import type { SceneDebug } from './lib/scene/sceneTypes';
 import type { SceneBackground } from './lib/scene/sceneTypes';
-import { getDaypart } from './lib/scene/daypart';
+import { resolveDaypart } from './lib/scene/daypart';
 import type { Daypart } from './lib/scene/daypart';
 import { uiSettings as defaultUiSettings } from '../../02_ui-overlay/src/config/uiSettings';
 import { subscribeCompanionUi } from '../../02_ui-overlay/src/services/companionClient';
@@ -485,13 +485,16 @@ function App() {
   // Daypart (Stage D, 2026-07-01): local-clock day/night, re-checked every
   // minute — the boundary only needs to be caught within a minute or so, and
   // this avoids a per-second re-render for something that flips twice a day.
-  // (No Companion override yet — daypart.ts's resolveDaypart() is ready for
-  // one, but wiring the setting itself is a later Companion-hardening item.)
-  const [daypart, setDaypart] = useState<Daypart>(() => getDaypart(new Date()));
+  // ?daypart=day|night forces a variant through resolveDaypart's override hook
+  // (daypart QA / screenshots); anything else falls back to the local clock.
+  const daypartParam = params.get('daypart');
+  const daypartOverride: Daypart | 'auto' =
+    daypartParam === 'day' || daypartParam === 'night' ? daypartParam : 'auto';
+  const [daypart, setDaypart] = useState<Daypart>(() => resolveDaypart(daypartOverride, new Date()));
   useEffect(() => {
-    const id = window.setInterval(() => setDaypart(getDaypart(new Date())), 60_000);
+    const id = window.setInterval(() => setDaypart(resolveDaypart(daypartOverride, new Date())), 60_000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [daypartOverride]);
 
   // Background / Window / Light Overlay (Motion Probe 0.5).
   const [backgroundEnabled, setBackgroundEnabled] = useState(true);

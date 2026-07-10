@@ -194,6 +194,62 @@ async function main() {
   }
 
   // =========================================================================
+  // 1b. Activity cadence (v0.8.3 A11): ambient start/end and away-stage
+  //     changes post immediately; unchanged activity does not re-post.
+  // =========================================================================
+  section('1b. Activity cadence (ambient start/end, away stage)');
+  {
+    const sent = [];
+    const poster = new KiritanPoster({
+      transport: (_url, body) => { sent.push(body); },
+      heartbeatMs: 30_000,
+      now,
+    });
+    const fsm = new ModeFsm(makeRng(11), 'work_normal');
+    const snap = () => fsm.snapshot();
+
+    clock += 1000;
+    ok(poster.maybePost(snap(), { nowMs: clock, ambient: null, away: null }) === 'initial', 'activity: first post is initial');
+
+    // Ambient starts → immediate 'activity' post carrying the ambient.
+    clock += 1000;
+    const r1 = poster.maybePost(snap(), { nowMs: clock, ambient: { id: 'amb_work_neck_roll', endsInSec: 4 }, away: null });
+    ok(r1 === 'activity', `ambient start posts immediately as 'activity' (got ${r1})`);
+    ok(sent[sent.length - 1].ambient?.id === 'amb_work_neck_roll', 'activity post carries the ambient id');
+
+    // Same ambient still playing (endsInSec counting down) → no re-post.
+    clock += 1000;
+    const r2 = poster.maybePost(snap(), { nowMs: clock, ambient: { id: 'amb_work_neck_roll', endsInSec: 3 }, away: null });
+    ok(r2 === null, `unchanged ambient (only endsInSec moved) does not re-post (got ${r2})`);
+
+    // Ambient ends → immediate 'activity' post with ambient null again.
+    clock += 1000;
+    const r3 = poster.maybePost(snap(), { nowMs: clock, ambient: null, away: null });
+    ok(r3 === 'activity', `ambient end posts immediately as 'activity' (got ${r3})`);
+    ok(sent[sent.length - 1].ambient === null, 'ambient-end post carries ambient=null');
+
+    // Away stage change (reason string) → 'activity'; drifting
+    // expectedReturnInMin alone → no re-post.
+    clock += 1000;
+    const away1 = poster.maybePost(snap(), { nowMs: clock, ambient: null, away: { reason: 'leaving', expectedReturnInMin: 5 } });
+    ok(away1 === 'activity', `away stage appearing posts as 'activity' (got ${away1})`);
+    clock += 1000;
+    const away2 = poster.maybePost(snap(), { nowMs: clock, ambient: null, away: { reason: 'leaving', expectedReturnInMin: 4.9 } });
+    ok(away2 === null, `away with same reason (only ETA moved) does not re-post (got ${away2})`);
+    clock += 1000;
+    const away3 = poster.maybePost(snap(), { nowMs: clock, ambient: null, away: { reason: 'out-of-room', expectedReturnInMin: 4.8 } });
+    ok(away3 === 'activity', `away stage change posts as 'activity' (got ${away3})`);
+
+    // Heartbeat still fires on a sustained unchanged activity.
+    clock += 31_000;
+    const hb = poster.maybePost(snap(), { nowMs: clock, ambient: null, away: { reason: 'out-of-room', expectedReturnInMin: 4 } });
+    ok(hb === 'heartbeat', `heartbeat still fires with unchanged activity (got ${hb})`);
+
+    const schemaErrs = sent.flatMap((b) => validateKiritanState(b));
+    ok(schemaErrs.length === 0, `all activity-cadence bodies valid §5.7 schema (${schemaErrs.length} errors)`);
+  }
+
+  // =========================================================================
   // 2. Fire-and-forget resilience (receiver absent / rejecting / hung)
   // =========================================================================
   section('2. Fire-and-forget resilience (host must never throw or block)');

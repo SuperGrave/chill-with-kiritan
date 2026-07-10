@@ -246,6 +246,21 @@ export type PersonalNewsState = {
   updatedAt: string;
 };
 
+// Wallpaper-reported runtime state (POST /api/kiritan/state wire object plus
+// the server-stamped receivedAt). Everything except mode is optional-tolerant:
+// the reader must survive an older wallpaper posting a smaller object.
+export type KiritanRuntimeState = {
+  mode: string;
+  modeLabel?: string;
+  since?: string;
+  prevMode?: string | null;
+  presence?: string; // "present" | "away"
+  ambient?: { id: string; endsAt?: string } | null;
+  sleepiness?: number; // 0..1
+  away?: { reason?: string; expectedReturnAt?: string } | null;
+  receivedAt?: string;
+};
+
 export const api = {
   health: () => req<{ ok: boolean; app: string; version: string }>("/health"),
   state: () => req<any>("/state"),
@@ -274,7 +289,7 @@ export const api = {
   putSecrets: (secrets: Record<string, string>) => put("/secrets", secrets),
 
   // Wallpaper-reported kiritan runtime state (null until the wallpaper posts).
-  kiritanState: () => req<{ receivedAt?: string } | null>("/kiritan/state"),
+  kiritanState: () => req<KiritanRuntimeState | null>("/kiritan/state"),
 
   // Data folder / backup
   dataDir: () => req<{ ok: boolean; path: string }>("/data-dir"),

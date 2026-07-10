@@ -1249,6 +1249,15 @@ button svg { width: 15px; height: 15px; }
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 10px;
 }
+
+/* きりたんは今 — REMOTE 先頭の状態ストリップ */
+.remote-kiritan { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.remote-kiritan-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.remote-kiritan-body { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.remote-kiritan-main { font-size: 16px; color: var(--text); }
+.remote-kiritan-sub { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-dim); }
+.remote-kiritan-empty { font-size: 11.5px; color: var(--text-dim); margin: 0; }
+
 .remote-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
 .remote-timer { display: flex; flex-direction: column; gap: 12px; }
 .remote-timer-meta strong { display: block; font-size: 15px; margin-top: 3px; color: var(--text); }

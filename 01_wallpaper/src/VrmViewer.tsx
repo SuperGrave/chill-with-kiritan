@@ -1656,7 +1656,28 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     const postKiritanState = () => {
       const director = directorRef.current;
       const snapshot = director ? director.snapshot() : fallbackKiritanSnapshot();
-      kiritanPoster.maybePost(snapshot, { nowMs: Date.now(), ambient: null, away: null });
+      // Report what she is actually DOING, not just the mode: the running
+      // ambient one-shot (with its remaining play time, read off the live
+      // AnimationAction) and the away-walk stage while out of the room.
+      let ambient: { id: string; endsInSec: number } | null = null;
+      const status = director?.status();
+      if (status?.state === 'ambient' && status.lastAmbient) {
+        const action = actionRef.current;
+        const clipDuration = action?.getClip()?.duration ?? 0;
+        ambient = {
+          id: status.lastAmbient,
+          endsInSec: action ? Math.max(0, clipDuration - action.time) : 0,
+        };
+      }
+      let away: { reason: string; expectedReturnInMin: number } | null = null;
+      if (snapshot.mode === 'away_room') {
+        const stage = awayRef.current.active ? awayRef.current.stage : 'hidden';
+        away = {
+          reason: stage === 'leave' ? 'leaving' : stage === 'return' ? 'returning' : 'out-of-room',
+          expectedReturnInMin: Math.max(0, snapshot.dwellTargetMinutes - snapshot.sinceMinutes),
+        };
+      }
+      kiritanPoster.maybePost(snapshot, { nowMs: Date.now(), ambient, away });
     };
     let frameCount = 0;
     let lastFpsTime = 0;

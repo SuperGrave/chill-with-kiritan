@@ -4,8 +4,11 @@
 // (`POST /api/kiritan/state`) on every mode transition plus a heartbeat. It is
 // the network half that complements the pure serialiser in `kiritanState.ts`.
 //
-// Contract (Test E acceptance):
-//   * Emits on mode change AND on a fixed heartbeat interval (default 30 s).
+// Contract (Test E acceptance, extended for v0.8.3 A11):
+//   * Emits on mode change, on an ACTIVITY change (ambient one-shot start/end,
+//     away-stage change — ambients only play for a few seconds, so waiting for
+//     the heartbeat would almost never catch one on the wire), AND on a fixed
+//     heartbeat interval (default 30 s).
 //   * Fire-and-forget: a rejected/throwing/hung transport NEVER throws back into
 //     the host and NEVER blocks it (the call returns synchronously; the promise
 //     is detached). A missing receiver therefore has zero effect on the wallpaper.
@@ -33,7 +36,7 @@ export interface KiritanPosterConfig {
   onError?: (err: unknown) => void;
 }
 
-export type PostReason = 'transition' | 'heartbeat' | 'initial';
+export type PostReason = 'transition' | 'activity' | 'heartbeat' | 'initial';
 
 const DEFAULT_URL = 'http://127.0.0.1:40313/api/kiritan/state';
 const TOKEN_HEADER = 'X-Companion-Token';
@@ -123,6 +126,7 @@ export class KiritanPoster {
   private readonly onError: (err: unknown) => void;
 
   private lastMode: string | null = null;
+  private lastActivityKey: string | null = null;
   private lastPostMs = Number.NEGATIVE_INFINITY;
   private sent = 0;
   private errors = 0;
@@ -142,13 +146,19 @@ export class KiritanPoster {
    */
   maybePost(snap: FsmSnapshot, ctx: KiritanStateContext): PostReason | null {
     const t = this.now();
+    // Activity identity: what she's doing beyond the mode. Only the ambient's
+    // id and the away stage participate — continuously-changing fields
+    // (endsInSec, expectedReturnInMin) must not retrigger every frame.
+    const activityKey = `${snap.mode}|${ctx.ambient?.id ?? ''}|${ctx.away?.reason ?? ''}`;
     let reason: PostReason | null = null;
     if (this.lastPostMs === Number.NEGATIVE_INFINITY) reason = 'initial';
     else if (snap.mode !== this.lastMode) reason = 'transition';
+    else if (activityKey !== this.lastActivityKey) reason = 'activity';
     else if (t - this.lastPostMs >= this.heartbeatMs) reason = 'heartbeat';
     if (reason === null) return null;
 
     this.lastMode = snap.mode;
+    this.lastActivityKey = activityKey;
     this.lastPostMs = t;
     this.sent++;
 
@@ -162,6 +172,7 @@ export class KiritanPoster {
   /** Force-send the current snapshot (e.g. on shutdown). Fire-and-forget. */
   flush(snap: FsmSnapshot, ctx: KiritanStateContext): void {
     this.lastMode = snap.mode;
+    this.lastActivityKey = `${snap.mode}|${ctx.ambient?.id ?? ''}|${ctx.away?.reason ?? ''}`;
     this.lastPostMs = this.now();
     this.sent++;
     this.dispatch(buildKiritanState(snap, ctx));

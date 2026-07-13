@@ -17,6 +17,7 @@ use crate::models::*;
 use crate::services;
 use crate::startup;
 use crate::state::Shared;
+use crate::tasks;
 
 pub const API_PORT: u16 = 40313;
 pub const API_TOKEN_HEADER: &str = "X-Companion-Token";
@@ -73,6 +74,11 @@ pub fn build_router(shared: Shared) -> Router {
         g.data_dir.join("backgrounds")
     };
     let _ = std::fs::create_dir_all(&backgrounds_dir);
+    let models_dir = {
+        let g = shared.lock().unwrap();
+        g.data_dir.join("models")
+    };
+    let _ = std::fs::create_dir_all(&models_dir);
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
@@ -116,6 +122,9 @@ pub fn build_router(shared: Shared) -> Router {
         // ── Background media ────────────────────────────────────────
         .route("/api/backgrounds/upload", post(background_upload))
         .nest_service("/api/backgrounds", ServeDir::new(backgrounds_dir))
+        // ── User-selected VRM models ────────────────────────────────
+        .route("/api/models/upload", post(model_upload))
+        .nest_service("/api/models", ServeDir::new(models_dir))
         // ── Config / secrets ─────────────────────────────────────────
         .route("/api/settings", get(get_settings).put(put_settings))
         .route("/api/startup/status", get(startup_status))
@@ -206,6 +215,12 @@ fn ok() -> Json<Value> {
 struct BackgroundUploadQuery {
     file_name: Option<String>,
     media_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ModelUploadQuery {
+    file_name: Option<String>,
 }
 
 fn safe_background_extension(file_name: Option<&str>, media_type: Option<&str>) -> String {
@@ -646,6 +661,66 @@ async fn background_upload(
     }))
 }
 
+async fn model_upload(
+    State(s): State<Shared>,
+    Host(host): Host,
+    Query(query): Query<ModelUploadQuery>,
+    body: Bytes,
+) -> Json<Value> {
+    if body.is_empty() {
+        return Json(json!({ "ok": false, "error": "empty VRM file" }));
+    }
+
+    let original_name = query
+        .file_name
+        .as_deref()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("selected.vrm")
+        .trim()
+        .to_string();
+    let extension = FsPath::new(&original_name)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase);
+    if extension.as_deref() != Some("vrm") {
+        return Json(json!({
+            "ok": false,
+            "error": "VRMファイル（.vrm）を選択してください"
+        }));
+    }
+
+    let saved_name = format!("{}.vrm", uuid::Uuid::new_v4());
+    let dir = s.lock().unwrap().data_dir.join("models");
+    if let Err(error) = tokio::fs::create_dir_all(&dir).await {
+        return Json(json!({
+            "ok": false,
+            "error": format!("failed to prepare models dir: {error}")
+        }));
+    }
+    let path = dir.join(&saved_name);
+    if let Err(error) = tokio::fs::write(&path, &body).await {
+        return Json(json!({
+            "ok": false,
+            "error": format!("failed to save VRM file: {error}")
+        }));
+    }
+    let host = if host.trim().is_empty() {
+        format!("127.0.0.1:{}", API_PORT)
+    } else {
+        host
+    };
+
+    Json(json!({
+        "ok": true,
+        "item": {
+            "url": format!("http://{host}/api/models/{saved_name}"),
+            "name": original_name,
+            "fileName": saved_name,
+            "size": body.len(),
+        }
+    }))
+}
+
 // ─── Presets ───────────────────────────────────────────────────────────────────
 
 async fn list_presets(State(s): State<Shared>) -> Json<Vec<UiPreset>> {
@@ -756,7 +831,8 @@ async fn put_settings(State(s): State<Shared>, Json(body): Json<Value>) -> Json<
         let previous_weather = g.state.settings.weather.clone();
         let mut cur = serde_json::to_value(&g.state.settings).unwrap_or(json!({}));
         merge(&mut cur, body);
-        if let Ok(parsed) = serde_json::from_value::<AppSettings>(cur) {
+        if let Ok(mut parsed) = serde_json::from_value::<AppSettings>(cur) {
+            parsed.spotify.poll_interval_ms = parsed.spotify.poll_interval_ms.clamp(1_000, 60_000);
             startup_config = Some(parsed.startup.clone());
             if parsed.weather != previous_weather {
                 weather_refresh = Some((parsed.weather.clone(), g.http.clone()));
@@ -903,6 +979,7 @@ async fn backup_export(State(s): State<Shared>, Json(body): Json<Value>) -> Json
                 "memos": g.state.memos,
                 "bookmarks": g.state.bookmarks,
                 "timer": g.state.timer,
+                "personalNews": g.state.personal_news,
             },
         });
         if include_secrets {
@@ -971,6 +1048,12 @@ async fn backup_import(State(s): State<Shared>, Json(body): Json<Value>) -> Json
             if let Ok(x) = serde_json::from_value(v.clone()) {
                 g.state.timer = x;
                 applied.push("timer");
+            }
+        }
+        if let Some(v) = data.get("personalNews") {
+            if let Ok(x) = serde_json::from_value(v.clone()) {
+                g.state.personal_news = x;
+                applied.push("personalNews");
             }
         }
         if let Some(v) = body.get("secrets") {
@@ -1338,26 +1421,12 @@ async fn spotify_callback(
 /// Ensures a valid access token (refreshing via refresh_token if needed),
 /// then polls currently-playing and writes it into state.
 async fn spotify_refresh(State(s): State<Shared>) -> Json<Value> {
-    let (token, http) = match ensure_spotify_token(&s).await {
-        Ok(x) => x,
-        Err(e) if e == "unconfigured" => {
-            let mut g = s.lock().unwrap();
-            g.state.spotify = SpotifyState {
-                connected: false,
-                status: "unconfigured".to_string(),
-                track: None,
-                lyrics: SpotifyLyricsState::default(),
-                error: None,
-            };
-            touch(&mut g);
-            return Json(json!({ "ok": false, "status": "unconfigured" }));
-        }
-        Err(e) => return Json(json!({ "ok": false, "error": e })),
-    };
-
-    match write_spotify_state(&s, &http, &token).await {
+    match tasks::refresh_spotify_once(&s).await {
         Ok(spotify) => Json(json!({ "ok": true, "spotify": spotify })),
-        Err(e) => Json(json!({ "ok": false, "error": e })),
+        Err(error) if error == "unconfigured" => {
+            Json(json!({ "ok": false, "status": "unconfigured" }))
+        }
+        Err(error) => Json(json!({ "ok": false, "error": error })),
     }
 }
 
@@ -1367,6 +1436,8 @@ async fn spotify_control(State(s): State<Shared>, Json(body): Json<Value>) -> Js
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    let guard = s.lock().unwrap().spotify_refresh_guard.clone();
+    let _refresh_guard = guard.lock().await;
     let (token, http) = match ensure_spotify_token(&s).await {
         Ok(x) => x,
         Err(e) => return Json(json!({ "ok": false, "error": e })),

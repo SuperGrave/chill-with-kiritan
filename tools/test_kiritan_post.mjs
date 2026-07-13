@@ -62,6 +62,10 @@ function section(t) {
   console.log(`\n=== ${t} ===`);
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function waitUntil(predicate, timeoutMs = 3000, intervalMs = 20) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate() && Date.now() < deadline) await sleep(intervalMs);
+}
 
 // A virtual clock the poster reads; the test drives it forward in sim time.
 let clock = Date.parse('2026-06-12T14:00:00+09:00');
@@ -164,8 +168,11 @@ async function main() {
       const r = poster.maybePost(fsm.snapshot(), { nowMs: clock, ambient: null, away: null });
       if (r) reasons[r]++;
     }
-    // Let the in-flight fire-and-forget POSTs land.
-    await sleep(150);
+    // Let the in-flight fire-and-forget POSTs land. A fixed short sleep was
+    // flaky after CPU-heavy suites because all heartbeat sends share the same
+    // token lookup before the POSTs fan out.
+    const totalSent = reasons.initial + reasons.transition + reasons.heartbeat;
+    await waitUntil(() => received.length === totalSent);
 
     ok(reasons.initial === 1, `exactly one initial sync POST (got ${reasons.initial})`);
     ok(transitions > 0, `FSM produced transitions to push (${transitions})`);
@@ -174,7 +181,6 @@ async function main() {
     // resets. Just assert the heartbeat actually fired on a sustained dwell.
     ok(reasons.heartbeat > 0, `heartbeat POSTs fired during dwell (${reasons.heartbeat})`);
 
-    const totalSent = reasons.initial + reasons.transition + reasons.heartbeat;
     ok(received.length === totalSent, `every POST was received (${received.length}/${totalSent})`);
 
     const schemaErrs = received.flatMap((b) => validateKiritanState(b));

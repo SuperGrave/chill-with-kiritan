@@ -401,7 +401,18 @@ pub async fn spotify_now_playing(
         return Ok(None);
     }
     if !resp.status().is_success() {
-        return Err(format!("spotify {}", resp.status()));
+        let status = resp.status();
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let retry_after = resp
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("unknown");
+            return Err(format!(
+                "spotify rate limited (429, retry after {retry_after}s)"
+            ));
+        }
+        return Err(format!("spotify {status}"));
     }
     let data: Value = resp.json().await.map_err(|e| e.to_string())?;
     let item = &data["item"];

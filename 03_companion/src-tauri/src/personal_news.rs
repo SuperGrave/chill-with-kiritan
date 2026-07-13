@@ -101,7 +101,7 @@ pub fn load_personal_news_state(
         .map(|p| p.to_string_lossy().to_string());
     let loop_enabled = previous.map_or(true, |p| p.loop_enabled);
 
-    PersonalNewsState {
+    let mut state = PersonalNewsState {
         scripts,
         current_script,
         selected_script_id,
@@ -127,7 +127,37 @@ pub fn load_personal_news_state(
             Some(errors.join("; "))
         },
         updated_at: now_iso(),
+    };
+
+    // A reload/restart should not silently rewind or stop the selected script.
+    // The script itself is always reparsed from disk, while the durable player
+    // cursor is restored only when the selected file still resolves to the same
+    // stable id. Reset the wall-clock anchor to now so time spent with Companion
+    // shut down is not counted as playback.
+    if let Some(previous) = previous.filter(|previous| {
+        previous.selected_script_id.is_some()
+            && previous.selected_script_id == state.selected_script_id
+    }) {
+        let line_count = state
+            .current_script
+            .as_ref()
+            .map(|script| script.lines.len())
+            .unwrap_or(0);
+        if line_count > 0 {
+            state.status = match previous.status.as_str() {
+                "playing" | "paused" | "finished" => previous.status.clone(),
+                _ => "idle".to_string(),
+            };
+            state.line_index = previous.line_index.min(line_count.saturating_sub(1));
+            state.line_elapsed_ms = previous.line_elapsed_ms;
+            state.loop_enabled = previous.loop_enabled;
+            state.auto_play_active = previous.auto_play_active;
+            state.line_started_at = (state.status == "playing").then(now_iso);
+            state = materialize_personal_news(&state);
+        }
     }
+
+    state
 }
 
 /// Materialize the two distributable samples into the user's data directory.
@@ -946,6 +976,35 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
         assert!(!paused.auto_play_active);
         assert_eq!(paused.line_index, 2);
         assert!(paused.line_elapsed_ms >= 900);
+    }
+
+    #[test]
+    fn reload_restores_the_same_scripts_playback_cursor() {
+        let dir = std::env::temp_dir().join(format!(
+            "tohoku-companion-personal-news-resume-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let scripts_dir = dir.join(SCRIPT_DIR_NAME);
+        std::fs::create_dir_all(&scripts_dir).unwrap();
+        std::fs::write(
+            scripts_dir.join("resume.txt"),
+            "# Title: Resume Test\n[Line: 10] first\n[Line: 10] second\n",
+        )
+        .unwrap();
+
+        let initial = load_personal_news_state(&dir, None, None);
+        let mut playing = control_personal_news(&initial, "play", None, None);
+        playing.line_index = 1;
+        playing.line_elapsed_ms = 1_250;
+        playing.line_started_at = Some(now_iso());
+        let restored = load_personal_news_state(&dir, Some(&playing), None);
+
+        assert_eq!(restored.selected_script_id, playing.selected_script_id);
+        assert_eq!(restored.status, "playing");
+        assert_eq!(restored.line_index, 1);
+        assert!(restored.line_elapsed_ms >= 1_250);
+        assert!(restored.line_started_at.is_some());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

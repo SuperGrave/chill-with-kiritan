@@ -65,18 +65,18 @@ cargo test
 cargo fmt --check
 ```
 
-v0.8.4の配布セットを再生成する場合:
+v0.8.5の配布セットを再生成する場合:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/package_release.ps1 -Version 0.8.4
+powershell -ExecutionPolicy Bypass -File tools/package_release.ps1 -Version 0.8.5
 ```
 
-出力先はGit管理外の `release/v0.8.4/` です。共有用パッケージにVRM/VRMAが入っていないことを必ず確認してください。
+出力先はGit管理外の `release/v0.8.5/` です。共有用パッケージにVRM/VRMAが入っていないことを必ず確認してください。
 
 モデル・キー・個人データを含まない制作版zipを作る場合:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/package_source.ps1 -Version 0.8.4
+powershell -ExecutionPolicy Bypass -File tools/package_source.ps1 -Version 0.8.5
 ```
 
 ## 変更箇所の目安

@@ -47,6 +47,7 @@ const resolutionOptions = [
   "2560x1440",
   "2560x1600",
   "3440x1440",
+  "3840x2160",
 ];
 
 const kiritanModeOptions = [
@@ -351,6 +352,7 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
   const [renameText, setRenameText] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState<SaveState>("idle");
+  const [modelUploadStatus, setModelUploadStatus] = useState("");
   const dirtyRef = useRef(false);
   const saveSeq = useRef(0);
 
@@ -419,6 +421,25 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
     const result = await api.uploadBackground(file, mediaType);
     if (!result.item?.url) throw new Error("missing uploaded background url");
     return result.item;
+  };
+
+  const setVrmModelFile = async (file: File | undefined) => {
+    if (!file) return;
+    setModelUploadStatus("VRMを読み込み中…");
+    try {
+      const result = await api.uploadModel(file);
+      if (!result.item?.url) throw new Error("missing uploaded model url");
+      patchSettingSection("wallpaper", {
+        vrmModelPath: result.item.url,
+        modelVisible: true,
+      });
+      setModelUploadStatus(`${result.item.name} を選択しました。壁紙側で読み込みを試します。`);
+      setError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "VRMの保存に失敗しました";
+      setModelUploadStatus(`VRMの読み込み準備に失敗: ${message}`);
+      setError("VRMファイルを読み込めませんでした");
+    }
   };
 
   const setBackgroundImageFile = async (file: File | undefined) => {
@@ -924,9 +945,34 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
           <div className="control-grid">
             <CheckControl label="3Dモデルを表示" checked={wallpaper.modelVisible !== false} onChange={(v) => setSettingValue("wallpaper", "modelVisible", v)} />
             <NumberControl label="3D明るさ" value={wallpaper.modelLightScale ?? 1} min={0} max={3} step={0.05} onChange={(v) => setSettingValue("wallpaper", "modelLightScale", v)} />
-            <ControlRow label="VRMファイル">
-              <input className="mono" value={wallpaper.vrmModelPath ?? ""} onChange={(e) => setSettingValue("wallpaper", "vrmModelPath", e.target.value)} placeholder="C:\\path\\model.vrm" />
-            </ControlRow>
+            <div className="display-control control-grid-wide">
+              <span>VRMファイル</span>
+              <div className="vrm-file-picker">
+                <input
+                  type="file"
+                  aria-label="VRMファイルを選択"
+                  accept=".vrm,model/gltf-binary,application/octet-stream"
+                  onChange={(e) => { void setVrmModelFile(e.target.files?.[0]); e.currentTarget.value = ""; }}
+                />
+                <input
+                  className="mono"
+                  readOnly
+                  value={wallpaper.vrmModelPath ?? ""}
+                  placeholder="未選択（パッケージ内 models/kiritan.vrm を使用）"
+                />
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => {
+                    patchSettingSection("wallpaper", { vrmModelPath: "" });
+                    setModelUploadStatus("パッケージ内の既定モデルへ戻します。");
+                  }}
+                >
+                  既定モデルに戻す
+                </button>
+                {modelUploadStatus && <span className="hint">{modelUploadStatus}</span>}
+              </div>
+            </div>
             <CheckControl label="スマホ" checked={wallpaper.propPhoneVisible !== false} onChange={(v) => setSettingValue("wallpaper", "propPhoneVisible", v)} />
             <CheckControl label="ゲームコントローラー" checked={wallpaper.propControllerVisible !== false} onChange={(v) => setSettingValue("wallpaper", "propControllerVisible", v)} />
             <CheckControl label="カップ" checked={wallpaper.propCupVisible !== false} onChange={(v) => setSettingValue("wallpaper", "propCupVisible", v)} />

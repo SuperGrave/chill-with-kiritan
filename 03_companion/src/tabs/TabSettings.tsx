@@ -464,6 +464,30 @@ export default function TabSettings({ showDisplay = true }: { showDisplay?: bool
           <input type="password" className="mono" value={spotifyRefresh}
             onChange={(e) => setSpotifyRefresh(e.target.value)} placeholder="(変更時のみ入力)" />
         </label>
+        <label className="field">
+          <span>再生情報の同期間隔（秒）</span>
+          <input
+            type="number"
+            className="mono"
+            min={1}
+            max={60}
+            step={0.5}
+            value={(settings.spotify.pollIntervalMs ?? 2000) / 1000}
+            onChange={(e) => upd(
+              "spotify.pollIntervalMs",
+              Math.round(Math.min(60, Math.max(1, Number(e.target.value) || 2)) * 1000),
+            )}
+          />
+        </label>
+        <label className="display-check">
+          <span>曲の終了予測から0.8秒後にも更新する</span>
+          <input
+            type="checkbox"
+            checked={settings.spotify.refreshOnTrackEnd === true}
+            onChange={(e) => upd("spotify.refreshOnTrackEnd", e.target.checked)}
+          />
+        </label>
+        <p className="hint">1〜60秒で設定できます。通信失敗やSpotifyの制限時は自動的に間隔を延ばします。</p>
         <button type="button" className="secondary-btn" onClick={connectSpotify}>Spotify認証を開く</button>
         <button type="button" className="secondary-btn" onClick={checkSpotify}>Spotify接続確認</button>
         {spotifyCheck && <p className="hint">{spotifyCheck}</p>}

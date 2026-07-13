@@ -1,16 +1,18 @@
-# Chill with Kiritan v0.8.4 かんたん導入
+# Chill with Kiritan v0.8.5 かんたん導入
 
 ## 1. Companionを入れる
 
-`companion/Tohoku Companion_0.8.4_x64-setup.exe` を実行します。起動すると、操作用の小さなウィンドウとローカルAPIが立ち上がります。
+`companion/Tohoku Companion_0.8.5_x64-setup.exe` を実行します。起動すると、操作用の小さなウィンドウとローカルAPIが立ち上がります。
 
 ## 2. Wallpaper Engineへ入れる
 
 `wallpaper-engine/Chill with Kiritan/project.json` をWallpaper Engineから開きます。先にCompanionを起動しておくと、天気・ニュース・Spotify・メモ・表示設定が連動します。
 
-## 3. きりたんの3Dモデルを置く
+## 3. VRMモデルを選ぶ
 
-公開配布物には、ライセンス上 `kiritan.vrm` を同梱していません。手元のモデルを、Wallpaper Engineへ取り込んだフォルダの次の場所へ自分でコピーしてください。
+公開配布物には、ライセンス上VRMモデルを同梱していません。Companionの `STUDIO（調律）> 3Dモデル > VRMファイル` で、手元の `.vrm` を選択してください。選択したモデルはローカルのCompanionデータフォルダへ保存され、壁紙側で読み込みを試します。モデルによってボーン・表情・モーションの互換性は異なります。
+
+従来どおり既定モデルとして使う場合は、Wallpaper Engineへ取り込んだ実フォルダの次の場所へコピーする方法も使えます。
 
 ```text
 models/kiritan.vrm
@@ -20,7 +22,7 @@ models/kiritan.vrm
 
 ## 4. 画面サイズを選ぶ
 
-初回は「1920×1080用サンプル」が適用されています。1920×1200の画面では、Companionの表示設定から「1920×1200用サンプル」を選んでください。
+初回は「1920×1080用サンプル」が適用されています。1920×1200の画面では「1920×1200用サンプル」を選び、4Kでは `STUDIO（調律）` の画面サイズから `3840x2160` を選んで調整・保存してください。
 
 ## 5. 個人ニュースを使う
 
@@ -32,5 +34,6 @@ models/kiritan.vrm
 
 - 壁紙がオフライン: Companionが起動しているか確認します。
 - きりたんが出ない: 実際に読み込んだ壁紙フォルダに `models/kiritan.vrm` があるか確認します。
+- 選択したVRMが出ない: `STUDIO > 3Dモデル` で別の `.vrm` を試すか「既定モデルに戻す」を押します。
 - 設定を戻したい: 表示プリセットを適用し直します。
 - 詳しい説明: `START_GUIDE_JP.md` を参照します。

@@ -990,6 +990,7 @@ function App() {
 
       {modelVisible && (
         <VrmViewer
+          key={wallpaperSettings.vrmModelPath || '__packaged_default_vrm__'}
           cameraMode={cameraMode}
           lookAtEnabled={lookAtEnabled}
           springBoneMode={springBoneMode}

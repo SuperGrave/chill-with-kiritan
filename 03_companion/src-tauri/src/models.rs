@@ -590,16 +590,25 @@ impl Default for NewsConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct SpotifyConfig {
     pub client_id: String, // public part only; secret lives in Secrets
+    /// Normal polling cadence. Clamped again by the worker so old or manually
+    /// edited config can never hammer Spotify's API.
+    pub poll_interval_ms: u64,
+    /// When enabled, schedule one poll for roughly 0.8 seconds after the
+    /// currently sampled track is expected to finish.
+    pub refresh_on_track_end: bool,
 }
 
 impl Default for SpotifyConfig {
     fn default() -> Self {
         Self {
             client_id: String::new(),
+            poll_interval_ms: 2_000,
+            refresh_on_track_end: false,
         }
     }
 }

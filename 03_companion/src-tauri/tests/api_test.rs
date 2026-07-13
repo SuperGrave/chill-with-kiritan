@@ -401,6 +401,50 @@ async fn background_upload_stores_file_and_serves_lightweight_url() {
 }
 
 #[tokio::test]
+async fn vrm_upload_stores_selected_model_and_serves_it_to_the_wallpaper() {
+    let base = spawn_server().await;
+    let c = reqwest::Client::new();
+    let token = fetch_token(&base, &c).await;
+    let payload = b"fake vrm bytes for transport test".to_vec();
+
+    let uploaded: serde_json::Value = auth(
+        c.post(format!(
+            "{base}/api/models/upload?fileName=custom-model.vrm"
+        )),
+        &token,
+    )
+    .header("content-type", "application/octet-stream")
+    .body(payload.clone())
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+
+    assert_eq!(uploaded["ok"], true);
+    assert_eq!(uploaded["item"]["name"], "custom-model.vrm");
+    assert_eq!(uploaded["item"]["size"], payload.len());
+    let url = uploaded["item"]["url"].as_str().unwrap();
+    assert!(url.starts_with(&format!("{base}/api/models/")));
+    let served = c.get(url).send().await.unwrap().bytes().await.unwrap();
+    assert_eq!(served.as_ref(), payload.as_slice());
+
+    let rejected: serde_json::Value = auth(
+        c.post(format!("{base}/api/models/upload?fileName=not-a-model.txt")),
+        &token,
+    )
+    .body("not a vrm")
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(rejected["ok"], false);
+}
+
+#[tokio::test]
 async fn mutating_routes_require_companion_token() {
     let base = spawn_server().await;
     let c = reqwest::Client::new();

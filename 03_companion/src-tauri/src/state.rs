@@ -21,6 +21,9 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Cached Spotify access token (token, expires_at). Not persisted.
     pub spotify_token: Option<(String, Instant)>,
+    /// Serializes automatic/manual Spotify sampling so a UI refresh cannot
+    /// overlap the background poller and trigger an avoidable rate-limit burst.
+    pub spotify_refresh_guard: Arc<tokio::sync::Mutex<()>>,
 }
 
 pub type Shared = Arc<Mutex<AppState>>;
@@ -38,6 +41,8 @@ struct Persist {
     memos: Vec<MemoItem>,
     bookmarks: Vec<BookmarkItem>,
     timer: Option<TimerState>,
+    #[serde(rename = "personalNews", alias = "personal_news")]
+    personal_news: Option<PersonalNewsState>,
 }
 
 impl AppState {
@@ -55,6 +60,7 @@ impl AppState {
         let mut state = WallpaperState::default();
         let api_token = load_or_create_api_token(&data_dir);
         let mut legacy_secrets = None;
+        let mut persisted_personal_news = None;
 
         let path = data_dir.join(DATA_FILE);
         if let Ok(text) = std::fs::read_to_string(&path) {
@@ -71,6 +77,7 @@ impl AppState {
                 if let Some(timer) = p.timer {
                     state.timer = timer;
                 }
+                persisted_personal_news = p.personal_news;
             }
         }
         let secrets = load_or_migrate_secrets(&data_dir, legacy_secrets);
@@ -82,7 +89,11 @@ impl AppState {
 
         repair_ui_state(&mut state.ui);
         crate::personal_news::ensure_bundled_samples(&data_dir);
-        state.personal_news = crate::personal_news::load_personal_news_state(&data_dir, None, None);
+        state.personal_news = crate::personal_news::load_personal_news_state(
+            &data_dir,
+            persisted_personal_news.as_ref(),
+            None,
+        );
 
         AppState {
             state,
@@ -94,6 +105,7 @@ impl AppState {
                 .build()
                 .unwrap_or_default(),
             spotify_token: None,
+            spotify_refresh_guard: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -108,6 +120,13 @@ impl AppState {
     /// either the old complete content or the new complete content, never a
     /// half-written one (see docs/COMPLETION_EXECUTION_PLAN_2026-07-01.md §4.4).
     pub fn persist(&self) {
+        self.persist_public_data();
+        persist_secrets(&self.data_dir, &self.secrets);
+    }
+
+    /// Checkpoint non-secret state without rewriting/backing up secrets. The
+    /// personal-news worker uses this periodically while playing.
+    pub fn persist_public_data(&self) {
         let p = Persist {
             ui: Some(self.state.ui.clone()),
             settings: Some(self.state.settings.clone()),
@@ -115,6 +134,7 @@ impl AppState {
             memos: self.state.memos.clone(),
             bookmarks: self.state.bookmarks.clone(),
             timer: Some(self.state.timer.clone()),
+            personal_news: Some(self.state.personal_news.clone()),
         };
         let Ok(text) = serde_json::to_string_pretty(&p) else {
             return;
@@ -124,7 +144,6 @@ impl AppState {
             &text,
             BackupMode::SanitizeSecrets,
         );
-        persist_secrets(&self.data_dir, &self.secrets);
         // touch updatedAt so pollers can detect change
         // (caller already mutated `state`; we just stamp time here is not ideal
         //  because we hold &self — callers stamp updated_at themselves.)

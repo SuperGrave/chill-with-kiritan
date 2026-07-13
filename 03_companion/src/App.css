@@ -309,6 +309,13 @@ input.mono, textarea.mono { font-family: Consolas, "Cascadia Mono", monospace; f
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
 }
+.control-grid > .control-grid-wide { grid-column: 1 / -1; }
+.display-control.control-grid-wide {
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+}
 .display-button-row {
   display: flex;
   flex-wrap: wrap;
@@ -491,6 +498,8 @@ input.mono, textarea.mono { font-family: Consolas, "Cascadia Mono", monospace; f
 @media (max-width: 560px) {
   .display-toolbar { grid-template-columns: 1fr; }
   .control-grid { grid-template-columns: 1fr; }
+  .vrm-file-picker { grid-template-columns: 1fr; }
+  .vrm-file-picker .secondary-btn { justify-self: start; }
   .background-overlay-controls { grid-template-columns: 1fr; }
   .display-number-control { width: 100%; }
 }
@@ -967,6 +976,31 @@ button svg { width: 15px; height: 15px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font-size: 11.5px; font-weight: 600; color: var(--text-dim); }
+
+.vrm-file-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+}
+.vrm-file-picker input { width: 100%; min-width: 0; max-width: none; }
+.vrm-file-picker input[type="file"] {
+  grid-column: 1 / -1;
+  padding: 7px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+}
+.vrm-file-picker input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface-3);
+  cursor: pointer;
+}
+.vrm-file-picker .secondary-btn { justify-self: start; white-space: nowrap; }
+.vrm-file-picker .hint { grid-column: 1 / -1; }
 
 .backup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .backup-actions .secondary-btn { flex: 1; min-width: 120px; }

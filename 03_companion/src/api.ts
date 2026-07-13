@@ -55,17 +55,20 @@ export type BackgroundMediaItem = {
   fileName?: string;
   size?: number;
 };
+export type ModelMediaItem = {
+  url: string;
+  name: string;
+  fileName: string;
+  size: number;
+};
 
-async function uploadBinary<T>(path: string, file: File, mediaType: BackgroundUploadKind): Promise<T> {
+async function uploadBinary<T>(path: string, file: File, queryValues: Record<string, string>): Promise<T> {
   const headers = new Headers();
   headers.set("Content-Type", file.type || "application/octet-stream");
   const token = await companionToken();
   if (token) headers.set(TOKEN_HEADER, token);
 
-  const query = new URLSearchParams({
-    fileName: file.name || "background",
-    mediaType,
-  });
+  const query = new URLSearchParams(queryValues);
 
   let res = await fetch(`${API_BASE}${path}?${query.toString()}`, {
     method: "POST",
@@ -115,7 +118,7 @@ export type UiState = {
 export type AppSettings = {
   weather: { latitude: number; longitude: number; timezone: string; locationLabel: string; jmaOffice: string };
   news: { feeds: string[]; maxItems: number };
-  spotify: { clientId: string };
+  spotify: { clientId: string; pollIntervalMs: number; refreshOnTrackEnd: boolean };
   startup: { launchAtLogin: boolean; launchWithHighestPrivileges: boolean };
 };
 export type SecretsStatus = {
@@ -278,7 +281,14 @@ export const api = {
   deletePreset: (id: string) => del(`/presets/${id}`),
   applyPreset: (id: string) => post(`/presets/${id}/apply`),
   uploadBackground: (file: File, mediaType: BackgroundUploadKind) =>
-    uploadBinary<{ ok: boolean; item: BackgroundMediaItem }>("/backgrounds/upload", file, mediaType),
+    uploadBinary<{ ok: boolean; item: BackgroundMediaItem }>("/backgrounds/upload", file, {
+      fileName: file.name || "background",
+      mediaType,
+    }),
+  uploadModel: (file: File) =>
+    uploadBinary<{ ok: boolean; item: ModelMediaItem }>("/models/upload", file, {
+      fileName: file.name || "selected.vrm",
+    }),
 
   // Config / secrets
   getSettings: () => req<AppSettings>("/settings"),

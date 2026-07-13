@@ -1395,7 +1395,12 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     loader.load(
       modelPath,
       (gltf) => {
-        const vrm = gltf.userData.vrm as VRM;
+        const vrm = gltf.userData.vrm as VRM | undefined;
+        if (!vrm) {
+          console.error('[VRM] GLTFLoader completed, but the file did not expose VRM metadata.', modelPath);
+          props.onStatusUpdate(`Error: ${modelPath} could not be recognized as a VRM model.`);
+          return;
+        }
         vrmRef.current = vrm;
         scene.add(vrm.scene);
         vrm.scene.rotation.y = Math.PI; // Face +Z
@@ -1591,7 +1596,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
         switchClip(built.clip, built.boneNames, built.source, built.hasExpressionTracks);
         console.log(`[EXT] mixer ready; built-in clip armed (bones=${built.boneNames.join(',')}). External Motion OFF by default.`);
 
-        props.onStatusUpdate('Loaded: ふらすこ式風きりたん (VRM 0.x)');
+        props.onStatusUpdate(`Loaded VRM: ${modelPath}`);
 
         // Production wallpaper (Stage B): start the Motion Director the same
         // way the Lab's `__motionLab.director(true)` does, minus the manual
@@ -1623,7 +1628,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       },
       (error: unknown) => {
         console.error(error);
-        props.onStatusUpdate(`Error: Failed to load ${modelPath}. Please check models/README_MODEL_PLACEMENT.md.`);
+        props.onStatusUpdate(`Error: Failed to load VRM ${modelPath}. Try another .vrm file or return to the packaged default.`);
       }
     );
 

@@ -9,7 +9,7 @@
 - Steam アカウント
 - Steam 版 Wallpaper Engine
 - Chill with Kiritan の配布パッケージ
-- 任意: ふらすこ式風東北きりたん VRM モデルを自分で入手した `kiritan.vrm`
+- 任意: 自分で正規に入手した `.vrm` モデル（きりたん以外も読み込みを試せます）
 - 任意: Spotify 連携用の Spotify アカウントと Spotify Developer Dashboard
 
 重要: 共有用パッケージには `models/kiritan.vrm` と `.vrma` は入っていません。対象モデルは再配布禁止のため、壁紙を使う本人が規約に同意して入手し、自分の PC にだけ配置してください。`local-personal` と付いた zip や `LOCAL_PERSONAL_VRM_INCLUDED.txt` が入ったフォルダは、個人利用専用です。再配布しないでください。
@@ -34,16 +34,18 @@ Windows SmartScreen が表示された場合は、配布元が信頼できるこ
    - https://store.steampowered.com/app/431960/Wallpaper_Engine/
 4. Steam ライブラリから Wallpaper Engine を起動します。
 
-## 4. VRM モデルを配置する
+## 4. VRM モデルを選ぶ
 
-共有用パッケージを使う場合、この手順を行わないとキャラクター本体は表示されません。
+共有用パッケージを使う場合、この手順を行わないとキャラクター本体は表示されません。v0.8.5以降は、Companionのファイル選択から読み込む方法が簡単です。
 
-1. 自分で入手した VRM ファイルを `kiritan.vrm` にリネームします。
-2. 展開した壁紙フォルダを開きます。
-   - まとめ版の例: `wallpaper-engine\Chill with Kiritan`
-   - 単体 zip の例: 展開した `Chill with Kiritan` フォルダ
-3. フォルダ内に `models` フォルダがなければ作成します。
-4. `models\kiritan.vrm` になるようにコピーします。
+1. Companionを起動します。
+2. `STUDIO（調律）> 3Dモデル` を開きます。
+3. `VRMファイル` の選択欄で、自分の `.vrm` を選びます。
+4. 選択したファイルは `%APPDATA%\tohoku-companion\models` にローカル保存され、壁紙側で読み込みを試します。
+
+VRM 0.x / 1.0の基本読み込みを試しますが、モデルによってヒューマノイドボーン、表情、モーション、小物位置の互換性は異なります。うまく動かない場合は別のVRMを試すか、`既定モデルに戻す` を押してください。
+
+従来方式を使う場合は、自分で入手したVRMを `kiritan.vrm` にリネームし、展開した壁紙フォルダまたはWallpaper Engineが実際に参照しているフォルダの `models\kiritan.vrm` へコピーします。この既定モデル方式はCompanionが起動していない時にも使えます。
 
 すでに Wallpaper Engine に取り込んだ後で追加する場合は、Wallpaper Engine の対象壁紙を選び、編集画面から `Open in Explorer` または `エクスプローラーで開く` を使って、実際に Wallpaper Engine が参照しているフォルダへ `models\kiritan.vrm` を入れてください。
 
@@ -90,6 +92,8 @@ Companion の画面は、左のアイコンレールで4つのセクションに
 2. 天気は `保存して天気更新`、ニュースは保存後に `REMOTE` の `いま更新` でその場で確認できます。
 3. `REMOTE（操作）` と `STUDIO（調律）` から、壁紙上のパネル表示、プリセット、メモ、タイマーなどを操作できます。
 4. 背景を変えたい場合は `STUDIO > 背景` で好きな画像・動画を追加できます（スライドショー対応）。
+5. 4Kディスプレイでは、`STUDIO` 上部の画面サイズから `3840x2160` を選び、必要に応じてパネル位置を調整してプリセット保存します。
+6. 別のキャラクターを試す場合は、`STUDIO > 3Dモデル > VRMファイル` から選びます。
 
 設定、メモ、プリセット、Spotify 認証情報は `%APPDATA%\tohoku-companion` に保存されます。配布 zip にはこれらの個人データは含まれません。
 設定一式は `SYSTEM > データ / バックアップ` の `書き出し` / `読み込み` でバックアップ・復元できます（APIキー類は既定で含まれません）。
@@ -122,6 +126,8 @@ http://127.0.0.1:40313/spotify/callback
 7. `Spotify connected` と表示されたら、そのタブを閉じて Companion に戻ります。
 8. `Spotify接続確認` を押します。
 9. Spotify 公式アプリまたは Web Player で曲を再生します。
+10. 同期間隔はSpotify欄の `再生情報の同期間隔（秒）` で1〜60秒に調整できます。既定は2秒です。
+11. 曲切替を早く拾いたい場合は `曲の終了予測から0.8秒後にも更新する` をONにします。通信失敗やSpotify側の制限時は自動的に間隔が延びます。
 
 このシステムが要求する Spotify スコープは次の3つです。
 
@@ -153,10 +159,12 @@ user-read-currently-playing user-read-playback-state user-modify-playback-state
 
 ### キャラクターが出ない
 
+- `STUDIO > 3Dモデル` で選択したVRMのパスが表示されているか確認し、別の `.vrm` でも試します。
+- 選択モデルから戻す場合は `既定モデルに戻す` を押します。
 - Wallpaper Engine が実際に参照しているフォルダに `models\kiritan.vrm` があるか確認します。
 - 壁紙のニュースや UI だけは動くのにカメラやキャラ状態が動かない場合も、まず `models\kiritan.vrm` の場所を確認してください。
 - Companion の `REMOTE（操作）> きりたんは今` が `未報告` のままなら、壁紙からキャラクターの状態が届いていません。ほとんどの場合 VRM 未配置が原因です。`LIVE` なら本体は動いています。
-- ファイル名は必ず `kiritan.vrm` にします。
+- Companionのファイル選択方式では元のファイル名のままで構いません。フォルダ配置方式だけ `kiritan.vrm` にします。
 
 ### `COMPANION: OFFLINE` のまま
 

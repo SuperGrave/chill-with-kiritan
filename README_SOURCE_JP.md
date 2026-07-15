@@ -7,7 +7,7 @@
 - `kiritan.vrm` および `.vrma` ファイル
 - APIキー、Spotify Client Secret / Refresh Token
 - Companionが生成するAPIトークン
-- `%APPDATA%\tohoku-companion` の個人設定、メモ、ニュース原稿
+- `%APPDATA%\tohoku-companion` の個人設定、メモ、ニュース原稿、取得済み歌詞キャッシュ
 - `node_modules`、`dist`、Rust `target`、インストーラーなどの生成物
 
 値をソースへ直接書き込まず、Companionの設定画面またはローカル設定を利用してください。秘密情報、モデル、個人データをIssueやPull Requestへ添付しないでください。

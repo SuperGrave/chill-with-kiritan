@@ -167,12 +167,13 @@ pub async fn refresh_spotify_once(shared: &Shared) -> Result<SpotifyState, Strin
             return Err(error);
         }
     };
-    let previous_lyrics = {
+    let (previous_lyrics, data_dir) = {
         let mut g = shared.lock().unwrap();
         let lyrics = match &track {
             Some(sampled) if lyrics_match_track(&g.state.spotify.lyrics, sampled) => {
                 g.state.spotify.lyrics.clone()
             }
+            Some(sampled) => crate::lyrics_cache::load(&g.data_dir, sampled).unwrap_or_default(),
             _ => SpotifyLyricsState::default(),
         };
         g.state.spotify = SpotifyState {
@@ -183,11 +184,12 @@ pub async fn refresh_spotify_once(shared: &Shared) -> Result<SpotifyState, Strin
             error: None,
         };
         g.state.updated_at = now_iso();
-        lyrics
+        (lyrics, g.data_dir.clone())
     };
 
     if let Some(sampled) = &track {
-        let lyrics = services::lyrics_for_track(&http, Some(previous_lyrics), sampled).await;
+        let lyrics =
+            services::lyrics_for_track(&http, &data_dir, Some(previous_lyrics), sampled).await;
         let mut g = shared.lock().unwrap();
         if current_track_matches(g.state.spotify.track.as_ref(), sampled) {
             g.state.spotify.lyrics = lyrics;

@@ -20,12 +20,64 @@ const MIN_TEXT_LINE_MS: u64 = 2_000;
 
 const BUNDLED_SAMPLES: &[(&str, &str)] = &[
     (
+        "aozora_夢十夜_第一夜.txt",
+        include_str!("../../personal_news_scripts/aozora_夢十夜_第一夜.txt"),
+    ),
+    (
+        "aozora_羅生門_冒頭.txt",
+        include_str!("../../personal_news_scripts/aozora_羅生門_冒頭.txt"),
+    ),
+    (
+        "aozora_走れメロス_冒頭.txt",
+        include_str!("../../personal_news_scripts/aozora_走れメロス_冒頭.txt"),
+    ),
+    (
         "aozora_銀河鉄道の夜_冒頭.txt",
         include_str!("../../personal_news_scripts/aozora_銀河鉄道の夜_冒頭.txt"),
     ),
     (
+        "aozora_注文の多い料理店_冒頭.txt",
+        include_str!("../../personal_news_scripts/aozora_注文の多い料理店_冒頭.txt"),
+    ),
+    (
+        "aozora_檸檬_冒頭.txt",
+        include_str!("../../personal_news_scripts/aozora_檸檬_冒頭.txt"),
+    ),
+    (
         "サンプル_本日のニュース_2026-07-10.txt",
         include_str!("../../personal_news_scripts/サンプル_本日のニュース_2026-07-10.txt"),
+    ),
+    (
+        "ニュース候補_今週の関心テーマ巡回.txt",
+        include_str!("../../personal_news_scripts/ニュース候補_今週の関心テーマ巡回.txt"),
+    ),
+    (
+        "特集_AIエージェント観測所.txt",
+        include_str!("../../personal_news_scripts/特集_AIエージェント観測所.txt"),
+    ),
+    (
+        "特集_ゲームを支える仕組み.txt",
+        include_str!("../../personal_news_scripts/特集_ゲームを支える仕組み.txt"),
+    ),
+    (
+        "特集_北海道と乗り物の小旅行.txt",
+        include_str!("../../personal_news_scripts/特集_北海道と乗り物の小旅行.txt"),
+    ),
+    (
+        "特集_宇宙と工学の小話.txt",
+        include_str!("../../personal_news_scripts/特集_宇宙と工学の小話.txt"),
+    ),
+    (
+        "特集_船と海のへんな話.txt",
+        include_str!("../../personal_news_scripts/特集_船と海のへんな話.txt"),
+    ),
+    (
+        "特集_音声と3Dキャラクターの裏側.txt",
+        include_str!("../../personal_news_scripts/特集_音声と3Dキャラクターの裏側.txt"),
+    ),
+    (
+        "雑学_きりたん深夜ラジオ.txt",
+        include_str!("../../personal_news_scripts/雑学_きりたん深夜ラジオ.txt"),
     ),
 ];
 
@@ -49,6 +101,16 @@ pub fn load_personal_news_state(
     let mut selected_script: Option<PersonalNewsScript> = None;
     let preferred =
         preferred_script_id.or_else(|| previous.and_then(|p| p.selected_script_id.as_deref()));
+    // Pre-fix Japanese file names collapsed to ids such as `aozora-txt` or
+    // simply `txt`. Preserve the selected file across the one-time id upgrade
+    // by matching the durable file name when no explicit new selection was
+    // requested.
+    let previous_file_name = preferred_script_id.is_none().then(|| {
+        previous
+            .and_then(|state| state.current_script.as_ref())
+            .map(|script| script.file_name.as_str())
+    });
+    let previous_file_name = previous_file_name.flatten();
 
     // Search dirs are fallbacks that can resolve to the same physical folder via
     // different path spellings (e.g. `cwd/..` vs `manifest/..`), so the same file
@@ -73,7 +135,9 @@ pub fn load_personal_news_state(
                     if first_script.is_none() {
                         first_script = Some(script.clone());
                     }
-                    if preferred.is_some_and(|id| id == script.id) {
+                    if preferred.is_some_and(|id| id == script.id)
+                        || previous_file_name.is_some_and(|name| name == script.file_name)
+                    {
                         selected_script = Some(script.clone());
                     }
                     scripts.push(summary_for(&script));
@@ -135,8 +199,14 @@ pub fn load_personal_news_state(
     // stable id. Reset the wall-clock anchor to now so time spent with Companion
     // shut down is not counted as playback.
     if let Some(previous) = previous.filter(|previous| {
-        previous.selected_script_id.is_some()
-            && previous.selected_script_id == state.selected_script_id
+        let same_id = previous.selected_script_id.is_some()
+            && previous.selected_script_id == state.selected_script_id;
+        let same_file = previous
+            .current_script
+            .as_ref()
+            .zip(state.current_script.as_ref())
+            .is_some_and(|(old, new)| old.file_name == new.file_name);
+        same_id || same_file
     }) {
         let line_count = state
             .current_script
@@ -160,7 +230,7 @@ pub fn load_personal_news_state(
     state
 }
 
-/// Materialize the two distributable samples into the user's data directory.
+/// Materialize the distributable reading/news samples into the user's data directory.
 /// Existing files are never overwritten, so edited copies remain user-owned.
 pub fn ensure_bundled_samples(data_dir: &Path) {
     let dir = data_dir.join(SCRIPT_DIR_NAME);
@@ -176,14 +246,15 @@ pub fn ensure_bundled_samples(data_dir: &Path) {
 }
 
 /// Start the fallback from its current position exactly once when it becomes
-/// visible, then pause at that position when lyrics become available again.
+/// visible. Once started, keep its timeline running even when lyrics become
+/// available again; visibility and playback are separate concerns. This avoids
+/// making the news cursor look stuck whenever Spotify briefly regains lyrics.
 pub fn reconcile_auto_play(state: &PersonalNewsState, auto_active: bool) -> PersonalNewsState {
     let mut out = materialize_personal_news(state);
     if auto_active && !out.auto_play_active {
         out = control_personal_news(&out, "play", None, None);
         out.auto_play_active = true;
     } else if !auto_active && out.auto_play_active {
-        out = control_personal_news(&out, "pause", None, None);
         out.auto_play_active = false;
     }
     out
@@ -497,33 +568,60 @@ fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, Stri
         }
 
         let (text, explicit_ms) = parse_text_line(line);
-        // Estimate from the visible characters only (inline supplement markers
-        // and their URLs must not inflate the reading time).
-        let duration_ms =
-            explicit_ms.unwrap_or_else(|| estimate_line_ms(stripped_char_count(&text)));
-        let text = extract_inline_supplements(
-            &text,
-            total_ms,
-            duration_ms,
-            current_topic.clone(),
-            lines.len(),
-            chapters.len().saturating_sub(1),
-            &mut supplements,
-            &mut sources,
-        );
-        if text.is_empty() {
-            continue;
+        // A physical source line may contain several sentences. Normalize it
+        // into one display item per sentence so the backend cursor and overlay
+        // always advance through the same, inspectable queue.
+        let segments = split_display_lines(&text);
+        let weights = segments
+            .iter()
+            .map(|segment| stripped_char_count(segment).max(1) as u64)
+            .collect::<Vec<_>>();
+        let weight_total = weights.iter().sum::<u64>().max(1);
+        let explicit_total = explicit_ms
+            .map(|duration| duration.max(MIN_LINE_MS.saturating_mul(segments.len() as u64)));
+        let explicit_flexible = explicit_total
+            .map(|duration| duration.saturating_sub(MIN_LINE_MS * segments.len() as u64));
+        let mut allocated_ms = 0u64;
+
+        for (segment_index, segment) in segments.iter().enumerate() {
+            let duration_ms =
+                if let (Some(total), Some(flexible)) = (explicit_total, explicit_flexible) {
+                    if segment_index + 1 == segments.len() {
+                        total.saturating_sub(allocated_ms).max(MIN_LINE_MS)
+                    } else {
+                        MIN_LINE_MS.saturating_add(
+                            flexible.saturating_mul(weights[segment_index]) / weight_total,
+                        )
+                    }
+                } else {
+                    estimate_line_ms(stripped_char_count(segment))
+                };
+            allocated_ms = allocated_ms.saturating_add(duration_ms);
+
+            let text = extract_inline_supplements(
+                segment,
+                total_ms,
+                duration_ms,
+                current_topic.clone(),
+                lines.len(),
+                chapters.len().saturating_sub(1),
+                &mut supplements,
+                &mut sources,
+            );
+            if text.is_empty() {
+                continue;
+            }
+            lines.push(PersonalNewsLine {
+                id: format!("line_{:03}", lines.len() + 1),
+                kind: "text".to_string(),
+                topic: current_topic.clone(),
+                text,
+                duration_ms,
+                source_id: None,
+                position_ms: total_ms,
+            });
+            total_ms = total_ms.saturating_add(duration_ms);
         }
-        lines.push(PersonalNewsLine {
-            id: format!("line_{:03}", lines.len() + 1),
-            kind: "text".to_string(),
-            topic: current_topic.clone(),
-            text,
-            duration_ms,
-            source_id: None,
-            position_ms: total_ms,
-        });
-        total_ms = total_ms.saturating_add(duration_ms);
     }
 
     if lines.is_empty() {
@@ -562,6 +660,65 @@ fn parse_text_line(line: &str) -> (String, Option<u64>) {
         }
     }
     (line.to_string(), None)
+}
+
+/// Split prose into display-sized sentences while keeping inline supplement
+/// markers and quoted punctuation intact. The source file is left untouched;
+/// this normalized queue only exists in the parsed runtime state.
+fn split_display_lines(text: &str) -> Vec<String> {
+    let mut segments = Vec::new();
+    let mut current = String::new();
+    let mut marker_depth = 0usize;
+    let mut quote_depth = 0usize;
+    let mut sentence_ended = false;
+
+    for ch in text.chars() {
+        let begins_marker = ch == '[';
+        let is_trailer = matches!(ch, '」' | '』' | '）' | ')' | '】' | '》' | '〉' | '〕');
+        if sentence_ended
+            && marker_depth == 0
+            && quote_depth == 0
+            && !ch.is_whitespace()
+            && !is_trailer
+            && !begins_marker
+        {
+            let completed = current.trim();
+            if !completed.is_empty() {
+                segments.push(completed.to_string());
+            }
+            current.clear();
+            sentence_ended = false;
+        }
+
+        if ch == '[' {
+            marker_depth = marker_depth.saturating_add(1);
+        }
+        current.push(ch);
+        if ch == ']' && marker_depth > 0 {
+            marker_depth -= 1;
+            continue;
+        }
+        if marker_depth > 0 {
+            continue;
+        }
+
+        if matches!(ch, '「' | '『' | '（' | '(' | '【' | '《' | '〈' | '〔') {
+            quote_depth = quote_depth.saturating_add(1);
+        } else if is_trailer && quote_depth > 0 {
+            quote_depth -= 1;
+        } else if quote_depth == 0 && matches!(ch, '。' | '！' | '？' | '!' | '?') {
+            sentence_ended = true;
+        }
+    }
+
+    let tail = current.trim();
+    if !tail.is_empty() {
+        segments.push(tail.to_string());
+    }
+    if segments.is_empty() && !text.trim().is_empty() {
+        segments.push(text.trim().to_string());
+    }
+    segments
 }
 
 fn estimate_line_ms(chars: usize) -> u64 {
@@ -784,7 +941,7 @@ fn summary_for(script: &PersonalNewsScript) -> PersonalNewsScriptSummary {
 }
 
 fn stable_script_id(file_name: &str) -> String {
-    file_name
+    let readable = file_name
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() {
@@ -797,7 +954,22 @@ fn stable_script_id(file_name: &str) -> String {
         .split('-')
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
-        .join("-")
+        .join("-");
+    // Keep ids stable and collision-free even when most of the file name is
+    // Japanese and therefore absent from the ASCII-readable prefix.
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in file_name.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!(
+        "{}-{hash:016x}",
+        if readable.is_empty() {
+            "script"
+        } else {
+            &readable
+        }
+    )
 }
 
 fn modified_at(path: &Path) -> Option<String> {
@@ -925,7 +1097,7 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
     }
 
     #[test]
-    fn exactly_two_bundled_samples_parse() {
+    fn every_bundled_sample_parses() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join(SCRIPT_DIR_NAME);
@@ -943,17 +1115,16 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
         }
 
         parsed.sort();
-        assert_eq!(
-            parsed,
-            vec![
-                "aozora_銀河鉄道の夜_冒頭.txt".to_string(),
-                "サンプル_本日のニュース_2026-07-10.txt".to_string(),
-            ]
-        );
+        let mut expected = BUNDLED_SAMPLES
+            .iter()
+            .map(|(file_name, _)| (*file_name).to_string())
+            .collect::<Vec<_>>();
+        expected.sort();
+        assert_eq!(parsed, expected);
     }
 
     #[test]
-    fn auto_visibility_resumes_then_pauses_without_rewinding() {
+    fn auto_visibility_starts_once_and_keeps_timeline_running_when_hidden() {
         let script = sample_script();
         let state = PersonalNewsState {
             scripts: vec![summary_for(&script)],
@@ -971,11 +1142,39 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
         assert_eq!(playing.line_index, 2);
         assert!(playing.line_elapsed_ms >= 900);
 
-        let paused = reconcile_auto_play(&playing, false);
-        assert_eq!(paused.status, "paused");
-        assert!(!paused.auto_play_active);
-        assert_eq!(paused.line_index, 2);
-        assert!(paused.line_elapsed_ms >= 900);
+        let hidden = reconcile_auto_play(&playing, false);
+        assert_eq!(hidden.status, "playing");
+        assert!(!hidden.auto_play_active);
+        assert_eq!(hidden.line_index, 2);
+        assert!(hidden.line_elapsed_ms >= 900);
+    }
+
+    #[test]
+    fn prose_is_normalized_to_one_display_line_per_sentence() {
+        let script = parse_script_text(
+            Path::new("normalized.txt"),
+            r#"# Title: Normalized
+## Scenario
+[Topic: Test]
+[Line: 9.0] 一文目です。二文目です！「疑問？」は引用の途中です。
+"#,
+        )
+        .expect("normalized prose parses");
+
+        assert_eq!(script.lines.len(), 3);
+        assert_eq!(script.lines[0].text, "一文目です。");
+        assert_eq!(script.lines[1].text, "二文目です！");
+        assert_eq!(script.lines[2].text, "「疑問？」は引用の途中です。");
+        assert_eq!(
+            script
+                .lines
+                .iter()
+                .map(|line| line.duration_ms)
+                .sum::<u64>(),
+            9_000
+        );
+        assert_eq!(script.lines[1].position_ms, script.lines[0].duration_ms);
+        assert_eq!(script.estimated_duration_ms, 9_000);
     }
 
     #[test]
@@ -997,9 +1196,16 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
         playing.line_index = 1;
         playing.line_elapsed_ms = 1_250;
         playing.line_started_at = Some(now_iso());
+        // Simulate a persisted id from before Japanese-safe hashed ids were
+        // introduced. The file name must keep the user's selection/cursor.
+        playing.selected_script_id = Some("resume-txt".to_string());
         let restored = load_personal_news_state(&dir, Some(&playing), None);
 
-        assert_eq!(restored.selected_script_id, playing.selected_script_id);
+        assert_ne!(restored.selected_script_id, playing.selected_script_id);
+        assert_eq!(
+            restored.current_script.as_ref().unwrap().file_name,
+            "resume.txt"
+        );
         assert_eq!(restored.status, "playing");
         assert_eq!(restored.line_index, 1);
         assert!(restored.line_elapsed_ms >= 1_250);
@@ -1008,7 +1214,15 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
     }
 
     #[test]
-    fn clean_data_dir_receives_only_the_two_samples() {
+    fn japanese_file_names_get_distinct_stable_ids() {
+        let first = stable_script_id("特集_船と海のへんな話.txt");
+        let second = stable_script_id("特集_宇宙と工学の小話.txt");
+        assert_ne!(first, second);
+        assert_eq!(first, stable_script_id("特集_船と海のへんな話.txt"));
+    }
+
+    #[test]
+    fn clean_data_dir_receives_every_bundled_sample() {
         let dir = std::env::temp_dir().join(format!(
             "tohoku-companion-personal-news-samples-{}",
             uuid::Uuid::new_v4()
@@ -1020,9 +1234,10 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
             .map(|entry| entry.file_name().to_string_lossy().to_string())
             .collect::<Vec<_>>();
         names.sort();
-        assert_eq!(names.len(), 2);
-        assert!(names.contains(&"aozora_銀河鉄道の夜_冒頭.txt".to_string()));
-        assert!(names.contains(&"サンプル_本日のニュース_2026-07-10.txt".to_string()));
+        assert_eq!(names.len(), BUNDLED_SAMPLES.len());
+        for (file_name, _) in BUNDLED_SAMPLES {
+            assert!(names.contains(&(*file_name).to_string()));
+        }
         let _ = std::fs::remove_dir_all(dir);
     }
 }

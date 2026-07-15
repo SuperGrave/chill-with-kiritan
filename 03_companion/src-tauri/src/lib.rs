@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 
 pub mod api;
+pub mod lyrics_cache;
 pub mod models;
 pub mod personal_news;
 pub mod services;

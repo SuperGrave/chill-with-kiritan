@@ -7,7 +7,7 @@
 - `kiritan.vrm` および `.vrma` ファイル
 - APIキー、Spotify Client Secret / Refresh Token
 - Companionが生成するAPIトークン
-- `%APPDATA%\tohoku-companion` の個人設定、メモ、ニュース原稿
+- `%APPDATA%\tohoku-companion` の個人設定、メモ、ニュース原稿、取得済み歌詞キャッシュ
 - `node_modules`、`dist`、Rust `target`、インストーラーなどの生成物
 
 値をソースへ直接書き込まず、Companionの設定画面またはローカル設定を利用してください。秘密情報、モデル、個人データをIssueやPull Requestへ添付しないでください。
@@ -65,18 +65,18 @@ cargo test
 cargo fmt --check
 ```
 
-v0.8.5の配布セットを再生成する場合:
+v0.8.6の配布セットを再生成する場合:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/package_release.ps1 -Version 0.8.5
+powershell -ExecutionPolicy Bypass -File tools/package_release.ps1 -Version 0.8.6
 ```
 
-出力先はGit管理外の `release/v0.8.5/` です。共有用パッケージにVRM/VRMAが入っていないことを必ず確認してください。
+出力先はGit管理外の `release/v0.8.6/` です。共有用パッケージにVRM/VRMAが入っていないことを必ず確認してください。
 
 モデル・キー・個人データを含まない制作版zipを作る場合:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/package_source.ps1 -Version 0.8.5
+powershell -ExecutionPolicy Bypass -File tools/package_source.ps1 -Version 0.8.6
 ```
 
 ## 変更箇所の目安

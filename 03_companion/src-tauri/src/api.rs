@@ -1511,12 +1511,13 @@ async fn write_spotify_state(
 ) -> Result<SpotifyState, String> {
     match services::spotify_now_playing(http, token).await {
         Ok(track) => {
-            let previous_lyrics = {
+            let (previous_lyrics, data_dir) = {
                 let mut g = s.lock().unwrap();
                 let lyrics = match &track {
                     Some(t) if lyrics_match_track(&g.state.spotify.lyrics, t) => {
                         g.state.spotify.lyrics.clone()
                     }
+                    Some(t) => crate::lyrics_cache::load(&g.data_dir, t).unwrap_or_default(),
                     _ => SpotifyLyricsState::default(),
                 };
                 g.state.spotify = SpotifyState {
@@ -1527,11 +1528,12 @@ async fn write_spotify_state(
                     error: None,
                 };
                 touch(&mut g);
-                lyrics
+                (lyrics, g.data_dir.clone())
             };
 
             if let Some(t) = &track {
-                let lyrics = services::lyrics_for_track(http, Some(previous_lyrics), t).await;
+                let lyrics =
+                    services::lyrics_for_track(http, &data_dir, Some(previous_lyrics), t).await;
                 let mut g = s.lock().unwrap();
                 if current_track_matches(g.state.spotify.track.as_ref(), t) {
                     g.state.spotify.lyrics = lyrics;

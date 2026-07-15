@@ -143,6 +143,24 @@ $works = @(
     ZipUrl = "https://www.aozora.gr.jp/cards/000081/files/456_ruby_145.zip"
     OutputName = "aozora_銀河鉄道の夜_冒頭.txt"
     MaxChars = 2200
+  },
+  @{
+    Title = "注文の多い料理店 冒頭"
+    Author = "宮沢賢治"
+    Topic = "注文の多い料理店"
+    CardUrl = "https://www.aozora.gr.jp/cards/000081/card43754.html"
+    ZipUrl = "https://www.aozora.gr.jp/cards/000081/files/43754_ruby_17594.zip"
+    OutputName = "aozora_注文の多い料理店_冒頭.txt"
+    MaxChars = 2000
+  },
+  @{
+    Title = "檸檬 冒頭"
+    Author = "梶井基次郎"
+    Topic = "檸檬"
+    CardUrl = "https://www.aozora.gr.jp/cards/000074/card424.html"
+    ZipUrl = "https://www.aozora.gr.jp/cards/000074/files/424_ruby_19825.zip"
+    OutputName = "aozora_檸檬_冒頭.txt"
+    MaxChars = 1900
   }
 )
 

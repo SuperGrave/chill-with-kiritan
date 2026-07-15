@@ -20,9 +20,6 @@ const fmtTime = (ms: number) => {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
-const visibleLineText = (line: { kind: string; text: string }) =>
-  line.kind !== 'wait' && line.kind !== 'source' && line.text.trim().length > 0;
-
 const supplementMarkerRegex = () => /\[(Supplement|補足|Source):\s*([^\]]+)\]/gi;
 
 const stripSupplementMarkers = (text: string) =>
@@ -174,15 +171,6 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
   }, []);
 
   const script = personalNews.currentScript;
-  const bodyText = React.useMemo(() => {
-    if (!script) return '';
-    const text = script.lines
-      .filter(visibleLineText)
-      .map((item) => stripSupplementMarkers(item.text))
-      .filter(Boolean)
-      .join('　　');
-    return text || script.title;
-  }, [script]);
 
   if (!script || script.lines.length === 0) {
     return (
@@ -199,9 +187,11 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
   const chapterIndex = Math.max(0, script.chapters.findIndex((item) => item.id === chapter?.id));
   const durationMs = script.estimatedDurationMs || personalNews.durationMs || 1;
   const totalProgress = clamp(live.elapsedMs / durationMs, 0, 1);
+  const lineText = stripSupplementMarkers(line.text) || script.title;
+  const lineDurationMs = Math.max(line.durationMs || 1, 1);
   const scrollSpeed = Math.max(s.personalNewsScrollSpeed ?? 1, 0.2);
-  const marqueeSeconds = clamp((durationMs / 1000) / scrollSpeed, 12, 1800);
-  const marqueeDelay = -clamp((live.elapsedMs / 1000) / scrollSpeed, 0, marqueeSeconds);
+  const marqueeSeconds = clamp((lineDurationMs / 1000) / scrollSpeed, 2, 180);
+  const marqueeDelay = -Math.max(0, live.lineElapsedMs / 1000 / scrollSpeed);
   const panelStatus = offline ? 'OFFLINE' : live.status.toUpperCase();
   const supplements = supplementsFor(script);
   const supplement = activeSupplement(supplements, live.elapsedMs);
@@ -237,16 +227,17 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
       {s.personalNewsShowBody && (
         <div className="personal-news-marquee-shell continuous">
           <div
-            key={script.id}
+            key={`${script.id}-${line.id}-${live.lineIndex}`}
             className="personal-news-marquee"
             style={{
               animationDuration: `${marqueeSeconds}s`,
               animationDelay: `${marqueeDelay}s`,
+              animationIterationCount: 'infinite',
               animationPlayState: live.status === 'playing' ? 'running' : 'paused',
               fontSize: `${s.personalNewsBodySize}px`,
             }}
           >
-            {bodyText}
+            {lineText}
           </div>
         </div>
       )}
@@ -264,7 +255,10 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
         <div className="personal-news-progress-block">
           <div className="personal-news-progress-meta" style={{ fontSize: `${s.personalNewsSourceSize}px` }}>
             <span>{fmtTime(live.elapsedMs)}</span>
-            <span>{String(chapterIndex + 1).padStart(2, '0')} / {String(script.chapters.length).padStart(2, '0')}</span>
+            <span>
+              CH {String(chapterIndex + 1).padStart(2, '0')}/{String(script.chapters.length).padStart(2, '0')}
+              {' · '}LINE {String(live.lineIndex + 1).padStart(3, '0')}/{String(script.lines.length).padStart(3, '0')}
+            </span>
             <span>{fmtTime(durationMs)}</span>
           </div>
           <div className="personal-news-progress" style={{ height: `${s.personalNewsProgressHeight}px` }}>

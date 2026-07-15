@@ -572,6 +572,7 @@ pub async fn fetch_lyrics(
 
 pub async fn lyrics_for_track(
     http: &reqwest::Client,
+    data_dir: &std::path::Path,
     previous: Option<SpotifyLyricsState>,
     track: &SpotifyTrack,
 ) -> SpotifyLyricsState {
@@ -583,7 +584,11 @@ pub async fn lyrics_for_track(
         return previous.unwrap();
     }
 
-    match fetch_lyrics(
+    if let Some(cached) = crate::lyrics_cache::load(data_dir, track) {
+        return cached;
+    }
+
+    let lyrics = match fetch_lyrics(
         http,
         track_id.clone(),
         &track.artist,
@@ -601,7 +606,9 @@ pub async fn lyrics_for_track(
             lines: vec![],
             error: Some(e),
         },
-    }
+    };
+    let _ = crate::lyrics_cache::store(data_dir, track, &lyrics);
+    lyrics
 }
 
 pub fn spotify_track_key(track: &SpotifyTrack) -> Option<String> {

@@ -232,7 +232,10 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
             style={{
               animationDuration: `${marqueeSeconds}s`,
               animationDelay: `${marqueeDelay}s`,
-              animationIterationCount: 'infinite',
+              // Each paragraph gets one complete trip. Repeating here could
+              // briefly jump the same text back onscreen before state advances.
+              animationIterationCount: '1',
+              animationFillMode: 'forwards',
               animationPlayState: live.status === 'playing' ? 'running' : 'paused',
               fontSize: `${s.personalNewsBodySize}px`,
             }}
@@ -257,7 +260,7 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
             <span>{fmtTime(live.elapsedMs)}</span>
             <span>
               CH {String(chapterIndex + 1).padStart(2, '0')}/{String(script.chapters.length).padStart(2, '0')}
-              {' · '}LINE {String(live.lineIndex + 1).padStart(3, '0')}/{String(script.lines.length).padStart(3, '0')}
+              {' · '}BLOCK {String(live.lineIndex + 1).padStart(3, '0')}/{String(script.lines.length).padStart(3, '0')}
             </span>
             <span>{fmtTime(durationMs)}</span>
           </div>

@@ -180,11 +180,15 @@ export default function TabSettings({ showDisplay = true }: { showDisplay?: bool
     if (settingsToSave !== settings) setSettings(settingsToSave);
     try {
       await api.putSettings(settingsToSave);
-      const startup = await api.startupRepair();
+      // PUT /settings already reconciles launch-at-login. Query the result
+      // instead of immediately registering it a second time, which previously
+      // spawned duplicate schtasks/reg processes for every save.
+      const startup = await api.startupStatus();
       setStartupStatus(startup.status);
-      if (!startup.ok) {
-        setError(`自動起動登録に失敗しました: ${startup.error ?? "Task Schedulerを確認してください"}`);
-        return false;
+      if (settingsToSave.startup?.launchAtLogin === true
+        && !startup.status.taskRegistered
+        && !startup.status.runKeyRegistered) {
+        setRefreshStatus("設定は保存しましたが、自動起動は未登録です。必要なら「管理者権限で登録」を使ってください");
       }
       const secrets: Record<string, string> = {};
       if (spotifySecret) secrets.spotifyClientSecret = spotifySecret;

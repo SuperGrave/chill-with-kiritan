@@ -1,6 +1,11 @@
 use crate::models::StartupConfig;
 use serde::Serialize;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::{env, io, process::Command};
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 const RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 const VALUE_NAME: &str = "Tohoku Companion";
@@ -56,7 +61,9 @@ pub fn request_elevated_registration(config: &StartupConfig) -> io::Result<()> {
     } else {
         "limited"
     };
-    let output = Command::new("powershell")
+    // Keep the PowerShell wrapper invisible. Windows' UAC consent UI is still
+    // shown exactly once because elevation must remain an explicit user action.
+    let output = background_command("powershell")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"])
         .arg(
             "param([string]$Exe,[string]$Action,[string]$RunLevel) \
@@ -172,7 +179,7 @@ fn create_scheduled_task(exe_path: &str, highest_privileges: bool) -> io::Result
     } else {
         "LIMITED"
     };
-    let output = Command::new("schtasks")
+    let output = background_command("schtasks")
         .args(["/Create", "/TN", TASK_NAME, "/SC", "ONLOGON", "/TR"])
         .arg(&action)
         .args(["/RL", run_level, "/F"])
@@ -185,7 +192,7 @@ fn create_scheduled_task(exe_path: &str, highest_privileges: bool) -> io::Result
 
 #[cfg(windows)]
 fn delete_scheduled_task() -> io::Result<()> {
-    let output = Command::new("schtasks")
+    let output = background_command("schtasks")
         .args(["/Delete", "/TN", TASK_NAME, "/F"])
         .output()?;
     if output.status.success() || command_output_contains(&output, "cannot find") {
@@ -196,7 +203,7 @@ fn delete_scheduled_task() -> io::Result<()> {
 
 #[cfg(windows)]
 fn scheduled_task_exists() -> bool {
-    Command::new("schtasks")
+    background_command("schtasks")
         .args(["/Query", "/TN", TASK_NAME])
         .output()
         .map(|output| output.status.success())
@@ -206,7 +213,7 @@ fn scheduled_task_exists() -> bool {
 #[cfg(windows)]
 fn set_run_key(exe_path: &str) -> io::Result<()> {
     let value = format!("\"{exe_path}\"");
-    let output = Command::new("reg")
+    let output = background_command("reg")
         .args([
             "add", RUN_KEY, "/v", VALUE_NAME, "/t", "REG_SZ", "/d", &value, "/f",
         ])
@@ -219,7 +226,7 @@ fn set_run_key(exe_path: &str) -> io::Result<()> {
 
 #[cfg(windows)]
 fn delete_run_key() -> io::Result<()> {
-    let output = Command::new("reg")
+    let output = background_command("reg")
         .args(["delete", RUN_KEY, "/v", VALUE_NAME, "/f"])
         .output()?;
     if output.status.success() || command_output_contains(&output, "unable to find") {
@@ -230,11 +237,21 @@ fn delete_run_key() -> io::Result<()> {
 
 #[cfg(windows)]
 fn run_key_exists() -> bool {
-    Command::new("reg")
+    background_command("reg")
         .args(["query", RUN_KEY, "/v", VALUE_NAME])
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+/// Build Windows maintenance commands without allocating a console window.
+/// These checks run at app startup and after settings saves, so allowing each
+/// `schtasks` / `reg` / PowerShell child to flash a window is especially noisy.
+#[cfg(windows)]
+fn background_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
 }
 
 #[cfg(windows)]

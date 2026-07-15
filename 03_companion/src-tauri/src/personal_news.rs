@@ -218,8 +218,25 @@ pub fn load_personal_news_state(
                 "playing" | "paused" | "finished" => previous.status.clone(),
                 _ => "idle".to_string(),
             };
-            state.line_index = previous.line_index.min(line_count.saturating_sub(1));
-            state.line_elapsed_ms = previous.line_elapsed_ms;
+            // Restore by absolute playback time rather than the old LINE
+            // number. Parser upgrades may join several old sentence-lines into
+            // one marquee paragraph; an index clamp would otherwise jump near
+            // the end of the newly grouped script.
+            let previous_elapsed = previous
+                .current_script
+                .as_ref()
+                .map(|script| {
+                    elapsed_before_line(script, previous.line_index)
+                        .saturating_add(previous.line_elapsed_ms)
+                })
+                .unwrap_or(previous.elapsed_ms);
+            let (line_index, line_elapsed_ms) = state
+                .current_script
+                .as_ref()
+                .map(|script| cursor_for_elapsed(script, previous_elapsed))
+                .unwrap_or((0, 0));
+            state.line_index = line_index;
+            state.line_elapsed_ms = line_elapsed_ms;
             state.loop_enabled = previous.loop_enabled;
             state.auto_play_active = previous.auto_play_active;
             state.line_started_at = (state.status == "playing").then(now_iso);
@@ -468,6 +485,78 @@ fn parse_script_file(path: &Path) -> Result<PersonalNewsScript, String> {
     parse_script_text(path, &text)
 }
 
+#[derive(Default)]
+struct ParagraphBuilder {
+    raw_text: String,
+    duration_ms: u64,
+    topic: Option<String>,
+}
+
+impl ParagraphBuilder {
+    fn push(&mut self, fragment: &str, duration_ms: u64, topic: Option<String>) {
+        let fragment = fragment.trim();
+        if fragment.is_empty() {
+            return;
+        }
+        if !self.raw_text.is_empty() {
+            self.raw_text.push(' ');
+        }
+        self.raw_text.push_str(fragment);
+        self.duration_ms = self.duration_ms.saturating_add(duration_ms);
+        if self.topic.is_none() {
+            self.topic = topic;
+        }
+    }
+}
+
+fn flush_paragraph(
+    pending: &mut ParagraphBuilder,
+    lines: &mut Vec<PersonalNewsLine>,
+    chapters: &[PersonalNewsChapter],
+    supplements: &mut Vec<PersonalNewsSupplement>,
+    sources: &mut Vec<PersonalNewsSource>,
+    total_ms: &mut u64,
+) {
+    if pending.raw_text.trim().is_empty() {
+        return;
+    }
+
+    let raw_text = std::mem::take(&mut pending.raw_text);
+    let topic = pending.topic.take();
+    let duration_ms = std::mem::take(&mut pending.duration_ms).max(MIN_LINE_MS);
+    let text = extract_inline_supplements(
+        &raw_text,
+        *total_ms,
+        duration_ms,
+        topic.clone(),
+        lines.len(),
+        chapters.len().saturating_sub(1),
+        supplements,
+        sources,
+    );
+    if text.is_empty() {
+        return;
+    }
+
+    lines.push(PersonalNewsLine {
+        id: format!("line_{:03}", lines.len() + 1),
+        kind: "text".to_string(),
+        topic,
+        text,
+        duration_ms,
+        source_id: None,
+        position_ms: *total_ms,
+    });
+    *total_ms = total_ms.saturating_add(duration_ms);
+}
+
+fn is_paragraph_break(line: &str) -> bool {
+    line.eq_ignore_ascii_case("[Break]")
+        || line.eq_ignore_ascii_case("[Paragraph]")
+        || line == "[段落]"
+        || line == "---"
+}
+
 fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, String> {
     let file_name = path
         .file_name()
@@ -488,6 +577,7 @@ fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, Stri
     let mut sources = Vec::new();
     let mut total_ms = 0u64;
     let mut current_topic: Option<String> = None;
+    let mut pending = ParagraphBuilder::default();
     let mut in_scenario = !text
         .lines()
         .any(|line| line.trim().eq_ignore_ascii_case("## Scenario"));
@@ -520,6 +610,16 @@ fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, Stri
             continue;
         }
         if line.starts_with("## ") {
+            if in_scenario {
+                flush_paragraph(
+                    &mut pending,
+                    &mut lines,
+                    &chapters,
+                    &mut supplements,
+                    &mut sources,
+                    &mut total_ms,
+                );
+            }
             in_scenario = line[3..].trim().eq_ignore_ascii_case("Scenario");
             continue;
         }
@@ -528,6 +628,14 @@ fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, Stri
         }
 
         if let Some(topic) = bracket_body(line, "Topic") {
+            flush_paragraph(
+                &mut pending,
+                &mut lines,
+                &chapters,
+                &mut supplements,
+                &mut sources,
+                &mut total_ms,
+            );
             current_topic = Some(topic.trim().to_string());
             chapters.push(PersonalNewsChapter {
                 id: format!("chapter_{:03}", chapters.len() + 1),
@@ -538,21 +646,34 @@ fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, Stri
             continue;
         }
 
-        if let Some(body) = bracket_body_any(line, &["Supplement", "補足", "Source"]) {
-            push_supplement(
+        if is_paragraph_break(line) {
+            flush_paragraph(
+                &mut pending,
+                &mut lines,
+                &chapters,
                 &mut supplements,
                 &mut sources,
-                &body,
-                current_topic.clone(),
-                lines.len(),
-                chapters.len().saturating_sub(1),
-                total_ms,
-                DEFAULT_SUPPLEMENT_MS,
+                &mut total_ms,
             );
             continue;
         }
 
+        if bracket_body_any(line, &["Supplement", "補足", "Source"]).is_some() {
+            // Keep a standalone marker inside the pending paragraph so its
+            // timing is derived from its actual position in the long marquee.
+            pending.push(line, 0, current_topic.clone());
+            continue;
+        }
+
         if let Some(body) = paren_body(line, "Wait") {
+            flush_paragraph(
+                &mut pending,
+                &mut lines,
+                &chapters,
+                &mut supplements,
+                &mut sources,
+                &mut total_ms,
+            );
             let duration_ms = parse_seconds_ms(&body).unwrap_or(default_line_ms);
             lines.push(PersonalNewsLine {
                 id: format!("line_{:03}", lines.len() + 1),
@@ -568,61 +689,23 @@ fn parse_script_text(path: &Path, text: &str) -> Result<PersonalNewsScript, Stri
         }
 
         let (text, explicit_ms) = parse_text_line(line);
-        // A physical source line may contain several sentences. Normalize it
-        // into one display item per sentence so the backend cursor and overlay
-        // always advance through the same, inspectable queue.
-        let segments = split_display_lines(&text);
-        let weights = segments
-            .iter()
-            .map(|segment| stripped_char_count(segment).max(1) as u64)
-            .collect::<Vec<_>>();
-        let weight_total = weights.iter().sum::<u64>().max(1);
-        let explicit_total = explicit_ms
-            .map(|duration| duration.max(MIN_LINE_MS.saturating_mul(segments.len() as u64)));
-        let explicit_flexible = explicit_total
-            .map(|duration| duration.saturating_sub(MIN_LINE_MS * segments.len() as u64));
-        let mut allocated_ms = 0u64;
-
-        for (segment_index, segment) in segments.iter().enumerate() {
-            let duration_ms =
-                if let (Some(total), Some(flexible)) = (explicit_total, explicit_flexible) {
-                    if segment_index + 1 == segments.len() {
-                        total.saturating_sub(allocated_ms).max(MIN_LINE_MS)
-                    } else {
-                        MIN_LINE_MS.saturating_add(
-                            flexible.saturating_mul(weights[segment_index]) / weight_total,
-                        )
-                    }
-                } else {
-                    estimate_line_ms(stripped_char_count(segment))
-                };
-            allocated_ms = allocated_ms.saturating_add(duration_ms);
-
-            let text = extract_inline_supplements(
-                segment,
-                total_ms,
-                duration_ms,
-                current_topic.clone(),
-                lines.len(),
-                chapters.len().saturating_sub(1),
-                &mut supplements,
-                &mut sources,
-            );
-            if text.is_empty() {
-                continue;
-            }
-            lines.push(PersonalNewsLine {
-                id: format!("line_{:03}", lines.len() + 1),
-                kind: "text".to_string(),
-                topic: current_topic.clone(),
-                text,
-                duration_ms,
-                source_id: None,
-                position_ms: total_ms,
-            });
-            total_ms = total_ms.saturating_add(duration_ms);
-        }
+        let duration_ms = explicit_ms
+            .unwrap_or_else(|| estimate_line_ms(stripped_char_count(&text)))
+            .max(MIN_LINE_MS);
+        // Physical lines are prose fragments, not automatic display breaks.
+        // They stay connected in one ticker until [Break], [Paragraph], [段落],
+        // `---`, a topic change, a wait, or the end of the scenario.
+        pending.push(&text, duration_ms, current_topic.clone());
     }
+
+    flush_paragraph(
+        &mut pending,
+        &mut lines,
+        &chapters,
+        &mut supplements,
+        &mut sources,
+        &mut total_ms,
+    );
 
     if lines.is_empty() {
         return Err(format!("{}: no scenario lines", file_name));
@@ -660,65 +743,6 @@ fn parse_text_line(line: &str) -> (String, Option<u64>) {
         }
     }
     (line.to_string(), None)
-}
-
-/// Split prose into display-sized sentences while keeping inline supplement
-/// markers and quoted punctuation intact. The source file is left untouched;
-/// this normalized queue only exists in the parsed runtime state.
-fn split_display_lines(text: &str) -> Vec<String> {
-    let mut segments = Vec::new();
-    let mut current = String::new();
-    let mut marker_depth = 0usize;
-    let mut quote_depth = 0usize;
-    let mut sentence_ended = false;
-
-    for ch in text.chars() {
-        let begins_marker = ch == '[';
-        let is_trailer = matches!(ch, '」' | '』' | '）' | ')' | '】' | '》' | '〉' | '〕');
-        if sentence_ended
-            && marker_depth == 0
-            && quote_depth == 0
-            && !ch.is_whitespace()
-            && !is_trailer
-            && !begins_marker
-        {
-            let completed = current.trim();
-            if !completed.is_empty() {
-                segments.push(completed.to_string());
-            }
-            current.clear();
-            sentence_ended = false;
-        }
-
-        if ch == '[' {
-            marker_depth = marker_depth.saturating_add(1);
-        }
-        current.push(ch);
-        if ch == ']' && marker_depth > 0 {
-            marker_depth -= 1;
-            continue;
-        }
-        if marker_depth > 0 {
-            continue;
-        }
-
-        if matches!(ch, '「' | '『' | '（' | '(' | '【' | '《' | '〈' | '〔') {
-            quote_depth = quote_depth.saturating_add(1);
-        } else if is_trailer && quote_depth > 0 {
-            quote_depth -= 1;
-        } else if quote_depth == 0 && matches!(ch, '。' | '！' | '？' | '!' | '?') {
-            sentence_ended = true;
-        }
-    }
-
-    let tail = current.trim();
-    if !tail.is_empty() {
-        segments.push(tail.to_string());
-    }
-    if segments.is_empty() && !text.trim().is_empty() {
-        segments.push(text.trim().to_string());
-    }
-    segments
 }
 
 fn estimate_line_ms(chars: usize) -> u64 {
@@ -990,6 +1014,24 @@ fn elapsed_before_line(script: &PersonalNewsScript, line_index: usize) -> u64 {
         .fold(0u64, |sum, line| sum.saturating_add(line.duration_ms))
 }
 
+fn cursor_for_elapsed(script: &PersonalNewsScript, elapsed_ms: u64) -> (usize, u64) {
+    if script.lines.is_empty() {
+        return (0, 0);
+    }
+    let mut remaining = elapsed_ms.min(script.estimated_duration_ms);
+    for (index, line) in script.lines.iter().enumerate() {
+        let duration = line.duration_ms.max(MIN_LINE_MS);
+        if remaining < duration {
+            return (index, remaining);
+        }
+        if index + 1 == script.lines.len() {
+            return (index, duration);
+        }
+        remaining = remaining.saturating_sub(duration);
+    }
+    (script.lines.len().saturating_sub(1), 0)
+}
+
 fn chapter_index_for(script: &PersonalNewsScript, line_index: usize) -> usize {
     script
         .chapters
@@ -1054,7 +1096,9 @@ Plain second line.
             Path::new("prose.txt"),
             r#"## Scenario
 short
+[Break]
 This is a much longer plain line that should take proportionally more time to read.
+[Break]
 with marker [Supplement: note | https://example.com/very/long/url/that/should/not/count | 3.0] tail
 "#,
         )
@@ -1124,6 +1168,40 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
     }
 
     #[test]
+    fn bundled_samples_group_prose_by_topics_instead_of_sentences() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join(SCRIPT_DIR_NAME);
+        let dream =
+            parse_script_file(&dir.join("aozora_夢十夜_第一夜.txt")).expect("Dream sample parses");
+        assert_eq!(dream.chapters.len(), 12);
+        assert_eq!(dream.lines.len(), 12);
+        assert!(dream.lines[0].text.contains("第一夜  こんな夢を見た。"));
+        assert!(dream.lines[0]
+            .text
+            .contains("しかし女は静かな声で、もう死にますと判然云った。"));
+
+        let ai = parse_script_file(&dir.join("特集_AIエージェント観測所.txt"))
+            .expect("AI sample parses");
+        assert_eq!(ai.chapters.len(), 7);
+        assert_eq!(ai.lines.len(), 7);
+        assert!(ai.lines[1].text.contains("忘れないことより"));
+    }
+
+    #[test]
+    fn absolute_elapsed_cursor_maps_across_grouped_paragraphs() {
+        let script = parse_script_text(
+            Path::new("cursor.txt"),
+            "## Scenario\n[Line: 4] joined paragraph\n[Break]\n[Line: 2] next\n",
+        )
+        .expect("cursor script parses");
+
+        assert_eq!(cursor_for_elapsed(&script, 2_500), (0, 2_500));
+        assert_eq!(cursor_for_elapsed(&script, 4_500), (1, 500));
+        assert_eq!(cursor_for_elapsed(&script, 99_000), (1, 2_000));
+    }
+
+    #[test]
     fn auto_visibility_starts_once_and_keeps_timeline_running_when_hidden() {
         let script = sample_script();
         let state = PersonalNewsState {
@@ -1150,31 +1228,51 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
     }
 
     #[test]
-    fn prose_is_normalized_to_one_display_line_per_sentence() {
+    fn prose_stays_connected_until_an_explicit_paragraph_break() {
         let script = parse_script_text(
-            Path::new("normalized.txt"),
-            r#"# Title: Normalized
+            Path::new("paragraphs.txt"),
+            r#"# Title: Paragraphs
 ## Scenario
 [Topic: Test]
 [Line: 9.0] 一文目です。二文目です！「疑問？」は引用の途中です。
+改行しても同じ電光掲示板へつながります。
+[Break]
+ここから次の段落です。
 "#,
         )
-        .expect("normalized prose parses");
+        .expect("paragraph prose parses");
+
+        assert_eq!(script.lines.len(), 2);
+        assert_eq!(
+            script.lines[0].text,
+            "一文目です。二文目です！「疑問？」は引用の途中です。 改行しても同じ電光掲示板へつながります。"
+        );
+        assert_eq!(script.lines[1].text, "ここから次の段落です。");
+        assert_eq!(script.lines[1].position_ms, script.lines[0].duration_ms);
+        assert!(script.lines[0].duration_ms > 9_000);
+    }
+
+    #[test]
+    fn topic_and_japanese_break_marker_start_new_marquee_paragraphs() {
+        let script = parse_script_text(
+            Path::new("markers.txt"),
+            r#"## Scenario
+[Topic: A]
+first
+second
+[段落]
+third
+[Topic: B]
+fourth
+"#,
+        )
+        .expect("marker script parses");
 
         assert_eq!(script.lines.len(), 3);
-        assert_eq!(script.lines[0].text, "一文目です。");
-        assert_eq!(script.lines[1].text, "二文目です！");
-        assert_eq!(script.lines[2].text, "「疑問？」は引用の途中です。");
-        assert_eq!(
-            script
-                .lines
-                .iter()
-                .map(|line| line.duration_ms)
-                .sum::<u64>(),
-            9_000
-        );
-        assert_eq!(script.lines[1].position_ms, script.lines[0].duration_ms);
-        assert_eq!(script.estimated_duration_ms, 9_000);
+        assert_eq!(script.lines[0].text, "first second");
+        assert_eq!(script.lines[1].text, "third");
+        assert_eq!(script.lines[2].text, "fourth");
+        assert_eq!(script.chapters[1].line_index, 2);
     }
 
     #[test]
@@ -1187,7 +1285,7 @@ with marker [Supplement: note | https://example.com/very/long/url/that/should/no
         std::fs::create_dir_all(&scripts_dir).unwrap();
         std::fs::write(
             scripts_dir.join("resume.txt"),
-            "# Title: Resume Test\n[Line: 10] first\n[Line: 10] second\n",
+            "# Title: Resume Test\n[Line: 10] first\n[Break]\n[Line: 10] second\n",
         )
         .unwrap();
 

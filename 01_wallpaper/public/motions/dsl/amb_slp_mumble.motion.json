@@ -1,0 +1,51 @@
+{
+  "schema": "motion/1",
+  "id": "amb_slp_mumble",
+  "label": "Ambient: 寝言をつぶやく",
+  "notes": "sleep_desk Ambient（新規 2026-07-16）。腕枕で眠りながら、口が小さくもごもご動いて2節の寝言をつぶやき、ふにゃっと安らいで戻る。寝顔の微細演出なので過剰にしない: 口パク(a/u 0.07-0.12)＋僅かな頭のすり寄せ（頬は腕の上、大きく動かすと顔が腕に食い込むため head y +0.03 まで）＋つぶやき後の安堵(fun)。目は終始閉じたまま＝全 set キーに blink 1.0 を明記（省略すると 0 にフェードして目が開いてしまう）。腕枕基底（spine 0.16 / chest 0.10 / head [0,0.7,0.16] ＋腕4トラック＋hands relax）をキーに埋め込み＝loop_sleep_desk と境界シームレス。寝息オシレータはループと同値(spine/chest x, period6)を持ち込み6s=1周期でシーム安全。dsl_amb_slp_mumble は WORK_HAND_PIN_POLICIES の sleeparms グループ（worldアンカー、腕枕は動かない）。lookAt off。oneshot 6.0s。",
+  "category": "ambient",
+  "tags": ["mode:sleep_desk", "family:special"],
+  "posture": "sit_desk_slump",
+  "duration": 6.0,
+  "loop": false,
+  "fadeIn": 0.8,
+  "fadeOut": 0.9,
+  "hands": { "left": "relax", "right": "relax" },
+  "tracks": {
+    "spine": { "keys": [
+      { "t": 0.0, "e": [0.16, 0, 0] },
+      { "t": 6.0, "e": [0.16, 0, 0] }
+    ] },
+    "chest": { "keys": [
+      { "t": 0.0, "e": [0.10, 0, 0] },
+      { "t": 1.0, "e": [0.115, 0, 0], "ease": "sineInOut" },
+      { "t": 2.8, "e": [0.10, 0, 0], "ease": "sineInOut" },
+      { "t": 6.0, "e": [0.10, 0, 0] }
+    ] },
+    "head": { "keys": [
+      { "t": 0.0, "e": [0, 0.7, 0.16] },
+      { "t": 1.4, "e": [0.015, 0.73, 0.165], "ease": "sineInOut" },
+      { "t": 3.4, "e": [0.01, 0.72, 0.162], "ease": "sineInOut" },
+      { "t": 6.0, "e": [0, 0.7, 0.16], "ease": "sineInOut" }
+    ] },
+    "leftUpperArm": { "keys": [ { "t": 0, "e": [1.29, -0.78, 0.67] }, { "t": 6.0, "e": [1.29, -0.78, 0.67] } ] },
+    "rightUpperArm": { "keys": [ { "t": 0, "e": [1.26, 0.82, -0.65] }, { "t": 6.0, "e": [1.26, 0.82, -0.65] } ] },
+    "leftLowerArm": { "keys": [ { "t": 0, "e": [-0.70, -2.33, -0.30] }, { "t": 6.0, "e": [-0.70, -2.33, -0.30] } ] },
+    "rightLowerArm": { "keys": [ { "t": 0, "e": [-0.50, 2.20, -0.05] }, { "t": 6.0, "e": [-0.50, 2.20, -0.05] } ] }
+  },
+  "oscillators": [
+    { "bone": "spine", "axis": "x", "amp": 0.022, "period": 6 },
+    { "bone": "chest", "axis": "x", "amp": 0.018, "period": 6 }
+  ],
+  "expressions": { "keys": [
+    { "t": 0.0, "set": { "blink": 1.0 }, "fade": 0.6 },
+    { "t": 1.0, "set": { "blink": 1.0, "a": 0.12 }, "fade": 0.35 },
+    { "t": 1.6, "set": { "blink": 1.0, "u": 0.10 }, "fade": 0.3 },
+    { "t": 2.2, "set": { "blink": 1.0, "a": 0.08 }, "fade": 0.3 },
+    { "t": 2.8, "set": { "blink": 1.0 }, "fade": 0.5 },
+    { "t": 3.9, "set": { "blink": 1.0, "u": 0.07 }, "fade": 0.4 },
+    { "t": 4.5, "set": { "blink": 1.0, "fun": 0.2 }, "fade": 0.5 },
+    { "t": 6.0, "set": { "blink": 1.0 }, "fade": 1.2 }
+  ] },
+  "lookAt": { "mode": "off" }
+}

@@ -142,6 +142,11 @@ const WORK_HAND_PIN_POLICIES: Record<string, WorkHandPinPolicy> = {
   dsl_amb_work_screen_scan: { group: 'keyboard', anchor: 'world', left: true, right: true },
   dsl_amb_work_posture_reset: { group: 'keyboard', anchor: 'world', left: true, right: true },
   dsl_amb_work_sip: { group: 'keyboard', anchor: 'world', left: false, right: true },
+  // window_gaze keeps both hands resting on the keys for the whole gaze —
+  // amb_work_wrist_flex is deliberately ABSENT (hands leave the keyboard;
+  // a pin would yank the wrists back mid-shake, same reason as amb_work_stretch).
+  dsl_amb_work_window_gaze: { group: 'keyboard', anchor: 'world', left: true, right: true },
+  dsl_amb_work_window_gaze_mirror: { group: 'keyboard', anchor: 'world', left: true, right: true },
   dsl_loop_video_relax: { group: 'chinrest', anchor: 'head', left: true, right: true },
   dsl_loop_video_relax_chinfit_a: { group: 'chinrest', anchor: 'head', left: true, right: true },
   dsl_loop_video_relax_chinfit_b: { group: 'chinrest', anchor: 'head', left: true, right: true },
@@ -149,12 +154,14 @@ const WORK_HAND_PIN_POLICIES: Record<string, WorkHandPinPolicy> = {
   dsl_amb_vid_chuckle: { group: 'chinrest', anchor: 'head', left: true, right: true },
   dsl_amb_vid_nod_watch: { group: 'chinrest', anchor: 'head', left: true, right: true },
   dsl_amb_vid_eyes_widen: { group: 'chinrest', anchor: 'head', left: true, right: true },
+  dsl_amb_vid_drowse: { group: 'chinrest', anchor: 'head', left: true, right: true },
   // sleeparms: the 腕枕 sleep pose — the crossed forearms are the pillow, so the
   // wrists hold their world plant on the laptop deck against sleep breathing
   // (the head rides the breath ON the arms; the arms must not ride with it).
   dsl_loop_sleep_desk: { group: 'sleeparms', anchor: 'world', left: true, right: true },
   dsl_amb_slp_head_shift: { group: 'sleeparms', anchor: 'world', left: true, right: true },
   dsl_amb_slp_dream_smile: { group: 'sleeparms', anchor: 'world', left: true, right: true },
+  dsl_amb_slp_mumble: { group: 'sleeparms', anchor: 'world', left: true, right: true },
 };
 
 const getWorkHandPinPolicy = (clipName: string | undefined): WorkHandPinPolicy | null =>
@@ -230,9 +237,9 @@ const DIRECTOR_LOOPS: Record<DirectorPlayableMode, string> = {
 };
 
 const DIRECTOR_AMBIENTS: Record<DirectorPlayableMode, readonly string[]> = {
-  work_normal: ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_stretch'],
-  video_relax: ['amb_vid_chuckle', 'amb_vid_nod_watch', 'amb_vid_eyes_widen'],
-  sleep_desk: ['amb_slp_head_shift', 'amb_slp_dream_smile'],
+  work_normal: ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_stretch', 'amb_work_wrist_flex', 'amb_work_window_gaze', 'amb_work_window_gaze_mirror'],
+  video_relax: ['amb_vid_chuckle', 'amb_vid_nod_watch', 'amb_vid_eyes_widen', 'amb_vid_drowse'],
+  sleep_desk: ['amb_slp_head_shift', 'amb_slp_dream_smile', 'amb_slp_mumble'],
 };
 
 const DIRECTOR_SECONDARY_CONTENT = {

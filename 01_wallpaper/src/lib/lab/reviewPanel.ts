@@ -15,9 +15,10 @@ import type { MotionLab } from './motionLab';
 const MODES = ['work_normal', 'work_sleepy', 'video_relax', 'sleep_desk'] as const;
 const AMBIENTS = [
   'amb_work_screen_scan', 'amb_work_posture_reset', 'amb_work_neck_roll', 'amb_work_sip',
+  'amb_work_stretch', 'amb_work_wrist_flex', 'amb_work_window_gaze', 'amb_work_window_gaze_mirror',
   'amb_slpy_head_bob', 'amb_slpy_slow_blink', 'amb_slpy_tilt_drift',
-  'amb_vid_chuckle', 'amb_vid_nod_watch', 'amb_vid_eyes_widen',
-  'amb_slp_head_shift', 'amb_slp_dream_smile',
+  'amb_vid_chuckle', 'amb_vid_nod_watch', 'amb_vid_eyes_widen', 'amb_vid_drowse',
+  'amb_slp_head_shift', 'amb_slp_dream_smile', 'amb_slp_mumble',
 ];
 const TRANSITIONS = [
   'tr_lean_back', 'tr_lean_forward', 'tr_sit_to_slump', 'tr_slump_wake',

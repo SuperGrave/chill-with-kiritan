@@ -60,6 +60,7 @@ export const MODE_TABLE: Record<ModeId, ModeSpec> = {
       { id: 'amb_work_wrist_flex', weight: 2 },
       { id: 'amb_work_yawn_small', weight: 1, nightWeight: 3 },
       { id: 'amb_work_window_gaze', weight: 1 },
+      { id: 'amb_work_window_gaze_mirror', weight: 1 },
     ],
   },
 

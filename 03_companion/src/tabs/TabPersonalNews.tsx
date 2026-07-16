@@ -229,6 +229,9 @@ export default function TabPersonalNews() {
           <RefreshIcon />
           原稿を再読込
         </button>
+        <p className="hint">
+          通常の改行は一続きの電光掲示板として連結されます。次の表示へ分けたい場所に <code>[Break]</code> を1行で書いてください。<code>[Topic: 見出し]</code> でも区切られます。
+        </p>
       </div>
 
       <div className="personal-news-now">
@@ -243,7 +246,7 @@ export default function TabPersonalNews() {
           <span>{formatMs(state?.elapsedMs ?? 0)}</span>
           <span>
             CH {String((state?.currentChapterIndex ?? 0) + 1).padStart(2, "0")}/{String(script?.chapters.length ?? 0).padStart(2, "0")}
-            {" · "}LINE {String((state?.lineIndex ?? 0) + 1).padStart(3, "0")}/{String(script?.lines.length ?? 0).padStart(3, "0")}
+            {" · "}BLOCK {String((state?.lineIndex ?? 0) + 1).padStart(3, "0")}/{String(script?.lines.length ?? 0).padStart(3, "0")}
           </span>
           <span>{formatMs(state?.durationMs ?? 0)}</span>
         </div>
@@ -252,7 +255,7 @@ export default function TabPersonalNews() {
       <div className="pn-transport">
         <IconButton label="最初から" icon={<RefreshIcon />} disabled={busy} onClick={() => control("restart")} />
         <IconButton label="前の章" icon={<PrevIcon />} disabled={busy} onClick={() => control("previousChapter")} />
-        <IconButton label="前の行" icon={<PrevIcon />} disabled={busy} onClick={() => control("previousLine")} />
+        <IconButton label="前の段落" icon={<PrevIcon />} disabled={busy} onClick={() => control("previousLine")} />
         <IconButton
           size="lg"
           label={playing ? "一時停止" : "再生"}
@@ -260,7 +263,7 @@ export default function TabPersonalNews() {
           disabled={busy}
           onClick={() => control("toggle")}
         />
-        <IconButton label="次の行" icon={<NextIcon />} disabled={busy} onClick={() => control("nextLine")} />
+        <IconButton label="次の段落" icon={<NextIcon />} disabled={busy} onClick={() => control("nextLine")} />
         <IconButton label="次の章" icon={<NextIcon />} disabled={busy} onClick={() => control("nextChapter")} />
         <IconButton label="停止" icon={<StopIcon />} disabled={busy} onClick={() => control("stop")} />
         <IconButton

@@ -157,6 +157,78 @@ const activeSupplement = (supplements: PersonalNewsSupplement[], elapsedMs: numb
   return current;
 };
 
+interface TickerProps {
+  text: string;
+  /** Total time this block owns on the state timeline. */
+  durationMs: number;
+  /** State-synced elapsed within the block, captured at render time. */
+  elapsedMs: number;
+  playing: boolean;
+  fontSize: number;
+}
+
+// LED-board ticker. The strip enters from the shell's right edge and its tail
+// exits the left edge exactly at durationMs: x(t) = shellW - (shellW + textW) * t/dur.
+// Block durations are proportional to text length (companion CHAR_MS), so the
+// pixel speed stays a steady reading pace across blocks. Driven by rAF writing
+// transform directly — the old CSS animation re-seeked every 250ms state tick
+// (animation-delay rewritten per render), which stuttered, and its scrollSpeed/
+// 180s-clamped duration could finish early or get cut before the tail exited.
+const PersonalNewsTicker: React.FC<TickerProps> = ({ text, durationMs, elapsedMs, playing, fontSize }) => {
+  const shellRef = React.useRef<HTMLDivElement | null>(null);
+  const stripRef = React.useRef<HTMLDivElement | null>(null);
+  // Anchor from the latest state render; the rAF loop extrapolates between
+  // renders on the same wall clock, so re-anchoring is seamless while pause /
+  // seek / block changes from the companion snap to the corrected position.
+  const anchorRef = React.useRef({ elapsedMs: 0, at: 0, playing: false, durationMs: 1 });
+  anchorRef.current = { elapsedMs, at: performance.now(), playing, durationMs: Math.max(durationMs, 1) };
+
+  const place = React.useCallback(() => {
+    const shell = shellRef.current;
+    const strip = stripRef.current;
+    if (!shell || !strip) return;
+    const a = anchorRef.current;
+    const t = a.playing ? a.elapsedMs + (performance.now() - a.at) : a.elapsedMs;
+    const progress = clamp(t / a.durationMs, 0, 1);
+    const shellW = shell.clientWidth;
+    const textW = Math.max(strip.scrollWidth, shellW);
+    const x = shellW - (shellW + textW) * progress;
+    strip.style.transform = `translate3d(${x}px, 0, 0)`;
+  }, []);
+
+  React.useEffect(() => {
+    let raf = 0;
+    const step = () => {
+      place();
+      raf = window.requestAnimationFrame(step);
+    };
+    raf = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(raf);
+  }, [place]);
+
+  // Re-place synchronously when the block text swaps so the new strip never
+  // paints one frame at the previous block's offset.
+  React.useLayoutEffect(() => {
+    place();
+  }, [place, text]);
+
+  return (
+    <div ref={shellRef} className="personal-news-marquee-shell continuous">
+      <div
+        ref={stripRef}
+        className="personal-news-marquee"
+        style={{
+          fontSize: `${fontSize}px`,
+          // Pre-rAF fallback: park off the right edge (first place() corrects it).
+          transform: 'translate3d(100vw, 0, 0)',
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+};
+
 const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
   personalNews = mockPersonalNews,
   settings,
@@ -189,9 +261,9 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
   const totalProgress = clamp(live.elapsedMs / durationMs, 0, 1);
   const lineText = stripSupplementMarkers(line.text) || script.title;
   const lineDurationMs = Math.max(line.durationMs || 1, 1);
-  const scrollSpeed = Math.max(s.personalNewsScrollSpeed ?? 1, 0.2);
-  const marqueeSeconds = clamp((lineDurationMs / 1000) / scrollSpeed, 2, 180);
-  const marqueeDelay = -Math.max(0, live.lineElapsedMs / 1000 / scrollSpeed);
+  // NOTE: personalNewsScrollSpeed is deliberately NOT applied here — the block
+  // owns lineDurationMs on the shared state timeline, so any display-side speed
+  // scaling either cuts the tail off early or leaves dead air (v0.8.6 bug).
   const panelStatus = offline ? 'OFFLINE' : live.status.toUpperCase();
   const supplements = supplementsFor(script);
   const supplement = activeSupplement(supplements, live.elapsedMs);
@@ -225,21 +297,13 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
       )}
 
       {s.personalNewsShowBody && (
-        <div className="personal-news-marquee-shell continuous">
-          <div
-            key={`${script.id}-${line.id}-${live.lineIndex}`}
-            className="personal-news-marquee"
-            style={{
-              animationDuration: `${marqueeSeconds}s`,
-              animationDelay: `${marqueeDelay}s`,
-              animationIterationCount: 'infinite',
-              animationPlayState: live.status === 'playing' ? 'running' : 'paused',
-              fontSize: `${s.personalNewsBodySize}px`,
-            }}
-          >
-            {lineText}
-          </div>
-        </div>
+        <PersonalNewsTicker
+          text={lineText}
+          durationMs={lineDurationMs}
+          elapsedMs={live.lineElapsedMs}
+          playing={live.status === 'playing'}
+          fontSize={s.personalNewsBodySize}
+        />
       )}
 
       {s.personalNewsShowSource && (
@@ -257,7 +321,7 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
             <span>{fmtTime(live.elapsedMs)}</span>
             <span>
               CH {String(chapterIndex + 1).padStart(2, '0')}/{String(script.chapters.length).padStart(2, '0')}
-              {' · '}LINE {String(live.lineIndex + 1).padStart(3, '0')}/{String(script.lines.length).padStart(3, '0')}
+              {' · '}BLOCK {String(live.lineIndex + 1).padStart(3, '0')}/{String(script.lines.length).padStart(3, '0')}
             </span>
             <span>{fmtTime(durationMs)}</span>
           </div>

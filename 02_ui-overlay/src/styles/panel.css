@@ -254,20 +254,10 @@
   min-width: 100%;
   white-space: nowrap;
   line-height: 1.2;
-  animation-name: personal-news-marquee;
-  animation-timing-function: linear;
-  animation-fill-mode: both;
   text-shadow: 0 0 18px rgba(255, 255, 255, 0.18);
+  /* Positioned per-frame by PersonalNewsTicker (rAF + translate3d) — a CSS
+     animation here would fight the JS-driven transform. */
   will-change: transform;
-}
-
-@keyframes personal-news-marquee {
-  from {
-    transform: translateX(12%);
-  }
-  to {
-    transform: translateX(-100%);
-  }
 }
 
 .personal-news-supplement {

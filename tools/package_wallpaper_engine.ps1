@@ -91,7 +91,11 @@ $project = [ordered]@{
   preview = "preview.svg"
   description = "A local web wallpaper for Wallpaper Engine. Companion runs separately for live data, settings, Spotify, memo, and personal news."
   tags = @("Anime", "Technology")
+  # Required for wallpaperRegisterAudioListener (SPECTRUM panel) to receive
+  # audio frames. WE can auto-detect and add this, but the generated
+  # project.json must declare it explicitly since users never open the editor.
   general = [ordered]@{
+    supportsaudioprocessing = $true
     properties = [ordered]@{}
   }
 }

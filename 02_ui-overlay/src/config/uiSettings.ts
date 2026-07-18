@@ -101,6 +101,28 @@ export const personalNewsPanelDefaults = {
   personalNewsSupplementColor: '#b8dcff',
 };
 
+export const audioSpectrumPanelDefaults = {
+  // Opt-in like personalNews: the audio feed only exists inside Wallpaper
+  // Engine, so the panel stays hidden until the user turns it on.
+  show: false,
+  showHeader: true,
+  showBackground: true,
+  backgroundOpacity: 0.34,
+  contentTopGap: 12,
+  barCount: 24,
+  segmentCount: 14,
+  barGap: 4,
+  peakHold: true,
+  peakFallSpeed: 0.008,
+  sensitivity: 1,
+  decaySpeed: 0.12,
+  mirror: false,
+  colorMode: 'mono' as 'mono' | 'heat',
+  showBpm: true,
+  bpmLockSeconds: 5,
+  standbyText: 'AUDIO STANDBY',
+};
+
 export const memoPanelDefaults = {
   show: true,
   showHeader: true,
@@ -210,6 +232,7 @@ export const uiSettings = {
   musicPanel: musicPanelDefaults,
   lyricsPanel: lyricsPanelDefaults,
   personalNewsPanel: personalNewsPanelDefaults,
+  audioSpectrumPanel: audioSpectrumPanelDefaults,
   memoPanel: memoPanelDefaults,
   timerPanel: timerPanelDefaults,
   overlay: {

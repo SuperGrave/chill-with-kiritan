@@ -11,6 +11,7 @@ import NewsPanel from './components/panels/NewsPanel';
 import MusicPanel from './components/panels/MusicPanel';
 import LyricsPanel from './components/panels/LyricsPanel';
 import PersonalNewsPanel from './components/panels/PersonalNewsPanel';
+import AudioSpectrumPanel from './components/panels/AudioSpectrumPanel';
 import MemoPanel from './components/panels/MemoPanel';
 import TimerPanel from './components/panels/TimerPanel';
 import DebugGuide from './components/DebugGuide';
@@ -33,7 +34,7 @@ interface OverlayAppProps {
   productionMode?: boolean;
 }
 
-export type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'PERSONAL_NEWS' | 'NEWS' | 'MEMO' | 'TIMER';
+export type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'PERSONAL_NEWS' | 'SPECTRUM' | 'NEWS' | 'MEMO' | 'TIMER';
 
 const OFFLINE_SPOTIFY: SpotifyState = {
   connected: false,
@@ -257,6 +258,7 @@ function App({ productionMode = false }: OverlayAppProps) {
     MUSIC: ['musicPanel', 'show'],
     LYRICS: ['lyricsPanel', 'show'],
     PERSONAL_NEWS: ['personalNewsPanel', 'show'],
+    SPECTRUM: ['audioSpectrumPanel', 'show'],
     NEWS: ['newsPanel', 'show'],
     MEMO: ['memoPanel', 'show'],
     TIMER: ['timerPanel', 'show'],
@@ -281,6 +283,7 @@ function App({ productionMode = false }: OverlayAppProps) {
     MUSIC: isPanelVisible('MUSIC'),
     LYRICS: isPanelVisible('LYRICS'),
     PERSONAL_NEWS: isPanelVisible('PERSONAL_NEWS'),
+    SPECTRUM: isPanelVisible('SPECTRUM'),
     NEWS: isPanelVisible('NEWS'),
     MEMO: isPanelVisible('MEMO'),
     TIMER: isPanelVisible('TIMER'),
@@ -495,6 +498,23 @@ function App({ productionMode = false }: OverlayAppProps) {
               settings={personalNewsSettings}
               personalNews={livePersonalNews}
               offline={productionMode && !connected}
+            />
+          </FloatingPanel>
+        )}
+        {layout.audioSpectrumPanel && (
+          <FloatingPanel
+            title="SPECTRUM"
+            layout={layout.audioSpectrumPanel}
+            visible={panelVisibility.SPECTRUM}
+            debugMode={effectiveSettings.debugMode}
+            showHeader={effectiveSettings.audioSpectrumPanel?.showHeader !== false}
+            showBackground={effectiveSettings.audioSpectrumPanel?.showBackground !== false}
+            backgroundOpacity={effectiveSettings.audioSpectrumPanel?.backgroundOpacity ?? 0.34}
+            contentTopGap={effectiveSettings.audioSpectrumPanel?.contentTopGap ?? defaultUiSettings.audioSpectrumPanel.contentTopGap}
+          >
+            <AudioSpectrumPanel
+              settings={effectiveSettings.audioSpectrumPanel}
+              allowMock={!productionMode}
             />
           </FloatingPanel>
         )}

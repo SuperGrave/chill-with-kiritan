@@ -1,8 +1,8 @@
-# Chill with Kiritan v0.8.7 かんたん導入
+# Chill with Kiritan v0.8.8 かんたん導入
 
 ## 1. Companionを入れる
 
-`companion/Tohoku Companion_0.8.7_x64-setup.exe` を実行します。起動すると、操作用の小さなウィンドウとローカルAPIが立ち上がります。
+`companion/Tohoku Companion_0.8.8_x64-setup.exe` を実行します。起動すると、操作用の小さなウィンドウとローカルAPIが立ち上がります。
 
 ## 2. Wallpaper Engineへ入れる
 

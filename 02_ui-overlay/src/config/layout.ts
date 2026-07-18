@@ -69,6 +69,12 @@ export const overlayLayout = {
     width: 500,
     height: 225,
   },
+  audioSpectrumPanel: {
+    x: 8,
+    y: 696,
+    width: 500,
+    height: 200,
+  },
   timerPanel: {
     x: 8,
     y: 921,

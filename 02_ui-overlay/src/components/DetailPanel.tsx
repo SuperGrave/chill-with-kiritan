@@ -1,8 +1,8 @@
-import { Captions, Cloud, Music, Newspaper, NotebookPen, Timer } from 'lucide-react';
+import { AudioLines, Captions, Cloud, Music, Newspaper, NotebookPen, Timer } from 'lucide-react';
 import SettingsPanel from './panels/SettingsPanel';
 import '../styles/panel.css';
 
-type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'PERSONAL_NEWS' | 'NEWS' | 'MEMO' | 'TIMER';
+type PanelId = 'WEATHER' | 'MUSIC' | 'LYRICS' | 'PERSONAL_NEWS' | 'SPECTRUM' | 'NEWS' | 'MEMO' | 'TIMER';
 
 interface DetailPanelProps {
   layout: { x: number; y: number; width: number; height: number };
@@ -27,6 +27,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
     { id: 'MUSIC', label: 'MUSIC', icon: <Music size={18} strokeWidth={1.5} /> },
     { id: 'LYRICS', label: 'LYRICS', icon: <Captions size={18} strokeWidth={1.5} /> },
     { id: 'PERSONAL_NEWS', label: 'P-NEWS', icon: <Newspaper size={18} strokeWidth={1.5} /> },
+    { id: 'SPECTRUM', label: 'SPECTRUM', icon: <AudioLines size={18} strokeWidth={1.5} /> },
     { id: 'NEWS', label: 'NEWS', icon: <Newspaper size={18} strokeWidth={1.5} /> },
     { id: 'MEMO', label: 'MEMO', icon: <NotebookPen size={18} strokeWidth={1.5} /> },
     { id: 'TIMER', label: 'TIMER', icon: <Timer size={18} strokeWidth={1.5} /> },

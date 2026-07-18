@@ -148,3 +148,198 @@ export function computeBeat(frame128: ArrayLike<number>, state: BeatState): Beat
   state.avg += (bassEnergy - state.avg) * BEAT_AVG_K;
   return { bassEnergy, beat };
 }
+
+// --- tempo tracking ---------------------------------------------------------
+//
+// Beat onsets are deliberately kept separate from tempo estimation. A single
+// onset is useful for flashing an LED, but handing a tempo to the character
+// needs a much higher confidence bar: several consistent inter-beat intervals,
+// robust outlier rejection, then a continuous stability window.
+
+export type TempoStatus = 'standby' | 'detecting' | 'locked';
+
+export interface TempoTrackerConfig {
+  minBpm: number;
+  maxBpm: number;
+  stableMs: number;
+  staleMs: number;
+  toleranceRatio: number;
+}
+
+export interface TempoTrackerState {
+  beatTimes: number[];
+  candidateBpm: number | null;
+  referenceBpm: number | null;
+  lockedBpm: number | null;
+  confidence: number;
+  stableSince: number | null;
+  lockedAt: number | null;
+  lastBeatAt: number | null;
+}
+
+export interface TempoSnapshot {
+  status: TempoStatus;
+  /** Robust real-time estimate, available before the five-second lock. */
+  detectedBpm: number | null;
+  /** Stable integer tempo safe to hand to a later motion consumer. */
+  lockedBpm: number | null;
+  confidence: number;
+  stableForMs: number;
+  lockedAt: number | null;
+  lastBeatAt: number | null;
+}
+
+export const DEFAULT_TEMPO_CONFIG: TempoTrackerConfig = {
+  minBpm: 50,
+  maxBpm: 220,
+  stableMs: 5_000,
+  // The dynamic expiry below also allows four expected beats, which keeps
+  // genuinely slow tracks alive while still clearing a stopped feed quickly.
+  staleMs: 3_000,
+  toleranceRatio: 0.055,
+};
+
+const TEMPO_HISTORY_BEATS = 18;
+const TEMPO_MIN_INTERVALS = 2;
+const TEMPO_STABLE_INTERVALS = 3;
+
+export function createTempoTrackerState(): TempoTrackerState {
+  return {
+    beatTimes: [],
+    candidateBpm: null,
+    referenceBpm: null,
+    lockedBpm: null,
+    confidence: 0,
+    stableSince: null,
+    lockedAt: null,
+    lastBeatAt: null,
+  };
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function clearTempoEstimate(state: TempoTrackerState, keepLastBeat = false): void {
+  state.beatTimes.length = 0;
+  state.candidateBpm = null;
+  state.referenceBpm = null;
+  state.lockedBpm = null;
+  state.confidence = 0;
+  state.stableSince = null;
+  state.lockedAt = null;
+  if (!keepLastBeat) state.lastBeatAt = null;
+}
+
+export function getTempoSnapshot(state: TempoTrackerState, now: number): TempoSnapshot {
+  const status: TempoStatus = state.lockedBpm !== null
+    ? 'locked'
+    : state.lastBeatAt !== null
+      ? 'detecting'
+      : 'standby';
+  return {
+    status,
+    detectedBpm: state.candidateBpm,
+    lockedBpm: state.lockedBpm,
+    confidence: state.confidence,
+    stableForMs: state.stableSince === null ? 0 : Math.max(0, now - state.stableSince),
+    lockedAt: state.lockedAt,
+    lastBeatAt: state.lastBeatAt,
+  };
+}
+
+/**
+ * Add one accepted onset timestamp and update the robust BPM estimate.
+ * Mutates `state` so callers can keep one allocation-free tracker.
+ */
+export function recordTempoBeat(
+  state: TempoTrackerState,
+  at: number,
+  config: TempoTrackerConfig = DEFAULT_TEMPO_CONFIG,
+): TempoSnapshot {
+  const minInterval = 60_000 / config.maxBpm;
+  const maxInterval = 60_000 / config.minBpm;
+  const previousBeat = state.beatTimes[state.beatTimes.length - 1];
+  if (previousBeat !== undefined) {
+    const interval = at - previousBeat;
+    // A very close duplicate is most likely another low-frequency onset from
+    // the same kick. Ignore it instead of corrupting the interval history.
+    if (interval < minInterval * 0.8) return getTempoSnapshot(state, at);
+    // A long break is a new listening session. It must earn its own five-second
+    // lock and must not inherit the previous track's BPM.
+    if (interval > maxInterval * 1.35) clearTempoEstimate(state);
+  }
+
+  state.beatTimes.push(at);
+  if (state.beatTimes.length > TEMPO_HISTORY_BEATS) state.beatTimes.shift();
+  state.lastBeatAt = at;
+
+  const intervals: number[] = [];
+  for (let i = 1; i < state.beatTimes.length; i++) {
+    const interval = state.beatTimes[i] - state.beatTimes[i - 1];
+    if (interval >= minInterval && interval <= maxInterval) intervals.push(interval);
+  }
+  if (intervals.length < TEMPO_MIN_INTERVALS) return getTempoSnapshot(state, at);
+
+  const center = median(intervals);
+  const outlierLimit = Math.max(24, center * 0.16);
+  const inliers = intervals.filter((interval) => Math.abs(interval - center) <= outlierLimit);
+  if (inliers.length < TEMPO_MIN_INTERVALS) return getTempoSnapshot(state, at);
+
+  const robustInterval = median(inliers);
+  const detectedBpm = 60_000 / robustInterval;
+  const deviations = inliers.map((interval) => Math.abs(interval - robustInterval));
+  const relativeJitter = robustInterval > 0 ? median(deviations) / robustInterval : 1;
+  const consistency = Math.max(0, 1 - relativeJitter / 0.08);
+  const sampleStrength = Math.min(1, inliers.length / 6);
+  state.confidence = Math.min(1, sampleStrength * 0.65 + consistency * 0.35);
+  state.candidateBpm = detectedBpm;
+
+  const reference = state.referenceBpm;
+  const shifted = reference !== null
+    && Math.abs(detectedBpm - reference) / Math.max(reference, 1) > config.toleranceRatio;
+  if (reference === null || shifted) {
+    state.referenceBpm = detectedBpm;
+    state.stableSince = inliers.length >= TEMPO_STABLE_INTERVALS ? at : null;
+    state.lockedBpm = null;
+    state.lockedAt = null;
+  } else {
+    // Follow small musical/measurement drift without letting display jitter
+    // reset the stability clock on every beat.
+    state.referenceBpm = reference * 0.82 + detectedBpm * 0.18;
+    if (state.stableSince === null && inliers.length >= TEMPO_STABLE_INTERVALS) {
+      state.stableSince = at;
+    }
+  }
+
+  const stableForMs = state.stableSince === null ? 0 : at - state.stableSince;
+  if (
+    state.lockedBpm === null
+    && state.referenceBpm !== null
+    && stableForMs >= config.stableMs
+    && state.confidence >= 0.65
+  ) {
+    state.lockedBpm = Math.round(state.referenceBpm);
+    state.lockedAt = at;
+  }
+
+  return getTempoSnapshot(state, at);
+}
+
+/** Clear a stale candidate/lock after playback or the audio feed stops. */
+export function expireTempoTracking(
+  state: TempoTrackerState,
+  now: number,
+  config: TempoTrackerConfig = DEFAULT_TEMPO_CONFIG,
+): TempoSnapshot {
+  if (state.lastBeatAt !== null) {
+    const bpm = state.candidateBpm ?? state.lockedBpm;
+    const expectedInterval = bpm ? 60_000 / bpm : 0;
+    const timeout = Math.max(config.staleMs, expectedInterval * 4.2);
+    if (now - state.lastBeatAt > timeout) clearTempoEstimate(state);
+  }
+  return getTempoSnapshot(state, now);
+}

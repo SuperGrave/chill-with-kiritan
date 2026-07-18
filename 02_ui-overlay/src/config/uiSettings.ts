@@ -118,6 +118,8 @@ export const audioSpectrumPanelDefaults = {
   decaySpeed: 0.12,
   mirror: false,
   colorMode: 'mono' as 'mono' | 'heat',
+  showBpm: true,
+  bpmLockSeconds: 5,
   standbyText: 'AUDIO STANDBY',
 };
 

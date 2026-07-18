@@ -536,6 +536,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <SliderInput label="Decay Speed" value={sp.decaySpeed ?? 0.12} onChange={(v: number) => updateSection('audioSpectrumPanel', 'decaySpeed', v)} min={0.03} max={0.5} step={0.01} />
         <CheckRow label="Peak Hold" checked={sp.peakHold !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'peakHold', v)} />
         <SliderInput label="Peak Fall Speed" value={sp.peakFallSpeed ?? 0.008} onChange={(v: number) => updateSection('audioSpectrumPanel', 'peakFallSpeed', v)} min={0.002} max={0.05} step={0.002} />
+        <SectionDivider label="RHYTHM SYNC" />
+        <CheckRow label="Show BPM Status" checked={sp.showBpm !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'showBpm', v)} />
+        <SliderInput label="BPM Lock Seconds" value={sp.bpmLockSeconds ?? 5} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmLockSeconds', v)} min={2} max={12} step={0.5} />
         <SectionDivider label="STYLE" />
         <CheckRow label="Mirror Layout" checked={sp.mirror === true} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'mirror', v)} />
         <SelectRow

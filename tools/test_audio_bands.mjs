@@ -33,6 +33,9 @@ const {
   smoothBands,
   updatePeaks,
   computeBeat,
+  createTempoTrackerState,
+  recordTempoBeat,
+  expireTempoTracking,
 } = require(path.join(outDir, 'spectrumMath.js'));
 
 let pass = 0;
@@ -157,6 +160,55 @@ section('7. computeBeat');
   // And a fresh kick after a quiet gap fires again.
   for (let i = 0; i < 60; i++) computeBeat(silent, state);
   ok(computeBeat(kickFrame, state).beat === true, 'kick after a quiet gap fires again');
+}
+
+// --- 8. BPM tracking + five-second sync lock --------------------------------
+section('8. BPM tracking + stable sync');
+{
+  const state = createTempoTrackerState();
+  let snapshot;
+  for (let at = 0; at <= 6000; at += 500) snapshot = recordTempoBeat(state, at);
+  ok(snapshot.detectedBpm !== null && Math.abs(snapshot.detectedBpm - 120) < 0.01,
+    '120 BPM onsets produce a real-time 120 BPM candidate');
+  ok(snapshot.status === 'detecting' && snapshot.lockedBpm === null,
+    'candidate does not lock before five continuous stable seconds');
+  snapshot = recordTempoBeat(state, 6500);
+  ok(snapshot.status === 'locked' && snapshot.lockedBpm === 120,
+    '120 BPM locks after five continuous stable seconds');
+  ok(snapshot.confidence >= 0.95, 'clean periodic onsets reach high confidence');
+
+  const jittered = createTempoTrackerState();
+  let at = 0;
+  const jitterPattern = [500, 508, 493, 504, 497, 506, 495, 502];
+  let jitterSnapshot;
+  for (let i = 0; i < 17; i++) {
+    jitterSnapshot = recordTempoBeat(jittered, at);
+    at += jitterPattern[i % jitterPattern.length];
+  }
+  ok(jitterSnapshot.detectedBpm !== null && Math.abs(jitterSnapshot.detectedBpm - 120) < 1,
+    'median/outlier filtering keeps a jittered 120 BPM estimate stable');
+  ok(jitterSnapshot.status === 'locked', 'small timing jitter still earns the stable lock');
+
+  const duplicate = createTempoTrackerState();
+  recordTempoBeat(duplicate, 0);
+  const ignored = recordTempoBeat(duplicate, 100);
+  ok(ignored.detectedBpm === null && duplicate.beatTimes.length === 1,
+    'near-duplicate onsets from one kick are ignored');
+
+  const expired = expireTempoTracking(state, 10_000);
+  ok(expired.status === 'standby' && expired.detectedBpm === null && expired.lockedBpm === null,
+    'stopped audio expires the candidate and sync lock');
+
+  const changed = createTempoTrackerState();
+  let changedSnapshot;
+  for (let beatAt = 0; beatAt <= 6500; beatAt += 500) changedSnapshot = recordTempoBeat(changed, beatAt);
+  ok(changedSnapshot.lockedBpm === 120, 'tempo-change fixture starts locked at 120 BPM');
+  let shiftAt = 7100;
+  for (let i = 0; i < 16; i++, shiftAt += 600) changedSnapshot = recordTempoBeat(changed, shiftAt);
+  ok(changedSnapshot.detectedBpm !== null && Math.abs(changedSnapshot.detectedBpm - 100) < 1,
+    'a sustained tempo change is detected as the new BPM');
+  ok(changedSnapshot.lockedBpm === null,
+    'a materially changed tempo must complete a fresh stability window before re-sync');
 }
 
 // --- summary -----------------------------------------------------------------

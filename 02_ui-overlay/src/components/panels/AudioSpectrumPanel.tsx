@@ -9,6 +9,7 @@ import {
   WE_CHANNEL_BUCKETS,
 } from '../../lib/spectrumMath';
 import {
+  configureTempoTracking,
   getLatestFrameInfo,
   isWallpaperEngineAudioAvailable,
   startMock,
@@ -31,6 +32,7 @@ const ATTACK = 0.55; // per-frame rise lerp — fast but not twitchy
 const FRAME_STALE_MS = 400;
 const STANDBY_AFTER_MS = 2600; // silence/no-feed for this long → standby
 const SILENCE_LEVEL = 0.015;
+const BPM_STATUS_HEIGHT = 26;
 
 // Overlay LED palette (matches panel.css whites + the supplement blue accent).
 const COLOR_LIT = 'rgba(255, 255, 255, 0.92)';
@@ -64,6 +66,11 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
     if (allowMock && !isWallpaperEngineAudioAvailable()) startMock();
     return () => stopMock();
   }, [allowMock]);
+
+  const bpmLockSeconds = Math.max(2, Math.min(12, Number(s.bpmLockSeconds ?? 5)));
+  React.useEffect(() => {
+    configureTempoTracking({ stableMs: bpmLockSeconds * 1000 });
+  }, [bpmLockSeconds]);
 
   React.useEffect(() => {
     let raf = 0;
@@ -131,11 +138,15 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
       ctx.scale(dpr, dpr);
       if (standby) ctx.globalAlpha = 0.35;
 
+      const showBpm = cfg.showBpm !== false;
+      const statusHeight = showBpm ? Math.min(BPM_STATUS_HEIGHT, Math.max(20, cssH * 0.22)) : 0;
+      const graphTop = statusHeight;
+      const graphHeight = Math.max(1, cssH - graphTop);
       const gap = Math.max(1, cfg.barGap ?? 4);
       const segments = Math.max(6, Math.min(24, Math.round(cfg.segmentCount ?? 14)));
       const segGap = 2;
       const barW = (cssW - gap * (barCount - 1)) / barCount;
-      const segH = (cssH - segGap * (segments - 1)) / segments;
+      const segH = Math.max(0.5, (graphHeight - segGap * (segments - 1)) / segments);
       const mirror = cfg.mirror === true;
 
       for (let i = 0; i < barCount; i++) {
@@ -151,7 +162,7 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
         const lit = Math.round(level * segments);
         const x = i * (barW + gap);
         for (let sIdx = 0; sIdx < segments; sIdx++) {
-          const y = cssH - (sIdx + 1) * segH - sIdx * segGap;
+          const y = graphTop + graphHeight - (sIdx + 1) * segH - sIdx * segGap;
           const frac = (sIdx + 1) / segments;
           let fill = COLOR_UNLIT;
           if (sIdx < lit) {
@@ -164,7 +175,7 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
           const peak = peaks[bandIndex];
           if (peak > 0.02) {
             const segIdx = Math.min(segments - 1, Math.round(peak * segments) - 1);
-            const y = cssH - (segIdx + 1) * segH - segIdx * segGap;
+            const y = graphTop + graphHeight - (segIdx + 1) * segH - segIdx * segGap;
             ctx.fillStyle = COLOR_PEAK;
             ctx.fillRect(x, y, barW, Math.max(2, segH * 0.35));
           }
@@ -177,7 +188,39 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-        ctx.fillText(String(cfg.standbyText ?? 'AUDIO STANDBY'), cssW / 2, cssH / 2);
+        ctx.fillText(String(cfg.standbyText ?? 'AUDIO STANDBY'), cssW / 2, graphTop + graphHeight / 2);
+      }
+
+      if (showBpm) {
+        // The first label is the live estimate. It appears before lock so the
+        // user can watch detection settle. Only the five-second stable state
+        // says KIRITAN SYNC — that is the moment the sync event was handed off.
+        ctx.globalAlpha = standby ? 0.62 : 1;
+        const rhythm = info.rhythm;
+        const bpm = rhythm.lockedBpm ?? rhythm.detectedBpm;
+        const lockMs = Math.max(2_000, Math.min(12_000, Number(cfg.bpmLockSeconds ?? 5) * 1000));
+        const progress = rhythm.status === 'locked'
+          ? 100
+          : Math.min(99, Math.round((rhythm.stableForMs / lockMs) * 100));
+        const left = bpm === null ? 'BPM ---' : `BPM ${Math.round(bpm)}`;
+        const right = standby
+          ? 'WAITING FOR AUDIO'
+          : rhythm.status === 'locked'
+            ? 'KIRITAN SYNC'
+            : rhythm.detectedBpm !== null
+              ? `DETECTING ${progress}%`
+              : 'LISTENING';
+        ctx.font = '700 11px "Segoe UI", system-ui, sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = rhythm.status === 'locked' ? COLOR_PEAK : 'rgba(255, 255, 255, 0.76)';
+        ctx.fillText(left, 2, statusHeight / 2 - 1);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = rhythm.status === 'locked' ? COLOR_PEAK : 'rgba(255, 255, 255, 0.52)';
+        ctx.fillText(right, cssW - 2, statusHeight / 2 - 1);
+        ctx.globalAlpha = standby ? 0.24 : 0.38;
+        ctx.fillStyle = 'rgba(184, 220, 255, 0.8)';
+        ctx.fillRect(0, statusHeight - 1, cssW, 1);
       }
       ctx.restore();
     };

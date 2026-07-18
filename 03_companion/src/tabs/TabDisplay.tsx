@@ -1408,6 +1408,8 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
                 <NumberControl label="減衰速度" value={spectrum.decaySpeed ?? 0.12} min={0.03} max={0.5} step={0.01} onChange={(v) => setSettingValue("audioSpectrumPanel", "decaySpeed", v)} />
                 <CheckControl label="ピークホールド" checked={spectrum.peakHold !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "peakHold", v)} />
                 <NumberControl label="ピーク落下速度" value={spectrum.peakFallSpeed ?? 0.008} min={0.002} max={0.05} step={0.002} onChange={(v) => setSettingValue("audioSpectrumPanel", "peakFallSpeed", v)} />
+                <CheckControl label="BPM・同期状態を表示" checked={spectrum.showBpm !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "showBpm", v)} />
+                <NumberControl label="BPM安定判定（秒）" value={spectrum.bpmLockSeconds ?? 5} min={2} max={12} step={0.5} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmLockSeconds", v)} />
                 <CheckControl label="ミラー配置" checked={spectrum.mirror === true} onChange={(v) => setSettingValue("audioSpectrumPanel", "mirror", v)} />
                 <SelectControl
                   label="カラー"

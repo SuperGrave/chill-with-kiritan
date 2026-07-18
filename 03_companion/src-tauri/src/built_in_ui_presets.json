@@ -52,6 +52,12 @@
           "x": 1020,
           "y": 921
         },
+        "audioSpectrumPanel": {
+          "height": 200,
+          "width": 500,
+          "x": 8,
+          "y": 696
+        },
         "rightDock": {
           "gap": 16,
           "width": 110,
@@ -216,6 +222,29 @@
           "showBackground": true,
           "showHeader": true,
           "showStatus": false
+        },
+        "audioSpectrumPanel": {
+          "backgroundOpacity": 0.34,
+          "barCount": 24,
+          "barGap": 4,
+          "bpmLockSeconds": 5,
+          "bpmMethod": "consensus",
+          "bpmOffset": 0,
+          "colorMode": "mono",
+          "contentTopGap": 12,
+          "decaySpeed": 0.12,
+          "mirror": false,
+          "peakFallSpeed": 0.008,
+          "peakHold": true,
+          "rhythmMotionEnabled": true,
+          "rhythmMotionStrength": 0.35,
+          "segmentCount": 14,
+          "sensitivity": 1,
+          "show": false,
+          "showBackground": true,
+          "showBpm": true,
+          "showHeader": true,
+          "standbyText": "AUDIO STANDBY"
         },
         "timerPanel": {
           "backgroundOpacity": 0.4,
@@ -540,6 +569,12 @@
           "x": 1020,
           "y": 780
         },
+        "audioSpectrumPanel": {
+          "height": 200,
+          "width": 500,
+          "x": 8,
+          "y": 555
+        },
         "rightDock": {
           "gap": 16,
           "width": 110,
@@ -704,6 +739,29 @@
           "showBackground": true,
           "showHeader": true,
           "showStatus": false
+        },
+        "audioSpectrumPanel": {
+          "backgroundOpacity": 0.34,
+          "barCount": 24,
+          "barGap": 4,
+          "bpmLockSeconds": 5,
+          "bpmMethod": "consensus",
+          "bpmOffset": 0,
+          "colorMode": "mono",
+          "contentTopGap": 12,
+          "decaySpeed": 0.12,
+          "mirror": false,
+          "peakFallSpeed": 0.008,
+          "peakHold": true,
+          "rhythmMotionEnabled": true,
+          "rhythmMotionStrength": 0.35,
+          "segmentCount": 14,
+          "sensitivity": 1,
+          "show": false,
+          "showBackground": true,
+          "showBpm": true,
+          "showHeader": true,
+          "standbyText": "AUDIO STANDBY"
         },
         "timerPanel": {
           "backgroundOpacity": 0.4,

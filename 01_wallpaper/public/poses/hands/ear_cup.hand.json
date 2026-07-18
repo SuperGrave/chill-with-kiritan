@@ -1,0 +1,24 @@
+{
+  "schema": "hand/1",
+  "id": "ear_cup",
+  "label": "耳に手をかざす",
+  "notes": "音楽ノリノリ（music_listen）待機用: 耳の横に軽くかざす手。指は揃えて浅くカール（聴き入るジェスチャー）、cheek_cup より浅く、スプレッドなし。掌は耳へ向く（掌向きは腕側 leftHand euler で決める）。side=both（右は[x,-y,-z]自動ミラー、当面は左のみ使用）。左手は z+ がカール方向。",
+  "side": "both",
+  "bones": {
+    "thumbMetacarpal": [0, 0.16, 0.04],
+    "thumbProximal": [0, 0.14, 0.04],
+    "thumbDistal": [0, 0.06, 0.03],
+    "indexProximal": [0, 0.02, 0.16],
+    "indexIntermediate": [0, 0, 0.14],
+    "indexDistal": [0, 0, 0.08],
+    "middleProximal": [0, 0, 0.20],
+    "middleIntermediate": [0, 0, 0.16],
+    "middleDistal": [0, 0, 0.10],
+    "ringProximal": [0, -0.02, 0.22],
+    "ringIntermediate": [0, 0, 0.18],
+    "ringDistal": [0, 0, 0.10],
+    "littleProximal": [0, -0.03, 0.20],
+    "littleIntermediate": [0, 0, 0.16],
+    "littleDistal": [0, 0, 0.08]
+  }
+}

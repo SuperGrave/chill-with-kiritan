@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import type { CameraMode, SpringBoneMode, ExternalRequestAction, MotionRequest, MotionDirectorSettings } from './VrmViewer';
+import type { CameraMode, SpringBoneMode, ExternalRequestAction, MotionRequest, MotionDirectorSettings, RhythmMotionSettings } from './VrmViewer';
 import type { IdleState, IdleDebug } from './lib/motion/idleStateMachine';
 import { IDLE_STATES, IDLE_STATE_LABELS } from './lib/motion/idleStateMachine';
 import type { ExternalMotionDebug } from './lib/motion/externalMotionController';
@@ -513,6 +513,10 @@ function App() {
   );
   const wallpaperSettingsRef = useRef(wallpaperSettings);
   const [motionSettings, setMotionSettings] = useState<MotionDirectorSettings>(defaultUiSettings.motion);
+  const [rhythmMotionSettings, setRhythmMotionSettings] = useState<RhythmMotionSettings>({
+    enabled: defaultUiSettings.audioSpectrumPanel.rhythmMotionEnabled,
+    strength: defaultUiSettings.audioSpectrumPanel.rhythmMotionStrength,
+  });
   const [backgroundQueueIndex, setBackgroundQueueIndex] = useState(0);
 
   useEffect(() => {
@@ -534,6 +538,11 @@ function App() {
       const wp = normalizeWallpaperSettings(ui.settings.wallpaper);
       setWallpaperSettings(wp);
       setMotionSettings({ ...defaultUiSettings.motion, ...(ui.settings.motion ?? {}) });
+      const spectrum = { ...defaultUiSettings.audioSpectrumPanel, ...(ui.settings.audioSpectrumPanel ?? {}) };
+      setRhythmMotionSettings({
+        enabled: spectrum.rhythmMotionEnabled !== false,
+        strength: finiteNumber(spectrum.rhythmMotionStrength, defaultUiSettings.audioSpectrumPanel.rhythmMotionStrength),
+      });
       if (isRecord(wp.objectLayout)) {
         setLayout((prev) => applyObjectLayout(prev, wp.objectLayout));
       }
@@ -1033,6 +1042,7 @@ function App() {
           onCameraReadback={setCameraReadback}
           autoStartDirector={productionMode}
           motionSettings={motionSettings}
+          rhythmMotionSettings={rhythmMotionSettings}
           daypart={daypart}
           lightScale={modelLightScale}
           vrmModelPath={wallpaperSettings.vrmModelPath ?? ''}

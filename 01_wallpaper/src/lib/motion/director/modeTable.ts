@@ -325,7 +325,10 @@ export const MODE_TABLE: Record<ModeId, ModeSpec> = {
 
   music_listen: {
     id: 'music_listen',
-    label: '音楽鑑賞',
+    // §2の原案は「音楽鑑賞」。2026-07-18 マスター命名で「音楽ノリノリ」に改名
+    // （BPM連動リズムモード実装時。ポーズも sit_back_relax+headphones から
+    // 「PC前で右腕を置き左手を耳にかざす」に置き換わった — loop_music_listen 参照）。
+    label: '音楽ノリノリ',
     family: "A'",
     dwellMin: [10, 25],
     ambientIntervalSec: [15, 40],

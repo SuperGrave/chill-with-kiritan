@@ -13,20 +13,19 @@
 
 import {
   capFrame,
-  computeBeat,
-  createTempoTrackerState,
   DEFAULT_TEMPO_CONFIG,
-  expireTempoTracking,
-  getTempoSnapshot,
-  recordTempoBeat,
   WE_FRAME_LENGTH,
 } from '../lib/spectrumMath';
 import type {
-  BeatState,
   TempoSnapshot,
-  TempoTrackerConfig,
-  TempoTrackerState,
 } from '../lib/spectrumMath';
+import {
+  BpmAnalyzer,
+  isBpmDetectionMethod,
+  type BpmDetectionMethod,
+  type BpmDetectorId,
+  type BpmDetectorEstimate,
+} from '../lib/bpmAnalyzer';
 
 export type AudioFrameSource = 'wallpaper-engine' | 'mock' | 'none';
 
@@ -46,6 +45,13 @@ export interface AudioFrameInfo {
 
 export interface AudioRhythmInfo extends TempoSnapshot {
   source: AudioFrameSource;
+  method: BpmDetectionMethod;
+  support: number;
+  contributors: BpmDetectorId[];
+  /** User taste adjustment (whole BPM, clamped ±10) applied to the locked bpm only. */
+  bpmOffset: number;
+  /** lockedBpm + bpmOffset — the value shown as final and handed to Kiritan. Null until locked. */
+  outputBpm: number | null;
 }
 
 export interface AudioBeatEventDetail {
@@ -54,16 +60,24 @@ export interface AudioBeatEventDetail {
   source: AudioFrameSource;
   detectedBpm: number | null;
   lockedBpm: number | null;
+  method: BpmDetectionMethod;
 }
 
 /** Contract for the later character-motion consumer. No motion is applied here. */
 export interface AudioBpmSyncEventDetail {
+  /** Final tempo for the character: locked bpm with the user offset applied. */
   bpm: number;
+  /** Raw locked bpm before the user offset. */
+  rawBpm: number;
+  bpmOffset: number;
   detectedBpm: number;
   confidence: number;
   stableForMs: number;
   lockedAt: number;
   source: AudioFrameSource;
+  method: BpmDetectionMethod;
+  support: number;
+  contributors: BpmDetectorId[];
 }
 
 type Subscriber = (info: AudioFrameInfo) => void;
@@ -80,14 +94,32 @@ declare global {
 }
 
 const frame = new Float32Array(WE_FRAME_LENGTH);
-const beatState: BeatState = { avg: 0, cooldown: 0 };
-let tempoState: TempoTrackerState = createTempoTrackerState();
-let tempoConfig: TempoTrackerConfig = { ...DEFAULT_TEMPO_CONFIG };
+let selectedMethod: BpmDetectionMethod = 'consensus';
+let stableMs = DEFAULT_TEMPO_CONFIG.stableMs;
+let bpmOffset = 0;
+let analyzer = new BpmAnalyzer({ stableMs });
 const subscribers = new Set<Subscriber>();
 
+export const BPM_OFFSET_RANGE = 10;
+
+function clampBpmOffset(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(-BPM_OFFSET_RANGE, Math.min(BPM_OFFSET_RANGE, Math.round(value)));
+}
+
+function toOutputBpm(lockedBpm: number | null): number | null {
+  if (lockedBpm === null) return null;
+  return Math.max(30, Math.round(lockedBpm) + bpmOffset);
+}
+
 const initialRhythm: AudioRhythmInfo = {
-  ...getTempoSnapshot(tempoState, 0),
+  ...analyzer.snapshot().estimates[selectedMethod],
   source: 'none',
+  method: selectedMethod,
+  support: 0,
+  contributors: [],
+  bpmOffset: 0,
+  outputBpm: null,
 };
 
 const info: AudioFrameInfo = {
@@ -112,6 +144,9 @@ function rhythmSignature(rhythm: AudioRhythmInfo): string {
     rhythm.lockedBpm ?? '-',
     Math.round(rhythm.confidence * 20),
     rhythm.source,
+    rhythm.method,
+    rhythm.support,
+    rhythm.bpmOffset,
   ].join('|');
 }
 
@@ -122,22 +157,41 @@ function publishRhythmState(rhythm: AudioRhythmInfo, force = false): void {
   window.dispatchEvent(new CustomEvent('kiritan:audio-rhythm', { detail: { ...rhythm } }));
 }
 
-function updateRhythm(snapshot: TempoSnapshot, source: AudioFrameSource, force = false): void {
-  const rhythm: AudioRhythmInfo = { ...snapshot, source };
+function updateRhythm(estimate: BpmDetectorEstimate, source: AudioFrameSource, force = false): void {
+  const rhythm: AudioRhythmInfo = {
+    status: estimate.status,
+    detectedBpm: estimate.detectedBpm,
+    lockedBpm: estimate.lockedBpm,
+    confidence: estimate.confidence,
+    stableForMs: estimate.stableForMs,
+    lockedAt: estimate.lockedAt,
+    lastBeatAt: estimate.lastBeatAt,
+    source,
+    method: selectedMethod,
+    support: estimate.support,
+    contributors: [...estimate.contributors],
+    bpmOffset,
+    outputBpm: toOutputBpm(estimate.lockedBpm),
+  };
   info.rhythm = rhythm;
   publishRhythmState(rhythm, force);
 
-  if (rhythm.lockedBpm !== null && rhythm.lockedAt !== null && rhythm.lockedAt !== lastSyncLockedAt) {
+  if (rhythm.lockedBpm !== null && rhythm.outputBpm !== null && rhythm.lockedAt !== null && rhythm.lockedAt !== lastSyncLockedAt) {
     lastSyncLockedAt = rhythm.lockedAt;
     window.dispatchEvent(
       new CustomEvent('kiritan:audio-bpm-sync', {
         detail: {
-          bpm: rhythm.lockedBpm,
+          bpm: rhythm.outputBpm,
+          rawBpm: rhythm.lockedBpm,
+          bpmOffset,
           detectedBpm: rhythm.detectedBpm ?? rhythm.lockedBpm,
           confidence: rhythm.confidence,
           stableForMs: rhythm.stableForMs,
           lockedAt: rhythm.lockedAt,
           source,
+          method: rhythm.method,
+          support: rhythm.support,
+          contributors: [...rhythm.contributors],
         },
       }),
     );
@@ -148,37 +202,35 @@ function updateRhythm(snapshot: TempoSnapshot, source: AudioFrameSource, force =
 }
 
 function resetRhythmForSource(source: AudioFrameSource, at: number): void {
-  tempoState = createTempoTrackerState();
-  beatState.avg = 0;
-  beatState.cooldown = 0;
+  analyzer = new BpmAnalyzer({ stableMs });
   lastSyncLockedAt = null;
-  updateRhythm(getTempoSnapshot(tempoState, at), source, true);
+  updateRhythm(analyzer.expire(at).estimates[selectedMethod], source, true);
 }
 
 function publishFrame(raw: ArrayLike<number>, source: AudioFrameSource): void {
   const now = performance.now();
   if (info.source !== 'none' && info.source !== source) resetRhythmForSource(source, now);
   capFrame(raw, frame);
-  const { bassEnergy, beat } = computeBeat(frame, beatState);
+  const analysis = analyzer.process(frame, now);
+  const selected = analysis.estimates[selectedMethod];
+  const onset = analysis.estimates['spectral-flux'].onset || analysis.estimates['low-band'].onset;
   info.seq += 1;
   info.at = now;
   info.source = source;
-  info.bassEnergy = bassEnergy;
-  const rhythm = beat
-    ? recordTempoBeat(tempoState, now, tempoConfig)
-    : expireTempoTracking(tempoState, now, tempoConfig);
-  updateRhythm(rhythm, source, beat);
-  if (beat) {
+  info.bassEnergy = analysis.bassEnergy;
+  updateRhythm(selected, source, selected.onset);
+  if (onset) {
     // Fine-grained onset hook. The later motion code may use this only after it
     // has received kiritan:audio-bpm-sync; this module never touches the VRM.
     window.dispatchEvent(
       new CustomEvent('kiritan:audio-beat', {
         detail: {
-          energy: bassEnergy,
+          energy: Math.max(analysis.bassEnergy, Math.min(1, analysis.fluxStrength * 12)),
           at: info.at,
           source,
-          detectedBpm: rhythm.detectedBpm,
-          lockedBpm: rhythm.lockedBpm,
+          detectedBpm: selected.detectedBpm,
+          lockedBpm: selected.lockedBpm,
+          method: selectedMethod,
         },
       }),
     );
@@ -211,8 +263,8 @@ export function hasReceivedWallpaperEngineFrames(): boolean {
 
 export function getLatestFrameInfo(): AudioFrameInfo {
   const now = performance.now();
-  const rhythm = expireTempoTracking(tempoState, now, tempoConfig);
-  updateRhythm(rhythm, info.source);
+  const selected = analyzer.expire(now).estimates[selectedMethod];
+  updateRhythm(selected, info.source);
   return info;
 }
 
@@ -220,13 +272,45 @@ export function getLatestRhythmInfo(): AudioRhythmInfo {
   return getLatestFrameInfo().rhythm;
 }
 
-/** Configure the stability wait while preserving safe tempo bounds. */
-export function configureTempoTracking(options: { stableMs?: number }): void {
+/**
+ * Configure the stability wait and selected detector. A detector/wait change
+ * starts a clean listening session. A bpmOffset change keeps the current lock
+ * and simply re-hands the adjusted tempo to Kiritan.
+ */
+export function configureTempoTracking(options: {
+  stableMs?: number;
+  method?: BpmDetectionMethod;
+  bpmOffset?: number;
+}): void {
+  let changed = false;
   if (typeof options.stableMs === 'number' && Number.isFinite(options.stableMs)) {
-    tempoConfig = {
-      ...tempoConfig,
-      stableMs: Math.max(2_000, Math.min(12_000, Math.round(options.stableMs))),
-    };
+    const nextStableMs = Math.max(3_000, Math.min(12_000, Math.round(options.stableMs)));
+    if (nextStableMs !== stableMs) {
+      stableMs = nextStableMs;
+      changed = true;
+    }
+  }
+  if (isBpmDetectionMethod(options.method) && options.method !== selectedMethod) {
+    selectedMethod = options.method;
+    changed = true;
+  }
+  let offsetChanged = false;
+  if (typeof options.bpmOffset === 'number') {
+    const nextOffset = clampBpmOffset(options.bpmOffset);
+    if (nextOffset !== bpmOffset) {
+      bpmOffset = nextOffset;
+      offsetChanged = true;
+    }
+  }
+  if (changed) {
+    analyzer = new BpmAnalyzer({ stableMs });
+    lastSyncLockedAt = null;
+    updateRhythm(analyzer.snapshot().estimates[selectedMethod], info.source, true);
+  } else if (offsetChanged) {
+    // Keep the analyzer (and any active lock); clearing lastSyncLockedAt makes
+    // updateRhythm re-dispatch kiritan:audio-bpm-sync with the new output bpm.
+    lastSyncLockedAt = null;
+    updateRhythm(analyzer.expire(performance.now()).estimates[selectedMethod], info.source, true);
   }
 }
 

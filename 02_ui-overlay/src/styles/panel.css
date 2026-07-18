@@ -260,6 +260,21 @@
   will-change: transform;
 }
 
+.audio-spectrum-panel {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  position: relative;
+}
+
+.audio-spectrum-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .personal-news-supplement {
   min-height: 1.2em;
   opacity: 0;

@@ -4,6 +4,7 @@ import {
   musicPanelDefaults,
   lyricsPanelDefaults,
   personalNewsPanelDefaults,
+  audioSpectrumPanelDefaults,
   memoPanelDefaults,
   timerPanelDefaults,
 } from '../../config/uiSettings';
@@ -188,6 +189,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
   const mp = { ...musicPanelDefaults, ...settings.musicPanel };
   const lp = { ...lyricsPanelDefaults, ...settings.lyricsPanel };
   const pp = { ...personalNewsPanelDefaults, ...settings.personalNewsPanel };
+  const sp = { ...audioSpectrumPanelDefaults, ...settings.audioSpectrumPanel };
   const mm = { ...memoPanelDefaults, ...settings.memoPanel };
   const tp = { ...timerPanelDefaults, ...settings.timerPanel };
 
@@ -521,6 +523,30 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <SliderInput label="Progress Height" value={pp.personalNewsProgressHeight ?? 10} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsProgressHeight', v)} min={4} max={32} />
         <SliderInput label="News Gap" value={pp.personalNewsGap ?? 12} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsGap', v)} max={60} />
         <SliderInput label="Scroll Speed" value={pp.personalNewsScrollSpeed ?? 1} onChange={(v: number) => updateSection('personalNewsPanel', 'personalNewsScrollSpeed', v)} min={0.2} max={3} step={0.1} />
+      </Accordion>
+
+      <Accordion title="Audio Spectrum Panel" defaultOpen={false}>
+        {renderPlacement('audioSpectrumPanel', sp)}
+        <SectionDivider label="BARS" />
+        <SliderInput label="Bar Count" value={sp.barCount ?? 24} onChange={(v: number) => updateSection('audioSpectrumPanel', 'barCount', v)} min={8} max={48} />
+        <SliderInput label="Segments" value={sp.segmentCount ?? 14} onChange={(v: number) => updateSection('audioSpectrumPanel', 'segmentCount', v)} min={6} max={24} />
+        <SliderInput label="Bar Gap" value={sp.barGap ?? 4} onChange={(v: number) => updateSection('audioSpectrumPanel', 'barGap', v)} min={1} max={16} />
+        <SectionDivider label="RESPONSE" />
+        <SliderInput label="Sensitivity" value={sp.sensitivity ?? 1} onChange={(v: number) => updateSection('audioSpectrumPanel', 'sensitivity', v)} min={0.2} max={3} step={0.1} />
+        <SliderInput label="Decay Speed" value={sp.decaySpeed ?? 0.12} onChange={(v: number) => updateSection('audioSpectrumPanel', 'decaySpeed', v)} min={0.03} max={0.5} step={0.01} />
+        <CheckRow label="Peak Hold" checked={sp.peakHold !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'peakHold', v)} />
+        <SliderInput label="Peak Fall Speed" value={sp.peakFallSpeed ?? 0.008} onChange={(v: number) => updateSection('audioSpectrumPanel', 'peakFallSpeed', v)} min={0.002} max={0.05} step={0.002} />
+        <SectionDivider label="STYLE" />
+        <CheckRow label="Mirror Layout" checked={sp.mirror === true} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'mirror', v)} />
+        <SelectRow
+          label="Color Mode"
+          value={sp.colorMode ?? 'mono'}
+          onChange={(v: string) => updateSection('audioSpectrumPanel', 'colorMode', v)}
+          options={[
+            { value: 'mono', label: 'Mono' },
+            { value: 'heat', label: 'Heat' },
+          ]}
+        />
       </Accordion>
 
       <Accordion title="Memo Panel" defaultOpen={false}>

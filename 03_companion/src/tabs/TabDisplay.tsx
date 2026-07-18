@@ -16,6 +16,7 @@ import { API_BASE, api, type BackgroundMediaItem, type BackgroundUploadKind, typ
 import { InfoHint } from "../controls";
 import { overlayLayout as defaultLayout } from "../../../02_ui-overlay/src/config/layout";
 import {
+  audioSpectrumPanelDefaults,
   lyricsPanelDefaults,
   memoPanelDefaults,
   musicPanelDefaults,
@@ -710,6 +711,7 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
   const personalNews = { ...personalNewsPanelDefaults, ...(draftSettings.personalNewsPanel ?? {}) };
   const lyricsUnavailableReplacementEnabled =
     personalNews.autoShowWhenLyricsUnavailable !== false && personalNews.hideLyricsWhenAutoShown !== false;
+  const spectrum = { ...audioSpectrumPanelDefaults, ...(draftSettings.audioSpectrumPanel ?? {}) };
   const memo = { ...memoPanelDefaults, ...(draftSettings.memoPanel ?? {}) };
   const timer = { ...timerPanelDefaults, ...(draftSettings.timerPanel ?? {}) };
   const wallpaper = { ...defaultSettings.wallpaper, ...(draftSettings.wallpaper ?? {}) };
@@ -1393,6 +1395,26 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
                 <NumberControl label="進捗バー高さ" value={personalNews.personalNewsProgressHeight ?? 10} min={4} max={34} onChange={(v) => setSettingValue("personalNewsPanel", "personalNewsProgressHeight", v)} />
                 <NumberControl label="ニュース行間" value={personalNews.personalNewsGap ?? 12} min={0} max={70} onChange={(v) => setSettingValue("personalNewsPanel", "personalNewsGap", v)} />
                 <NumberControl label="横スクロール速度" value={personalNews.personalNewsScrollSpeed ?? 1} min={0.2} max={3} step={0.1} onChange={(v) => setSettingValue("personalNewsPanel", "personalNewsScrollSpeed", v)} />
+              </div>
+            </DisplaySection>
+
+            {renderPlacement("audioSpectrumPanel", "スペクトラムパネル", audioSpectrumPanelDefaults)}
+            <DisplaySection title="スペクトラム内容">
+              <div className="control-grid">
+                <NumberControl label="バー本数" value={spectrum.barCount ?? 24} min={8} max={48} onChange={(v) => setSettingValue("audioSpectrumPanel", "barCount", v)} />
+                <NumberControl label="セグメント数" value={spectrum.segmentCount ?? 14} min={6} max={24} onChange={(v) => setSettingValue("audioSpectrumPanel", "segmentCount", v)} />
+                <NumberControl label="バー間隔" value={spectrum.barGap ?? 4} min={1} max={16} onChange={(v) => setSettingValue("audioSpectrumPanel", "barGap", v)} />
+                <NumberControl label="感度" value={spectrum.sensitivity ?? 1} min={0.2} max={3} step={0.1} onChange={(v) => setSettingValue("audioSpectrumPanel", "sensitivity", v)} />
+                <NumberControl label="減衰速度" value={spectrum.decaySpeed ?? 0.12} min={0.03} max={0.5} step={0.01} onChange={(v) => setSettingValue("audioSpectrumPanel", "decaySpeed", v)} />
+                <CheckControl label="ピークホールド" checked={spectrum.peakHold !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "peakHold", v)} />
+                <NumberControl label="ピーク落下速度" value={spectrum.peakFallSpeed ?? 0.008} min={0.002} max={0.05} step={0.002} onChange={(v) => setSettingValue("audioSpectrumPanel", "peakFallSpeed", v)} />
+                <CheckControl label="ミラー配置" checked={spectrum.mirror === true} onChange={(v) => setSettingValue("audioSpectrumPanel", "mirror", v)} />
+                <SelectControl
+                  label="カラー"
+                  value={spectrum.colorMode ?? "mono"}
+                  onChange={(v) => setSettingValue("audioSpectrumPanel", "colorMode", v)}
+                  options={[{ value: "mono", label: "モノ" }, { value: "heat", label: "ヒート" }]}
+                />
               </div>
             </DisplaySection>
 

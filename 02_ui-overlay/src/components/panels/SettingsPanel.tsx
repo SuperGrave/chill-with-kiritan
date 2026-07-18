@@ -538,7 +538,21 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <SliderInput label="Peak Fall Speed" value={sp.peakFallSpeed ?? 0.008} onChange={(v: number) => updateSection('audioSpectrumPanel', 'peakFallSpeed', v)} min={0.002} max={0.05} step={0.002} />
         <SectionDivider label="RHYTHM SYNC" />
         <CheckRow label="Show BPM Status" checked={sp.showBpm !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'showBpm', v)} />
-        <SliderInput label="BPM Lock Seconds" value={sp.bpmLockSeconds ?? 5} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmLockSeconds', v)} min={2} max={12} step={0.5} />
+        <SelectRow
+          label="BPM Detector"
+          value={sp.bpmMethod ?? 'consensus'}
+          onChange={(v: string) => updateSection('audioSpectrumPanel', 'bpmMethod', v)}
+          options={[
+            { value: 'consensus', label: 'Consensus (recommended)' },
+            { value: 'low-band', label: 'Low-band IOI' },
+            { value: 'spectral-flux', label: 'Spectral Flux' },
+            { value: 'autocorrelation', label: 'Autocorrelation' },
+          ]}
+        />
+        <SliderInput label="BPM Lock Seconds" value={sp.bpmLockSeconds ?? 5} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmLockSeconds', v)} min={3} max={12} step={0.5} />
+        <SliderInput label="BPM Offset (±10)" value={sp.bpmOffset ?? 0} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmOffset', v)} min={-10} max={10} step={1} />
+        <CheckRow label="Kiritan Rhythm Motion" checked={sp.rhythmMotionEnabled !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'rhythmMotionEnabled', v)} />
+        <SliderInput label="Rhythm Motion Strength" value={sp.rhythmMotionStrength ?? 0.35} onChange={(v: number) => updateSection('audioSpectrumPanel', 'rhythmMotionStrength', v)} min={0} max={1} step={0.05} />
         <SectionDivider label="STYLE" />
         <CheckRow label="Mirror Layout" checked={sp.mirror === true} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'mirror', v)} />
         <SelectRow

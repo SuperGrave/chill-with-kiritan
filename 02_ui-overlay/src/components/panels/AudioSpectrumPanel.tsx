@@ -15,6 +15,7 @@ import {
   startMock,
   stopMock,
 } from '../../services/audioSpectrum';
+import { isBpmDetectionMethod } from '../../lib/bpmAnalyzer';
 
 interface AudioSpectrumPanelProps {
   settings?: any;
@@ -67,10 +68,12 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
     return () => stopMock();
   }, [allowMock]);
 
-  const bpmLockSeconds = Math.max(2, Math.min(12, Number(s.bpmLockSeconds ?? 5)));
+  const bpmLockSeconds = Math.max(3, Math.min(12, Number(s.bpmLockSeconds ?? 5)));
+  const bpmMethod = isBpmDetectionMethod(s.bpmMethod) ? s.bpmMethod : 'consensus';
+  const bpmOffset = Math.max(-10, Math.min(10, Math.round(Number(s.bpmOffset ?? 0) || 0)));
   React.useEffect(() => {
-    configureTempoTracking({ stableMs: bpmLockSeconds * 1000 });
-  }, [bpmLockSeconds]);
+    configureTempoTracking({ stableMs: bpmLockSeconds * 1000, method: bpmMethod, bpmOffset });
+  }, [bpmLockSeconds, bpmMethod, bpmOffset]);
 
   React.useEffect(() => {
     let raf = 0;
@@ -197,16 +200,24 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
         // says KIRITAN SYNC — that is the moment the sync event was handed off.
         ctx.globalAlpha = standby ? 0.62 : 1;
         const rhythm = info.rhythm;
-        const bpm = rhythm.lockedBpm ?? rhythm.detectedBpm;
-        const lockMs = Math.max(2_000, Math.min(12_000, Number(cfg.bpmLockSeconds ?? 5) * 1000));
+        // Locked → show the final (user-offset) tempo, i.e. what Kiritan received.
+        const bpm = rhythm.status === 'locked'
+          ? rhythm.outputBpm ?? rhythm.lockedBpm
+          : rhythm.lockedBpm ?? rhythm.detectedBpm;
+        const lockMs = Math.max(3_000, Math.min(12_000, Number(cfg.bpmLockSeconds ?? 5) * 1000));
         const progress = rhythm.status === 'locked'
           ? 100
           : Math.min(99, Math.round((rhythm.stableForMs / lockMs) * 100));
-        const left = bpm === null ? 'BPM ---' : `BPM ${Math.round(bpm)}`;
+        const offsetTag = rhythm.status === 'locked' && rhythm.bpmOffset
+          ? ` (${rhythm.bpmOffset > 0 ? '+' : ''}${rhythm.bpmOffset})`
+          : '';
+        const left = bpm === null ? 'BPM ---' : `BPM ${Math.round(bpm)}${offsetTag}`;
         const right = standby
           ? 'WAITING FOR AUDIO'
           : rhythm.status === 'locked'
-            ? 'KIRITAN SYNC'
+            ? rhythm.method === 'consensus'
+              ? `KIRITAN SYNC ${rhythm.support}/3`
+              : 'KIRITAN SYNC'
             : rhythm.detectedBpm !== null
               ? `DETECTING ${progress}%`
               : 'LISTENING';

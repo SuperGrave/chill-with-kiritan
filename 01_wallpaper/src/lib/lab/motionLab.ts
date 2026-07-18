@@ -121,7 +121,7 @@ export interface LabHandles {
   extController: ExternalMotionController;
   onStatus: (status: string) => void;
   /** Director runner control (INF-5) — viewer-owned; null status when not running. */
-  startDirector: (opts?: { seed?: number; initialMode?: ModeId }) => Promise<{ ok: boolean; loaded: string[]; error?: string }>;
+  startDirector: (opts?: { seed?: number; initialMode?: ModeId; fixedMode?: ModeId }) => Promise<{ ok: boolean; loaded: string[]; error?: string }>;
   stopDirector: () => { ok: boolean };
   getDirectorStatus: () => DirectorStatus | null;
 }
@@ -988,7 +988,7 @@ export class MotionLab {
    * and the scheduler injects ambient one-shots with no user input. thaw()s the
    * viewer first (the director needs the live rAF loop, not a frozen frame).
    */
-  async director(on: boolean, opts?: { seed?: number; initialMode?: ModeId }): Promise<Record<string, unknown>> {
+  async director(on: boolean, opts?: { seed?: number; initialMode?: ModeId; fixedMode?: ModeId }): Promise<Record<string, unknown>> {
     if (!on) return { ...this.h.stopDirector(), ok: true };
     const ctx = this.ensureVrm();
     if ('ok' in ctx) return ctx;

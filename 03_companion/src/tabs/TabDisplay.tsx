@@ -55,9 +55,12 @@ const kiritanModeOptions = [
   { value: "work_normal", label: "通常作業" },
   { value: "video_relax", label: "動画くつろぎ" },
   { value: "sleep_desk", label: "机で休む" },
+  // 音楽ノリノリは固定モード専用: 音楽が鳴っていない時に自動で入らないよう、
+  // 自動ローテーション（kiritanAutoModeOptions）には含めない。
+  { value: "music_listen", label: "音楽ノリノリ" },
 ];
 
-const kiritanAutoModeOptions = kiritanModeOptions;
+const kiritanAutoModeOptions = kiritanModeOptions.filter((mode) => mode.value !== "music_listen");
 
 const kiritanSmallActionOptions = [
   { value: "amb_work_neck_roll", label: "通常作業: 首を回す" },
@@ -1188,7 +1191,7 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
               options={kiritanModeOptions}
             />
           </div>
-          <p className="hint">固定モードは通常作業・動画くつろぎ・机で休むから選べます。通常モードでは、下の除外設定を使って混ぜたくないモードや小アクションを外せます。</p>
+          <p className="hint">固定モードは通常作業・動画くつろぎ・机で休む・音楽ノリノリから選べます。音楽ノリノリは音楽再生中にBPMを検知するとリズムに合わせて動くモードです（SPECTRUMパネルの「きりたんをBPM連動」がONの時）。通常モードでは、下の除外設定を使って混ぜたくないモードや小アクションを外せます。</p>
 
           <div className="settings-divider" />
           <ControlRow label="モード切替間隔">
@@ -1409,7 +1412,21 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
                 <CheckControl label="ピークホールド" checked={spectrum.peakHold !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "peakHold", v)} />
                 <NumberControl label="ピーク落下速度" value={spectrum.peakFallSpeed ?? 0.008} min={0.002} max={0.05} step={0.002} onChange={(v) => setSettingValue("audioSpectrumPanel", "peakFallSpeed", v)} />
                 <CheckControl label="BPM・同期状態を表示" checked={spectrum.showBpm !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "showBpm", v)} />
-                <NumberControl label="BPM安定判定（秒）" value={spectrum.bpmLockSeconds ?? 5} min={2} max={12} step={0.5} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmLockSeconds", v)} />
+                <SelectControl
+                  label="BPM判定方式"
+                  value={spectrum.bpmMethod ?? "consensus"}
+                  onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmMethod", v)}
+                  options={[
+                    { value: "consensus", label: "コンセンサス（推奨）" },
+                    { value: "low-band", label: "低域ビート間隔" },
+                    { value: "spectral-flux", label: "全帯域の立ち上がり" },
+                    { value: "autocorrelation", label: "自己相関" },
+                  ]}
+                />
+                <NumberControl label="BPM確定待ち（秒）" value={spectrum.bpmLockSeconds ?? 5} min={3} max={12} step={0.5} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmLockSeconds", v)} />
+                <NumberControl label="BPM補正（±10）" value={spectrum.bpmOffset ?? 0} min={-10} max={10} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmOffset", v)} />
+                <CheckControl label="きりたんをBPM連動" checked={spectrum.rhythmMotionEnabled !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionEnabled", v)} />
+                <NumberControl label="BPM連動の強さ" value={spectrum.rhythmMotionStrength ?? 0.35} min={0} max={1} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionStrength", v)} />
                 <CheckControl label="ミラー配置" checked={spectrum.mirror === true} onChange={(v) => setSettingValue("audioSpectrumPanel", "mirror", v)} />
                 <SelectControl
                   label="カラー"

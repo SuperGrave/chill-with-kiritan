@@ -165,6 +165,7 @@ fn legacy_default_ui_state() -> UiState {
         "memoPanel": { "height": 225, "width": 500, "x": 514, "y": 921 },
         "lyricsPanel": { "height": 225, "width": 896, "x": 1020, "y": 921 },
         "personalNewsPanel": { "height": 225, "width": 896, "x": 1020, "y": 921 },
+        "audioSpectrumPanel": { "height": 200, "width": 500, "x": 8, "y": 696 },
         "detailPanel": { "height": 900, "width": 420, "x": 1320, "y": 70 },
         "rightDock": { "gap": 16, "width": 110, "x": 1789, "y": 100 },
         "safeArea": { "padding": 40 }
@@ -226,6 +227,15 @@ fn legacy_default_ui_state() -> UiState {
             "personalNewsSourceSize": 12, "personalNewsProgressHeight": 10,
             "personalNewsGap": 12, "personalNewsScrollSpeed": 1,
             "personalNewsSupplementColor": "#b8dcff"
+        },
+        "audioSpectrumPanel": {
+            "show": false, "showHeader": true, "showBackground": true, "backgroundOpacity": 0.34,
+            "contentTopGap": 12, "barCount": 24, "segmentCount": 14, "barGap": 4,
+            "peakHold": true, "peakFallSpeed": 0.008, "sensitivity": 1, "decaySpeed": 0.12,
+            "mirror": false, "colorMode": "mono", "showBpm": true,
+            "bpmMethod": "consensus", "bpmLockSeconds": 5, "bpmOffset": 0,
+            "rhythmMotionEnabled": true, "rhythmMotionStrength": 0.35,
+            "standbyText": "AUDIO STANDBY"
         },
         "memoPanel": {
             "show": true, "showHeader": true, "showBackground": true, "backgroundOpacity": 0.4,
@@ -1055,6 +1065,19 @@ mod tests {
         assert_eq!(ui.settings["baseResolution"], json!("1920x1080"));
         assert_eq!(ui.layout["canvas"]["width"], json!(1920));
         assert_eq!(ui.layout["canvas"]["height"], json!(1080));
+        assert_eq!(
+            ui.settings["audioSpectrumPanel"]["bpmMethod"],
+            json!("consensus")
+        );
+        assert_eq!(
+            ui.settings["audioSpectrumPanel"]["bpmLockSeconds"],
+            json!(5)
+        );
+        assert_eq!(ui.settings["audioSpectrumPanel"]["bpmOffset"], json!(0));
+        assert_eq!(
+            ui.settings["audioSpectrumPanel"]["rhythmMotionEnabled"],
+            json!(true)
+        );
         assert_eq!(ui.presets.len(), 2);
         assert!(ui.presets.iter().any(|preset| {
             preset.id == "builtin-1920x1200-sample"

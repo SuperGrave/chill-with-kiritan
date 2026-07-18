@@ -29,6 +29,7 @@ export const PHASE1_MODE_LOOP: Partial<Record<ModeId, string>> = {
   work_sleepy: 'loop_work_sleepy',
   video_relax: 'loop_video_relax',
   sleep_desk: 'loop_sleep_desk',
+  music_listen: 'loop_music_listen',
 };
 
 export type MotionCategory =

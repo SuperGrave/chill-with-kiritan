@@ -119,7 +119,13 @@ export const audioSpectrumPanelDefaults = {
   mirror: false,
   colorMode: 'mono' as 'mono' | 'heat',
   showBpm: true,
+  bpmMethod: 'consensus' as 'consensus' | 'low-band' | 'spectral-flux' | 'autocorrelation',
   bpmLockSeconds: 5,
+  // User taste adjustment added to the LOCKED bpm only (display + kiritan sync).
+  // Detection itself always runs on the raw signal.
+  bpmOffset: 0,
+  rhythmMotionEnabled: true,
+  rhythmMotionStrength: 0.35,
   standbyText: 'AUDIO STANDBY',
 };
 

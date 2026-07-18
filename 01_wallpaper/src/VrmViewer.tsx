@@ -54,6 +54,8 @@ import {
   LEAVE_SEQ, RETURN_SEQ, seqAt, seqDuration, leaveRoot, returnRoot,
 } from './lib/motion/director/awayWalk';
 import type { ModeId } from './lib/motion/director/types';
+import { RhythmMotionController } from './lib/motion/rhythmMotionController';
+import type { AudioBeatEventDetail, AudioBpmSyncEventDetail, AudioRhythmInfo } from '../../02_ui-overlay/src/services/audioSpectrum';
 import type { MotionLab, ClipSwapRequest } from './lib/lab/motionLab';
 // Expression Preset System 0.2: raw-morph derived expressions + the preset
 // overlay layer (max-blended between the idle mood overlay and the blink).
@@ -109,6 +111,11 @@ export interface MotionDirectorSettings {
   disabledMotions?: string[];
 }
 
+export interface RhythmMotionSettings {
+  enabled?: boolean;
+  strength?: number;
+}
+
 // Path a user-supplied VRM Animation is loaded from (see public/motions/README).
 const VRMA_SAMPLE_PATH = publicAssetUrl('/motions/sample_idle.vrma');
 
@@ -147,6 +154,11 @@ const WORK_HAND_PIN_POLICIES: Record<string, WorkHandPinPolicy> = {
   // a pin would yank the wrists back mid-shake, same reason as amb_work_stretch).
   dsl_amb_work_window_gaze: { group: 'keyboard', anchor: 'world', left: true, right: true },
   dsl_amb_work_window_gaze_mirror: { group: 'keyboard', anchor: 'world', left: true, right: true },
+  // music_listen: the right wrist rests on the laptop (typing arm, stopped)
+  // and must stay planted while the rhythm sway rolls the torso — the IK
+  // absorbs the roll exactly like it absorbs breathing. The LEFT hand hovers
+  // at the ear and is deliberately unpinned (no contact; it rides the chest).
+  dsl_loop_music_listen: { group: 'keyboard', anchor: 'world', left: false, right: true },
   dsl_loop_video_relax: { group: 'chinrest', anchor: 'head', left: true, right: true },
   dsl_loop_video_relax_chinfit_a: { group: 'chinrest', anchor: 'head', left: true, right: true },
   dsl_loop_video_relax_chinfit_b: { group: 'chinrest', anchor: 'head', left: true, right: true },
@@ -224,22 +236,29 @@ const CAMERA_PRESETS: Record<Exclude<CameraMode, 'free'>, { pos: [number, number
 
 // Director runtime content lanes:
 // Auto-run keeps the完成組. Fixed mode may also use authored secondary loops.
-type DirectorPlayableMode = 'work_normal' | 'video_relax' | 'sleep_desk';
+// music_listen (音楽ノリノリ, 2026-07-18) is FIXED-ONLY: she should never
+// wander into the listening pose while no music is playing, so it is playable
+// (selectable from the Companion) but absent from the auto rotation.
+type DirectorPlayableMode = 'work_normal' | 'video_relax' | 'sleep_desk' | 'music_listen';
 
 const DIRECTOR_AUTO_MODES: readonly DirectorPlayableMode[] = ['work_normal', 'video_relax', 'sleep_desk'];
-const DIRECTOR_PLAYABLE_MODES: readonly DirectorPlayableMode[] = ['work_normal', 'video_relax', 'sleep_desk'];
+const DIRECTOR_PLAYABLE_MODES: readonly DirectorPlayableMode[] = ['work_normal', 'video_relax', 'sleep_desk', 'music_listen'];
 const DIRECTOR_PLAYABLE_MODE_SET = new Set<ModeId>(DIRECTOR_PLAYABLE_MODES);
 
 const DIRECTOR_LOOPS: Record<DirectorPlayableMode, string> = {
   work_normal: 'loop_work_normal',
   video_relax: 'loop_video_relax',
   sleep_desk: 'loop_sleep_desk',
+  music_listen: 'loop_music_listen',
 };
 
 const DIRECTOR_AMBIENTS: Record<DirectorPlayableMode, readonly string[]> = {
   work_normal: ['amb_work_neck_roll', 'amb_work_posture_reset', 'amb_work_stretch', 'amb_work_wrist_flex', 'amb_work_window_gaze', 'amb_work_window_gaze_mirror'],
   video_relax: ['amb_vid_chuckle', 'amb_vid_nod_watch', 'amb_vid_eyes_widen', 'amb_vid_drowse'],
   sleep_desk: ['amb_slp_head_shift', 'amb_slp_dream_smile', 'amb_slp_mumble'],
+  // Rhythm figures (sway / finger tap) are procedural — see
+  // rhythmMotionController — so the mode needs no DSL ambient pool.
+  music_listen: [],
 };
 
 const DIRECTOR_SECONDARY_CONTENT = {
@@ -394,6 +413,7 @@ export interface VrmViewerProps {
   // Lab keeps full manual control (no competing auto-start).
   autoStartDirector: boolean;
   motionSettings: MotionDirectorSettings;
+  rhythmMotionSettings: RhythmMotionSettings;
   // Stage D (2026-07-01): which lighting/background variant to show. App
   // derives this from the local clock (see lib/scene/daypart.ts); changing it
   // relights the current scene without a reload.
@@ -418,6 +438,37 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
   useEffect(() => {
     propsRef.current = props;
   }, [props]);
+
+  // BPM is owned by the audio service. The viewer consumes only its stable
+  // event contract and adds a tiny final-pass groove; it never replaces a
+  // Director/DSL clip, so authored transitions and hand pins remain intact.
+  const rhythmMotionRef = useRef(new RhythmMotionController());
+  // Latest rhythm smile (0..1 'fun'), carried from the bone-composition block
+  // to the expression bridge further down the same frame.
+  const rhythmSmileRef = useRef(0);
+  useEffect(() => {
+    const onSync = (event: CustomEvent<AudioBpmSyncEventDetail>) => {
+      rhythmMotionRef.current.sync({ bpm: event.detail.bpm, lockedAt: event.detail.lockedAt });
+    };
+    const onRhythm = (event: CustomEvent<AudioRhythmInfo>) => {
+      rhythmMotionRef.current.rhythm({ status: event.detail.status, lockedBpm: event.detail.lockedBpm });
+    };
+    const onBeat = (event: CustomEvent<AudioBeatEventDetail>) => {
+      rhythmMotionRef.current.beat({
+        at: event.detail.at,
+        lockedBpm: event.detail.lockedBpm,
+        energy: event.detail.energy,
+      });
+    };
+    window.addEventListener('kiritan:audio-bpm-sync', onSync);
+    window.addEventListener('kiritan:audio-rhythm', onRhythm);
+    window.addEventListener('kiritan:audio-beat', onBeat);
+    return () => {
+      window.removeEventListener('kiritan:audio-bpm-sync', onSync);
+      window.removeEventListener('kiritan:audio-rhythm', onRhythm);
+      window.removeEventListener('kiritan:audio-beat', onBeat);
+    };
+  }, []);
 
   // Idle Motion state machine (Motion Probe 0.2). Stable across re-renders.
   const idleMachineRef = useRef(new IdleStateMachine());
@@ -885,7 +936,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
 
   // Start the director: preload the demo content, build the runner, play the
   // first loop. Exposed via the Lab handle (`__motionLab.director(true)`).
-  const startDirector = async (opts?: { seed?: number; initialMode?: ModeId }): Promise<{ ok: boolean; loaded: string[]; error?: string }> => {
+  const startDirector = async (opts?: { seed?: number; initialMode?: ModeId; fixedMode?: ModeId }): Promise<{ ok: boolean; loaded: string[]; error?: string }> => {
     if (!vrmRef.current) return { ok: false, loaded: [], error: 'VRM not loaded yet' };
     // Reset away/presence so a (re)start is clean.
     pendingSettleRef.current = null; // drop any Lab context-loop settle
@@ -895,7 +946,12 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     if (vrmRef.current) vrmRef.current.scene.visible = true;
     const directorSettings = normalizeDirectorSettings(propsRef.current.motionSettings);
     directorSettingsKeyRef.current = directorSettingsKey(propsRef.current.motionSettings);
-    const fixedMode = directorSettings.directorMode === 'fixed' ? directorSettings.fixedMode : null;
+    // Lab override first (lets __motionLab.director exercise any fixed mode —
+    // incl. music_listen, which only enters via fixed mode), else the
+    // Companion-provided settings.
+    const fixedMode = opts?.fixedMode && isDirectorPlayableMode(opts.fixedMode)
+      ? opts.fixedMode
+      : directorSettings.directorMode === 'fixed' ? directorSettings.fixedMode : null;
     const candidateModes = fixedMode ? [fixedMode] : DIRECTOR_AUTO_MODES.filter((mode) => !directorSettings.disabledModes.has(mode));
     const modesToLoad = candidateModes.length > 0 ? candidateModes : (['work_normal'] as DirectorPlayableMode[]);
     const ids = new Set<string>();
@@ -1702,6 +1758,8 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     const _extOffsetQ = new THREE.Quaternion();
     const _extEuler = new THREE.Euler();
     const _hipsPos = new THREE.Vector3();
+    const _rhythmEuler = new THREE.Euler();
+    const _rhythmQ = new THREE.Quaternion();
 
     // Runtime end-effector pinning for keyboard work. Targets live in world
     // space because the keyboard is a scene prop, not part of the character
@@ -2453,6 +2511,53 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
             vrm.scene.rotation.set(brot[0], Math.PI + brot[1] + dr[3] + rRotY, brot[2]);
             vrm.scene.scale.set(bsc[0], bsc[1], bsc[2]);
           }
+
+          // Stable BPM overlay: additive and deliberately last among the
+          // normalized-bone writers (but BEFORE applyWorkHandPins, so a
+          // pinned wrist stays planted while the torso sways — the IK absorbs
+          // the roll). Values are absolute-per-frame offsets, so they cannot
+          // accumulate drift or corrupt an authored clip.
+          const rhythmSettings = currentProps.rhythmMotionSettings;
+          const rhythmFrame = rhythmMotionRef.current.update(performance.now(), updateDelta, {
+            enabled: rhythmSettings.enabled !== false,
+            strength: Number.isFinite(Number(rhythmSettings.strength)) ? Number(rhythmSettings.strength) : 0.35,
+            mode: directorRef.current?.status().mode ?? null,
+          });
+          rhythmSmileRef.current = rhythmFrame.smile;
+          if (rhythmFrame.active) {
+            const applyRhythmRotation = (boneName: string, x: number, z = 0) => {
+              if (x === 0 && z === 0) return;
+              const node = vrm.humanoid?.getNormalizedBoneNode(boneName as never);
+              if (!node) return;
+              _rhythmEuler.set(x, 0, z, 'XYZ');
+              _rhythmQ.setFromEuler(_rhythmEuler);
+              node.quaternion.multiply(_rhythmQ);
+            };
+            applyRhythmRotation('head', rhythmFrame.headPitch, rhythmFrame.headRoll);
+            applyRhythmRotation('neck', rhythmFrame.neckPitch);
+            applyRhythmRotation('chest', rhythmFrame.chestPitch, rhythmFrame.chestRoll);
+            applyRhythmRotation('spine', 0, rhythmFrame.spineRoll);
+            applyRhythmRotation('leftShoulder', 0, rhythmFrame.leftShoulderRoll);
+            applyRhythmRotation('rightShoulder', 0, rhythmFrame.rightShoulderRoll);
+            // 指トントン (music_listen figure): the wrist stays planted (the
+            // pin holds the hand ORIGIN; rotating the hand bone only moves
+            // the palm/fingers), palm tilts up and the fingers extend off the
+            // keys, then everything drops back ON the beat. Hand shapes are
+            // authored left-based with +z = curl and the right side mirrors
+            // to −z, so +z here EXTENDS the right fingers.
+            if (rhythmFrame.rightHandLift !== 0 || rhythmFrame.rightFingerLift !== 0) {
+              const lift = rhythmFrame.rightFingerLift;
+              applyRhythmRotation('rightHand', rhythmFrame.rightHandLift);
+              applyRhythmRotation('rightIndexProximal', 0, lift);
+              applyRhythmRotation('rightIndexIntermediate', 0, lift * 0.55);
+              applyRhythmRotation('rightMiddleProximal', 0, lift * 0.9);
+              applyRhythmRotation('rightMiddleIntermediate', 0, lift * 0.5);
+              applyRhythmRotation('rightRingProximal', 0, lift * 0.72);
+              applyRhythmRotation('rightRingIntermediate', 0, lift * 0.4);
+              applyRhythmRotation('rightLittleProximal', 0, lift * 0.55);
+              applyRhythmRotation('rightLittleIntermediate', 0, lift * 0.3);
+            }
+          }
         }
 
         // Report idle + external state back to the UI (throttled, ~8Hz).
@@ -2614,6 +2719,20 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
               if (!binds) continue;
               for (const { index, weight } of binds) {
                 if (index < influences.length) influences[index] = Math.max(influences[index], weight * w);
+              }
+            }
+
+            // Rhythm smile (音楽ノリノリ): while she grooves on a locked BPM
+            // the rhythm controller eases in a soft 'fun'. Same max-blend
+            // contract as the idle/preset overlays.
+            if (rhythmSmileRef.current > 0.001) {
+              const funBinds = expressionMap['fun'];
+              if (funBinds) {
+                for (const { index, weight } of funBinds) {
+                  if (index < influences.length) {
+                    influences[index] = Math.max(influences[index], weight * rhythmSmileRef.current);
+                  }
+                }
               }
             }
 

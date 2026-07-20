@@ -28,6 +28,12 @@ pub struct WallpaperState {
     /// not written to disk (see `state::Persist`), since it's a live runtime
     /// signal re-sent on every mode change / ~30s heartbeat.
     pub kiritan: Option<KiritanRuntimeState>,
+    /// Latest BPM-analyzer snapshot the overlay POSTed (~1 Hz while audio
+    /// frames are flowing). Memory-only, same rationale as `kiritan`. The
+    /// Companion's スペクトラム settings tab polls this to show what every
+    /// detection method is currently reading.
+    #[serde(default)]
+    pub audio_rhythm: Option<AudioRhythmRuntimeState>,
     pub updated_at: String,
 }
 
@@ -47,6 +53,7 @@ impl Default for WallpaperState {
             ui: UiState::default(),
             settings: AppSettings::default(),
             kiritan: None,
+            audio_rhythm: None,
             updated_at: now_iso(),
         }
     }
@@ -1051,6 +1058,23 @@ impl From<KiritanStatePost> for KiritanRuntimeState {
     }
 }
 
+// ─── Audio rhythm runtime state (スペクトラム設定タブ, 2026-07-19) ───────────
+// The overlay's audioSpectrum service POSTs a live BPM-analyzer snapshot to
+// `/api/audio-rhythm/state` about once a second while audio frames are
+// flowing. The payload schema is owned by the sender
+// (02_ui-overlay/src/services/audioSpectrum.ts — maybePostRhythmState), so it
+// is stored as-is and only stamped with the server clock; the Companion UI
+// treats a stale `receivedAt` as 停止中 / 旧バージョンの壁紙.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioRhythmRuntimeState {
+    /// Overlay-sent snapshot (selected method, per-detector estimates, …).
+    #[serde(flatten)]
+    pub payload: Map<String, Value>,
+    pub received_at: String, // ISO, server clock
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1069,11 +1093,15 @@ mod tests {
             ui.settings["audioSpectrumPanel"]["bpmMethod"],
             json!("consensus")
         );
+        // 2026-07-19: the samples ship master's live v0.8.9 tuning — panel on,
+        // spectrum placed in the right column, quicker 3s lock.
+        assert_eq!(ui.settings["audioSpectrumPanel"]["show"], json!(true));
         assert_eq!(
             ui.settings["audioSpectrumPanel"]["bpmLockSeconds"],
-            json!(5)
+            json!(3)
         );
         assert_eq!(ui.settings["audioSpectrumPanel"]["bpmOffset"], json!(0));
+        assert_eq!(ui.layout["audioSpectrumPanel"]["x"], json!(1396));
         assert_eq!(
             ui.settings["audioSpectrumPanel"]["rhythmMotionEnabled"],
             json!(true)

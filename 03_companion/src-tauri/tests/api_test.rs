@@ -364,6 +364,88 @@ async fn kiritan_state_post_and_get() {
 }
 
 #[tokio::test]
+async fn audio_rhythm_state_post_and_get() {
+    let base = spawn_server().await;
+    let c = reqwest::Client::new();
+    let token = fetch_token(&base, &c).await;
+
+    // Absent until the overlay reports at least once.
+    let empty: serde_json::Value = c
+        .get(format!("{base}/api/audio-rhythm/state"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(empty.is_null(), "audio rhythm starts absent, got {empty}");
+
+    // The overlay's snapshot (schema owned by audioSpectrum.ts) round-trips
+    // as-is; a client-echoed receivedAt is replaced by the server stamp.
+    let body = serde_json::json!({
+        "source": "wallpaper-engine",
+        "method": "consensus",
+        "stableMs": 5000,
+        "bpmOffset": 0,
+        "status": "locked",
+        "lockedBpm": 128,
+        "outputBpm": 128,
+        "receivedAt": "1999-01-01T00:00:00.000Z",
+        "estimates": [
+            { "id": "consensus", "status": "locked", "lockedBpm": 128, "detectedBpm": 128.4, "confidence": 0.9, "support": 3 },
+            { "id": "low-band", "status": "locked", "lockedBpm": 127, "detectedBpm": 127.2, "confidence": 0.8, "support": 1 }
+        ],
+    });
+    let posted: serde_json::Value = auth(c.post(format!("{base}/api/audio-rhythm/state")), &token)
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(posted["ok"], true);
+
+    let got: serde_json::Value = c
+        .get(format!("{base}/api/audio-rhythm/state"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(got["method"], "consensus");
+    assert_eq!(got["estimates"][0]["id"], "consensus");
+    assert_eq!(got["estimates"][1]["lockedBpm"], 127);
+    let received_at = got["receivedAt"].as_str().unwrap_or_default();
+    assert!(
+        !received_at.is_empty() && !received_at.starts_with("1999"),
+        "server clock owns receivedAt, got {received_at}"
+    );
+
+    // A non-object body is rejected without touching the stored snapshot.
+    let rejected: serde_json::Value =
+        auth(c.post(format!("{base}/api/audio-rhythm/state")), &token)
+            .json(&serde_json::json!([1, 2, 3]))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+    assert_eq!(rejected["ok"], false);
+    let still: serde_json::Value = c
+        .get(format!("{base}/api/audio-rhythm/state"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(still["method"], "consensus");
+}
+
+#[tokio::test]
 async fn background_upload_stores_file_and_serves_lightweight_url() {
     let base = spawn_server().await;
     let c = reqwest::Client::new();

@@ -5,6 +5,12 @@
       "id": "builtin-1920x1200-sample",
       "name": "1920×1200用サンプル",
       "layout": {
+        "audioSpectrumPanel": {
+          "height": 140,
+          "width": 518,
+          "x": 1396,
+          "y": 778
+        },
         "canvas": {
           "height": 1200,
           "width": 1920
@@ -38,10 +44,10 @@
           "height": 305,
           "width": 520,
           "x": 1396,
-          "y": 611
+          "y": 471
         },
         "newsPanel": {
-          "height": 600,
+          "height": 460,
           "width": 520,
           "x": 1396,
           "y": 6
@@ -51,12 +57,6 @@
           "width": 896,
           "x": 1020,
           "y": 921
-        },
-        "audioSpectrumPanel": {
-          "height": 200,
-          "width": 500,
-          "x": 8,
-          "y": 696
         },
         "rightDock": {
           "gap": 16,
@@ -177,7 +177,7 @@
           "highlightLatest": true,
           "indexSize": 26,
           "itemGap": 18,
-          "maxItems": 4,
+          "maxItems": 3,
           "maxSummaryLines": 2,
           "maxTitleLines": 2,
           "metaPlacement": "separate",
@@ -200,14 +200,14 @@
           "opacity": 1
         },
         "personalNewsPanel": {
-          "autoShowWhenLyricsUnavailable": true,
+          "autoShowWhenLyricsUnavailable": false,
           "backgroundOpacity": 0.34,
           "contentTopGap": 18,
           "hideLyricsWhenAutoShown": true,
           "personalNewsBodySize": 35,
           "personalNewsGap": 12,
-          "personalNewsProgressHeight": 10,
-          "personalNewsScrollSpeed": 1,
+          "personalNewsProgressHeight": 5,
+          "personalNewsScrollSpeed": 0.2,
           "personalNewsShowBody": true,
           "personalNewsShowChapterMarks": true,
           "personalNewsShowProgress": false,
@@ -225,25 +225,25 @@
         },
         "audioSpectrumPanel": {
           "backgroundOpacity": 0.34,
-          "barCount": 24,
+          "barCount": 12,
           "barGap": 4,
-          "bpmLockSeconds": 5,
+          "bpmLockSeconds": 3,
           "bpmMethod": "consensus",
           "bpmOffset": 0,
           "colorMode": "mono",
           "contentTopGap": 12,
-          "decaySpeed": 0.12,
+          "decaySpeed": 0.15,
           "mirror": false,
           "peakFallSpeed": 0.008,
           "peakHold": true,
           "rhythmMotionEnabled": true,
           "rhythmMotionStrength": 0.35,
-          "segmentCount": 14,
-          "sensitivity": 1,
-          "show": false,
+          "segmentCount": 10,
+          "sensitivity": 1.1,
+          "show": true,
           "showBackground": true,
           "showBpm": true,
-          "showHeader": true,
+          "showHeader": false,
           "standbyText": "AUDIO STANDBY"
         },
         "timerPanel": {
@@ -487,7 +487,7 @@
           "showHumidity": true,
           "showLocation": true,
           "showMinMaxLabels": false,
-          "showPressure": true,
+          "showPressure": false,
           "showTemperature": true,
           "showWeather": true,
           "temperaturePadding": 5
@@ -522,9 +522,15 @@
       "id": "builtin-1920x1080-sample",
       "name": "1920×1080用サンプル",
       "layout": {
+        "audioSpectrumPanel": {
+          "height": 126,
+          "width": 518,
+          "x": 1396,
+          "y": 700
+        },
         "canvas": {
-          "height": 1080,
-          "width": 1920
+          "width": 1920,
+          "height": 1080
         },
         "clock": {
           "dateSize": 76,
@@ -534,61 +540,55 @@
           "y": 0
         },
         "detailPanel": {
-          "height": 900,
+          "height": 810,
           "width": 420,
           "x": 1320,
-          "y": 70
+          "y": 63
         },
         "lyricsPanel": {
-          "height": 225,
+          "height": 202,
           "width": 896,
           "x": 1020,
-          "y": 780
+          "y": 829
         },
         "memoPanel": {
-          "height": 225,
+          "height": 202,
           "width": 500,
           "x": 514,
-          "y": 780
+          "y": 829
         },
         "musicPanel": {
-          "height": 305,
+          "height": 274,
           "width": 520,
           "x": 1396,
-          "y": 468
+          "y": 424
         },
         "newsPanel": {
-          "height": 458,
+          "height": 414,
           "width": 520,
           "x": 1396,
-          "y": 6
+          "y": 5
         },
         "personalNewsPanel": {
-          "height": 225,
+          "height": 202,
           "width": 896,
           "x": 1020,
-          "y": 780
-        },
-        "audioSpectrumPanel": {
-          "height": 200,
-          "width": 500,
-          "x": 8,
-          "y": 555
+          "y": 829
         },
         "rightDock": {
           "gap": 16,
           "width": 110,
           "x": 1789,
-          "y": 100
+          "y": 90
         },
         "safeArea": {
           "padding": 40
         },
         "timerPanel": {
-          "height": 225,
+          "height": 202,
           "width": 500,
           "x": 8,
-          "y": 780
+          "y": 829
         },
         "weatherCompact": {
           "barHeight": 22,
@@ -596,7 +596,7 @@
           "rowGap": 10,
           "width": 531,
           "x": 16,
-          "y": 216
+          "y": 194
         }
       },
       "settings": {
@@ -717,14 +717,14 @@
           "opacity": 1
         },
         "personalNewsPanel": {
-          "autoShowWhenLyricsUnavailable": true,
+          "autoShowWhenLyricsUnavailable": false,
           "backgroundOpacity": 0.34,
           "contentTopGap": 18,
           "hideLyricsWhenAutoShown": true,
           "personalNewsBodySize": 35,
           "personalNewsGap": 12,
-          "personalNewsProgressHeight": 10,
-          "personalNewsScrollSpeed": 1,
+          "personalNewsProgressHeight": 5,
+          "personalNewsScrollSpeed": 0.2,
           "personalNewsShowBody": true,
           "personalNewsShowChapterMarks": true,
           "personalNewsShowProgress": false,
@@ -742,25 +742,25 @@
         },
         "audioSpectrumPanel": {
           "backgroundOpacity": 0.34,
-          "barCount": 24,
+          "barCount": 12,
           "barGap": 4,
-          "bpmLockSeconds": 5,
+          "bpmLockSeconds": 3,
           "bpmMethod": "consensus",
           "bpmOffset": 0,
           "colorMode": "mono",
           "contentTopGap": 12,
-          "decaySpeed": 0.12,
+          "decaySpeed": 0.15,
           "mirror": false,
           "peakFallSpeed": 0.008,
           "peakHold": true,
           "rhythmMotionEnabled": true,
           "rhythmMotionStrength": 0.35,
-          "segmentCount": 14,
-          "sensitivity": 1,
-          "show": false,
+          "segmentCount": 10,
+          "sensitivity": 1.1,
+          "show": true,
           "showBackground": true,
           "showBpm": true,
-          "showHeader": true,
+          "showHeader": false,
           "standbyText": "AUDIO STANDBY"
         },
         "timerPanel": {
@@ -1004,7 +1004,7 @@
           "showHumidity": true,
           "showLocation": true,
           "showMinMaxLabels": false,
-          "showPressure": true,
+          "showPressure": false,
           "showTemperature": true,
           "showWeather": true,
           "temperaturePadding": 5

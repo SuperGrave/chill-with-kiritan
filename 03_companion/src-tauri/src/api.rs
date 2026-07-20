@@ -114,6 +114,11 @@ pub fn build_router(shared: Shared) -> Router {
             "/api/kiritan/state",
             get(get_kiritan_state).post(post_kiritan_state),
         )
+        // ── Live BPM-analyzer snapshot (スペクトラム設定タブ) ─────────
+        .route(
+            "/api/audio-rhythm/state",
+            get(get_audio_rhythm_state).post(post_audio_rhythm_state),
+        )
         // ── Display settings + presets ───────────────────────────────
         .route("/api/ui", get(get_ui).put(put_ui))
         .route("/api/presets", get(list_presets).post(create_preset))
@@ -580,6 +585,35 @@ async fn post_kiritan_state(
     // Deliberately NOT touch()/persist(): this is a live runtime signal
     // re-sent every ~30s, not user data — see the `kiritan` field doc comment
     // on WallpaperState and `state::Persist` (which excludes it).
+    ok()
+}
+
+// ─── Audio rhythm runtime state ─────────────────────────────────────────────
+// The overlay's BPM analyzer POSTs a per-method estimate snapshot ~1×/s while
+// audio frames flow (02_ui-overlay audioSpectrum.ts). Same lifecycle as the
+// kiritan state: memory-only, never persisted, `null` until first report.
+
+async fn get_audio_rhythm_state(State(s): State<Shared>) -> Json<Value> {
+    match &s.lock().unwrap().state.audio_rhythm {
+        Some(a) => Json(serde_json::to_value(a).unwrap_or(json!(null))),
+        None => Json(json!(null)),
+    }
+}
+
+async fn post_audio_rhythm_state(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    let Value::Object(mut payload) = body else {
+        return Json(json!({ "ok": false, "error": "body must be a JSON object" }));
+    };
+    // The server clock owns receivedAt (the struct field is flattened next to
+    // the payload, so an echoed key would otherwise serialize twice).
+    payload.remove("receivedAt");
+
+    let mut g = s.lock().unwrap();
+    g.state.audio_rhythm = Some(AudioRhythmRuntimeState {
+        payload,
+        received_at: now_iso(),
+    });
+    // Live runtime signal — deliberately NOT touch()/persist(), like kiritan.
     ok()
 }
 

@@ -2,24 +2,24 @@
 
 東北きりたんの3Dモデル、情報パネル、音楽・天気・ニュース連携を組み合わせた、Windows / Wallpaper Engine向けのデスクトップ壁紙プロジェクトです。
 
-現在公開している動作確認済みセットは **v0.8.9** です。
+現在公開している動作確認済みセットは **v0.9.0** です。
 
 ## どちらを使いますか？
 
 ### そのまま使いたい方
 
-[v0.8.9 Release](https://github.com/SuperGrave/chill-with-kiritan/releases/tag/v0.8.9) から、用途に合うファイルを入手してください。
+[v0.9.0 Release](https://github.com/SuperGrave/chill-with-kiritan/releases/tag/v0.9.0) から、用途に合うファイルを入手してください。
 
-- `Chill-with-Kiritan-v0.8.9-release.zip`: Wallpaper Engine用データ、Companion、説明書の全部入り
-- `Chill-with-Kiritan-WallpaperEngine-v0.8.9.zip`: Wallpaper Engine用データのみ
-- `Tohoku Companion_0.8.9_x64-setup.exe`: Companionインストーラー
+- `Chill-with-Kiritan-v0.9.0-release.zip`: Wallpaper Engine用データ、Companion、説明書の全部入り
+- `Chill-with-Kiritan-WallpaperEngine-v0.9.0.zip`: Wallpaper Engine用データのみ
+- `Tohoku Companion_0.9.0_x64-setup.exe`: Companionインストーラー
 - `tohoku-companion.exe`: Companionポータブル版
 
 導入手順は [README_DISTRIBUTION_JP.md](README_DISTRIBUTION_JP.md) を参照してください。
 
 ### 機能を改造・開発したい方
 
-このリポジトリの `main`、またはv0.8.9 Releaseの `Chill-with-Kiritan-v0.8.9-source.zip` が制作版です。コンパイル済みアプリ、再配布できないVRM/VRMA、APIキー、Spotify認証情報、個人設定、個人用原稿は含みません。
+このリポジトリの `main`、またはv0.9.0 Releaseの `Chill-with-Kiritan-v0.9.0-source.zip` が制作版です。コンパイル済みアプリ、再配布できないVRM/VRMA、APIキー、Spotify認証情報、個人設定、個人用原稿は含みません。
 
 セットアップ、構成、ビルド方法は [README_SOURCE_JP.md](README_SOURCE_JP.md) にまとめています。IssueやPull Requestも歓迎します。
 
@@ -48,7 +48,7 @@ models/kiritan.vrm
 
 ## バージョンとサポート範囲
 
-- 公開配布版: v0.8.9
+- 公開配布版: v0.9.0
 - 制作版: `main`（変更途中の場合があります）
 - 対象OS: Windows
 - Wallpaper Engineは別途必要です

@@ -52,3 +52,15 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Dev-only conveyor QA.  `?tickerHarness=1` mounts the synthetic personal-news
+// panel without touching Companion/user state; `tickerHarnessLine=4` can start
+// it on the final block so the loop seam is exercised immediately.  The DEV
+// guard is replaced with false and removed from production builds.
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('tickerHarness')) {
+  void import('./dev/personalNewsTickerHarness.ts').then((harness) => {
+    harness.mount()
+    const line = Number(new URLSearchParams(window.location.search).get('tickerHarnessLine'))
+    if (Number.isInteger(line) && line >= 0) harness.seek(line)
+  })
+}

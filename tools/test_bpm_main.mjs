@@ -197,6 +197,46 @@ function settleMusic(controller, fromMs, endMs) {
 }
 
 {
+  // 首振り smoothness (master FB 2026-07-19): the music-figure head nod is a
+  // continuous cosine — the motion spreads across the whole beat instead of
+  // the old quarter-beat pulse that parked the head for the rest of the beat.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 128, lockedAt: 0 });
+  settleMusic(c, 0, 3000);
+  const beatMs = 60_000 / 128;
+  const deltas = [];
+  let prev = c.update(3000, 1 / 60, musicInput()).headPitch;
+  for (let at = 3000 + 1000 / 60; at < 3000 + beatMs * 4; at += 1000 / 60) {
+    const f = c.update(at, 1 / 60, musicInput());
+    deltas.push(Math.abs(f.headPitch - prev));
+    prev = f.headPitch;
+  }
+  const maxD = Math.max(...deltas);
+  const meanD = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+  ok(maxD < meanD * 1.8, 'nod frame deltas stay uniform (sine wave, not a pulse)');
+  const still = deltas.filter((d) => d < maxD * 0.05).length;
+  ok(still < deltas.length * 0.2, 'the head never parks mid-beat');
+  const h0 = c.update(5000, 1 / 60, musicInput()).headPitch;
+  const hHalf = c.update(5000 + beatMs / 2, 1 / 60, musicInput()).headPitch;
+  const h1 = c.update(5000 + beatMs, 1 / 60, musicInput()).headPitch;
+  ok(Math.abs(h0 - h1) < 0.0015, 'nod repeats after exactly 1 beat');
+  ok(Math.abs(h0 + hHalf) < 0.0015, 'nod mirrors after half a beat (pure sinusoid)');
+}
+
+{
+  // Fast tempo: the nod drops to half time with the tap so it never buzzes.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 170, lockedAt: 0 });
+  settleMusic(c, 0, 3000);
+  const beatMs = 60_000 / 170;
+  const n0 = c.update(4000, 1 / 60, musicInput()).headPitch;
+  const n1 = c.update(4000 + beatMs, 1 / 60, musicInput()).headPitch;
+  const n2 = c.update(4000 + beatMs * 2, 1 / 60, musicInput()).headPitch;
+  ok(Math.abs(n0 - n2) < 0.0015, '170 BPM nod repeats after 2 beats (half-time)');
+  ok(Math.abs(n0 + n1) < 0.0015, '170 BPM nod mirrors after 1 beat');
+}
+
+{
   // Figure rotation: after 32 beats at a slow tempo, sway hands over to tap.
   const c = new RhythmMotionController();
   c.sync({ bpm: 120, lockedAt: 0 });

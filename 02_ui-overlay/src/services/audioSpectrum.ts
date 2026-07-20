@@ -22,10 +22,12 @@ import type {
 import {
   BpmAnalyzer,
   isBpmDetectionMethod,
+  type BpmAnalysisFrame,
   type BpmDetectionMethod,
   type BpmDetectorId,
   type BpmDetectorEstimate,
 } from '../lib/bpmAnalyzer';
+import { pushAudioRhythmState } from './companionClient';
 
 export type AudioFrameSource = 'wallpaper-engine' | 'mock' | 'none';
 
@@ -207,6 +209,49 @@ function resetRhythmForSource(source: AudioFrameSource, at: number): void {
   updateRhythm(analyzer.expire(at).estimates[selectedMethod], source, true);
 }
 
+// Live estimator snapshot for the Companion's スペクトラム settings tab: while
+// frames are flowing, a 1 Hz throttled fire-and-forget POST carries what every
+// detector is currently reading (the tab treats a stale receivedAt as 停止中).
+const AUDIO_RHYTHM_POST_MS = 1000;
+const AUDIO_RHYTHM_ESTIMATE_IDS: readonly BpmDetectionMethod[] = [
+  'consensus',
+  'low-band',
+  'spectral-flux',
+  'autocorrelation',
+];
+let lastRhythmPostAt = 0;
+
+function maybePostRhythmState(analysis: BpmAnalysisFrame, source: AudioFrameSource, now: number): void {
+  if (now - lastRhythmPostAt < AUDIO_RHYTHM_POST_MS) return;
+  lastRhythmPostAt = now;
+  const rhythm = info.rhythm;
+  void pushAudioRhythmState({
+    source,
+    method: selectedMethod,
+    stableMs,
+    bpmOffset,
+    status: rhythm.status,
+    detectedBpm: rhythm.detectedBpm,
+    lockedBpm: rhythm.lockedBpm,
+    outputBpm: rhythm.outputBpm,
+    confidence: rhythm.confidence,
+    stableForMs: rhythm.stableForMs,
+    estimates: AUDIO_RHYTHM_ESTIMATE_IDS.map((id) => {
+      const estimate = analysis.estimates[id];
+      return {
+        id,
+        status: estimate.status,
+        detectedBpm: estimate.detectedBpm,
+        lockedBpm: estimate.lockedBpm,
+        confidence: estimate.confidence,
+        stableForMs: estimate.stableForMs,
+        support: estimate.support,
+        contributors: [...estimate.contributors],
+      };
+    }),
+  });
+}
+
 function publishFrame(raw: ArrayLike<number>, source: AudioFrameSource): void {
   const now = performance.now();
   if (info.source !== 'none' && info.source !== source) resetRhythmForSource(source, now);
@@ -235,6 +280,7 @@ function publishFrame(raw: ArrayLike<number>, source: AudioFrameSource): void {
       }),
     );
   }
+  maybePostRhythmState(analysis, source, now);
   for (const cb of subscribers) cb(info);
 }
 

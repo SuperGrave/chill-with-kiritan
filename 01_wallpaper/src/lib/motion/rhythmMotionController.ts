@@ -111,6 +111,8 @@ const FIGURE_SPAN_BEATS = 32;
 const FIGURE_CROSSFADE_SEC = 1.4;
 /** The strength slider default; figure amplitudes are authored at this value. */
 const REFERENCE_STRENGTH = 0.35;
+/** Above this BPM the music-figure head nod spans 2 beats (never buzzes). */
+const NOD_HALF_TIME_BPM = 150;
 
 /**
  * Percussive tap envelope over one tap period. 0 = fingers resting on the
@@ -225,9 +227,16 @@ export class RhythmMotionController {
     const bpm = this.bpm ?? 120;
     const beatPhase = ((beatFloat % 1) + 1) % 1;
 
-    // A light on-beat nod underlies every figure (and previews the future
-    // 首振り figure): rise on the first eighth, decay through the beat.
+    // Groove keeps its original decaying pulse (test/back-compat for the
+    // subtle non-music groove). The MUSIC figures ride a continuous cosine
+    // instead: the old quarter-beat pulse spent 75% of every beat dead still
+    // and popped back on the next onset, which read as カクカク (master FB
+    // 2026-07-19). cos(2π·phase) peaks exactly ON the beat, is smooth across
+    // the wrap, and spans 2 beats at racing tempi so the head never buzzes.
     const nod = Math.sin(Math.min(1, beatPhase * 4) * Math.PI) * Math.exp(-beatPhase * 4.2);
+    const nodBeats = bpm > NOD_HALF_TIME_BPM ? 2 : 1;
+    const nodPhase = ((beatFloat / nodBeats) % 1 + 1) % 1;
+    const smoothNod = Math.cos(nodPhase * Math.PI * 2);
 
     if (figure === 'sway') {
       // 腰より上をゆっくり横揺れ: full cycle over 2 beats, throw tapering as
@@ -241,8 +250,8 @@ export class RhythmMotionController {
       out.headRoll = -s * 0.024 * taper;
       out.leftShoulderRoll = s * 0.012 * taper;
       out.rightShoulderRoll = s * 0.012 * taper;
-      out.headPitch = nod * 0.010;
-      out.neckPitch = nod * 0.006;
+      out.headPitch = smoothNod * 0.008;
+      out.neckPitch = smoothNod * 0.005;
     } else if (figure === 'fingertap') {
       // 指トントン: palm + fingers lift together and drop ON the beat. Above
       // TAP_HALF_TIME_BPM the tap rides every 2nd beat to stay readable.
@@ -251,9 +260,9 @@ export class RhythmMotionController {
       const lift = tapLiftCurve(tapPhase);
       out.rightHandLift = lift * 0.085;
       out.rightFingerLift = lift * 0.30;
-      out.headPitch = nod * 0.016;
-      out.neckPitch = nod * 0.009;
-      out.chestPitch = nod * 0.004;
+      out.headPitch = smoothNod * 0.013;
+      out.neckPitch = smoothNod * 0.0075;
+      out.chestPitch = smoothNod * 0.0035;
     } else {
       // 'groove' — the original subtle everywhere motion.
       const sway = Math.sin(beatPhase * Math.PI * 2);

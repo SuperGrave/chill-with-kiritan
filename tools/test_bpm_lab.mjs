@@ -38,6 +38,20 @@ function runSynthetic(bpm, mode = 'full', seconds = 16) {
   return frame;
 }
 
+function runJitteredSynthetic(bpm, seconds = 16) {
+  const analyzer = new BpmComparisonAnalyzer({ stableMs: 3000 });
+  const steps = [27, 39, 31, 36, 29, 42, 33];
+  let frame = null;
+  let at = 0;
+  let index = 0;
+  while (at <= seconds * 1000) {
+    frame = analyzer.process(makeSyntheticBands(bpm, at), at);
+    at += steps[index % steps.length];
+    index++;
+  }
+  return frame;
+}
+
 console.log('\n=== Full-band synthetic fixtures ===');
 for (const bpm of [88, 120, 174]) {
   const frame = runSynthetic(bpm);
@@ -46,7 +60,11 @@ for (const bpm of [88, 120, 174]) {
   const tolerance = bpm >= 160 ? 7 : 3;
   ok(Math.abs(frame.legacy.bpm - bpm) <= tolerance, `${bpm}: legacy detector`);
   ok(Math.abs(frame.flux.bpm - bpm) <= tolerance, `${bpm}: spectral-flux detector`);
+  ok(Math.abs(frame.superflux.bpm - bpm) <= tolerance, `${bpm}: SuperFlux-lite detector`);
   ok(Math.abs(frame.autocorr.bpm - bpm) <= Math.max(5, tolerance), `${bpm}: autocorrelation detector`);
+  ok(Math.abs(frame.comb.bpm - bpm) <= Math.max(5, tolerance), `${bpm}: multiband comb detector`);
+  ok(Math.abs(frame.dp.bpm - bpm) <= Math.max(5, tolerance), `${bpm}: dynamic pulse detector`);
+  ok(Math.abs(frame.pulse.bpm - bpm) <= Math.max(5, tolerance), `${bpm}: state pulse bank`);
   ok(Math.abs(frame.consensus.bpm - bpm) <= tolerance, `${bpm}: consensus detector`);
   ok(frame.consensus.support >= 2, `${bpm}: consensus has at least two votes`);
 }
@@ -57,8 +75,22 @@ console.log('\n=== Bass-light fixture ===');
   ok(frame.legacy.bpm === null || Math.abs(frame.legacy.bpm - 120) > 4,
     'legacy low-band detector is allowed to miss bass-light material');
   ok(Math.abs(frame.flux.bpm - 120) <= 3, 'spectral flux still finds 120 BPM');
+  ok(Math.abs(frame.superflux.bpm - 120) <= 3, 'SuperFlux-lite still finds bass-light 120 BPM');
   ok(Math.abs(frame.autocorr.bpm - 120) <= 5, 'autocorrelation still finds 120 BPM');
-  ok(Math.abs(frame.consensus.bpm - 120) <= 4, '2/3 consensus recovers bass-light 120 BPM');
+  ok(Math.abs(frame.comb.bpm - 120) <= 5, 'multiband comb still finds bass-light 120 BPM');
+  ok(Math.abs(frame.dp.bpm - 120) <= 5, 'dynamic pulse still finds bass-light 120 BPM');
+  ok(Math.abs(frame.pulse.bpm - 120) <= 5, 'state pulse bank recovers bass-light 120 BPM');
+  ok(Math.abs(frame.consensus.bpm - 120) <= 4, '5-way consensus recovers bass-light 120 BPM');
+}
+
+console.log('\n=== Callback jitter fixture ===');
+{
+  const frame = runJitteredSynthetic(120);
+  ok(Math.abs(frame.superflux.bpm - 120) <= 4, 'SuperFlux-lite tolerates irregular callbacks');
+  ok(Math.abs(frame.comb.bpm - 120) <= 5, 'multiband comb resamples callback jitter');
+  ok(Math.abs(frame.dp.bpm - 120) <= 5, 'dynamic pulse resamples callback jitter');
+  ok(Math.abs(frame.pulse.bpm - 120) <= 5, 'state pulse bank remains stable with callback jitter');
+  ok(Math.abs(frame.consensus.bpm - 120) <= 5, 'consensus remains stable with callback jitter');
 }
 
 console.log('\n=== Harmonic consensus ===');

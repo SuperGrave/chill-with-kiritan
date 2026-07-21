@@ -1625,7 +1625,7 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
             <NumberControl label="BPM連動の強さ" value={spectrum.rhythmMotionStrength ?? 0.35} min={0} max={1} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionStrength", v)} />
             <NumberControl label="BPMロスト後の継続（秒）" value={spectrum.rhythmMotionHoldSeconds ?? 8} min={0} max={30} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionHoldSeconds", v)} />
           </div>
-          <p className="hint">確定待ちは同じテンポが続いてから確定するまでの秒数。BPM補正は確定BPMにだけ足す好み調整（検知そのものは生値のまま）。連動モーションは5 BPM刻みの固定速度から選ばれ、検出が途切れても指定秒数はそのまま継続します。同じ5 BPM帯へ戻れば、モーションを再始動せず続きから再生します。</p>
+          <p className="hint">確定待ちは同じテンポが続いてから確定するまでの秒数。BPM補正は確定BPMにだけ足す好み調整（検知そのものは生値のまま）。連動モーションは1 BPM刻みの固定速度から選ばれ、高速時も半分のテンポへ落としません。検出が途切れても指定秒数はそのまま継続し、同じBPMへ戻れば再始動せず続きから再生します。</p>
         </div>
         )}
         {studioObj === "system" && (

@@ -126,7 +126,7 @@ export const audioSpectrumPanelDefaults = {
   bpmOffset: 0,
   rhythmMotionEnabled: true,
   rhythmMotionStrength: 0.35,
-  // Keep the selected five-BPM motion bank alive through brief detector gaps.
+  // Keep the selected one-BPM motion bank alive through brief detector gaps.
   rhythmMotionHoldSeconds: 8,
   standbyText: 'AUDIO STANDBY',
 };

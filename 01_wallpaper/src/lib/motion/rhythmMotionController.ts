@@ -107,21 +107,16 @@ function modeScale(mode: string | null | undefined): number {
 const SWAY_MAX_BPM = 112;
 /** One full left-right-left sway spans this many beats. */
 const SWAY_CYCLE_BEATS = 2;
-/** Finger taps land every beat, or every 2nd beat once the tempo races. */
-const TAP_HALF_TIME_BPM = 150;
 /** A figure holds the stage for this many beats (8 bars in 4/4). */
 const FIGURE_SPAN_BEATS = 32;
 /** Crossfade seconds when the figures rotate. */
 const FIGURE_CROSSFADE_SEC = 1.4;
 /** The strength slider default; figure amplitudes are authored at this value. */
 const REFERENCE_STRENGTH = 0.35;
-/** Above this BPM the music-figure head nod spans 2 beats (never buzzes). */
-const NOD_HALF_TIME_BPM = 150;
-
-/** Fixed motion-bank range. Every entry is authored on a five-BPM grid. */
+/** Fixed motion-bank range. Every entry is authored on a one-BPM grid. */
 export const BPM_MOTION_BANK_MIN = 40;
 export const BPM_MOTION_BANK_MAX = 240;
-export const BPM_MOTION_BANK_STEP = 5;
+export const BPM_MOTION_BANK_STEP = 1;
 export const DEFAULT_RHYTHM_MOTION_HOLD_SECONDS = 8;
 
 export interface BpmMotionPreset {
@@ -134,7 +129,7 @@ export interface BpmMotionPreset {
 }
 
 /**
- * Prepared fixed-speed loops. Detection jitter can only select another entry;
+ * Prepared one-BPM fixed-speed loops. Detection jitter can only select another entry;
  * it can no longer continuously stretch the motion on every estimate.
  */
 export const BPM_MOTION_BANK: readonly BpmMotionPreset[] = Object.freeze(
@@ -147,8 +142,8 @@ export const BPM_MOTION_BANK: readonly BpmMotionPreset[] = Object.freeze(
         bpm,
         beatMs,
         swayCycleMs: beatMs * SWAY_CYCLE_BEATS,
-        tapBeats: bpm > TAP_HALF_TIME_BPM ? 2 : 1,
-        nodBeats: bpm > NOD_HALF_TIME_BPM ? 2 : 1,
+        tapBeats: 1,
+        nodBeats: 1,
         openingFigure: bpm <= SWAY_MAX_BPM ? 'sway' : 'fingertap',
       });
     },
@@ -187,7 +182,7 @@ function tapLiftCurve(phase: number): number {
  * wrist stays planted while the torso sways). That keeps hand pins, props,
  * transitions and authored motion intact.
  *
- * Everything is computed from one of the fixed five-BPM oscillators. A same-
+ * Everything is computed from one of the fixed one-BPM oscillators. A same-
  * bucket re-lock keeps the oscillator running; a real bucket change preserves
  * beat phase and crossfades the tempo-appropriate opening figure.
  *
@@ -218,7 +213,7 @@ export class RhythmMotionController {
     const previous = this.preset;
     this.lostAtMs = null;
 
-    // Re-locking into the same five-BPM range only cancels the loss timer.
+    // Re-locking into the same one-BPM entry only cancels the loss timer.
     // Keeping the oscillator and figure state intact prevents a visible jump.
     if (previous?.bpm === next.bpm) return;
 
@@ -295,9 +290,10 @@ export class RhythmMotionController {
     // instead: the old quarter-beat pulse spent 75% of every beat dead still
     // and popped back on the next onset, which read as カクカク (master FB
     // 2026-07-19). cos(2π·phase) peaks exactly ON the beat, is smooth across
-    // the wrap, and spans 2 beats at racing tempi so the head never buzzes.
+    // the wrap. High tempi intentionally stay at one motion cycle per beat;
+    // silently halving the apparent tempo made the character feel unsynced.
     const nod = Math.sin(Math.min(1, beatPhase * 4) * Math.PI) * Math.exp(-beatPhase * 4.2);
-    const nodBeats = preset?.nodBeats ?? (bpm > NOD_HALF_TIME_BPM ? 2 : 1);
+    const nodBeats = preset?.nodBeats ?? 1;
     const nodPhase = ((beatFloat / nodBeats) % 1 + 1) % 1;
     const smoothNod = Math.cos(nodPhase * Math.PI * 2);
 
@@ -316,9 +312,8 @@ export class RhythmMotionController {
       out.headPitch = smoothNod * 0.008;
       out.neckPitch = smoothNod * 0.005;
     } else if (figure === 'fingertap') {
-      // 指トントン: palm + fingers lift together and drop ON the beat. Above
-      // TAP_HALF_TIME_BPM the tap rides every 2nd beat to stay readable.
-      const tapBeats = preset?.tapBeats ?? (bpm > TAP_HALF_TIME_BPM ? 2 : 1);
+      // 指トントン: palm + fingers lift together and drop ON every beat.
+      const tapBeats = preset?.tapBeats ?? 1;
       const tapPhase = ((beatFloat / tapBeats) % 1 + 1) % 1;
       const lift = tapLiftCurve(tapPhase);
       out.rightHandLift = lift * 0.085;

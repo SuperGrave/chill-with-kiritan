@@ -92,13 +92,13 @@ for (const bpm of [88, 120, 174]) {
 }
 
 console.log('\n=== Rhythm motion bridge ===');
-ok(BPM_MOTION_BANK.length === 41, 'fixed bank contains 40..240 BPM in five-BPM steps');
+ok(BPM_MOTION_BANK.length === 201, 'fixed bank contains 40..240 BPM in one-BPM steps');
 ok(
-  BPM_MOTION_BANK.every((preset, index) => preset.bpm === 40 + index * 5),
-  'every prepared motion-bank entry is exactly five BPM apart',
+  BPM_MOTION_BANK.every((preset, index) => preset.bpm === 40 + index),
+  'every prepared motion-bank entry is exactly one BPM apart',
 );
-ok(selectBpmMotionPreset(128)?.bpm === 130, '128 BPM selects the prepared 130 BPM motion');
-ok(selectBpmMotionPreset(127)?.bpm === 125, '127 BPM selects the prepared 125 BPM motion');
+ok(selectBpmMotionPreset(128)?.bpm === 128, '128 BPM selects the prepared 128 BPM motion');
+ok(selectBpmMotionPreset(127)?.bpm === 127, '127 BPM selects the prepared 127 BPM motion');
 {
   const controller = new RhythmMotionController();
   let frame = controller.update(0, 1 / 60, { enabled: true, strength: 1, mode: 'work_normal' });
@@ -134,18 +134,18 @@ function settleMusic(controller, fromMs, endMs) {
 }
 
 {
-  // Same-bank jitter: re-locking 128 -> 132 selects 130 both times and must
-  // neither retime nor restart the fixed oscillator.
+  // Same-bank jitter below half a BPM must neither retime nor restart the
+  // fixed oscillator.
   const c = new RhythmMotionController();
-  c.sync({ bpm: 128, lockedAt: 0 });
+  c.sync({ bpm: 128.1, lockedAt: 0 });
   settleMusic(c, 0, 2000);
   const before = c.update(2450, 1 / 60, musicInput());
   c.rhythm({ status: 'detecting', lockedBpm: null, at: 2450 });
-  c.sync({ bpm: 132, lockedAt: 2700 });
+  c.sync({ bpm: 128.4, lockedAt: 2700 });
   const after = c.update(2700, 1 / 60, musicInput());
-  const expectedAdvance = (2700 - 2450) / (60_000 / 130);
+  const expectedAdvance = (2700 - 2450) / (60_000 / 128);
   const actualAdvance = ((after.beatPhase - before.beatPhase) % 1 + 1) % 1;
-  ok(before.bpm === 130 && after.bpm === 130, 'same five-BPM range keeps the selected 130 BPM bank');
+  ok(before.bpm === 128 && after.bpm === 128, 'same one-BPM entry keeps the selected 128 BPM bank');
   ok(Math.abs(actualAdvance - expectedAdvance) < 0.002, 'same-bank re-lock continues phase instead of restarting');
 }
 
@@ -156,9 +156,9 @@ function settleMusic(controller, fromMs, endMs) {
   c.sync({ bpm: 128, lockedAt: 0 });
   settleMusic(c, 0, 2000);
   const before = c.update(2345, 1 / 60, musicInput());
-  c.sync({ bpm: 136, lockedAt: 2345 });
+  c.sync({ bpm: 129, lockedAt: 2345 });
   const after = c.update(2345, 1 / 60, musicInput());
-  ok(after.bpm === 135, 'crossing a range boundary selects the next prepared bank');
+  ok(after.bpm === 129, 'one-BPM change selects the matching prepared bank');
   ok(Math.abs(after.beatPhase - before.beatPhase) < 0.002, 'bank change preserves fractional beat phase');
 }
 
@@ -231,7 +231,7 @@ function settleMusic(controller, fromMs, endMs) {
 }
 
 {
-  // Fast tempo: sway is gated out and the tap drops to half time.
+  // Fast tempo: sway is gated out, but the visible tap stays on every beat.
   const c = new RhythmMotionController();
   c.sync({ bpm: 170, lockedAt: 0 });
   const settled = settleMusic(c, 0, 2000);
@@ -244,7 +244,7 @@ function settleMusic(controller, fromMs, endMs) {
     if (prev < 0.1 && f.rightFingerLift >= 0.1) crossings++;
     prev = f.rightFingerLift;
   }
-  ok(crossings === 4, 'above 150 BPM the tap rides every 2nd beat');
+  ok(crossings === 8, '170 BPM keeps tapping on every detected beat');
 }
 
 {
@@ -275,16 +275,17 @@ function settleMusic(controller, fromMs, endMs) {
 }
 
 {
-  // Fast tempo: the nod drops to half time with the tap so it never buzzes.
+  // Fast tempo: the nod also stays at the detected tempo instead of silently
+  // dividing it by two.
   const c = new RhythmMotionController();
   c.sync({ bpm: 170, lockedAt: 0 });
   settleMusic(c, 0, 3000);
   const beatMs = 60_000 / 170;
   const n0 = c.update(4000, 1 / 60, musicInput()).headPitch;
   const n1 = c.update(4000 + beatMs, 1 / 60, musicInput()).headPitch;
-  const n2 = c.update(4000 + beatMs * 2, 1 / 60, musicInput()).headPitch;
-  ok(Math.abs(n0 - n2) < 0.0015, '170 BPM nod repeats after 2 beats (half-time)');
-  ok(Math.abs(n0 + n1) < 0.0015, '170 BPM nod mirrors after 1 beat');
+  const nHalf = c.update(4000 + beatMs / 2, 1 / 60, musicInput()).headPitch;
+  ok(Math.abs(n0 - n1) < 0.0015, '170 BPM nod repeats after exactly 1 beat');
+  ok(Math.abs(n0 + nHalf) < 0.0015, '170 BPM nod mirrors after half a beat');
 }
 
 {
@@ -315,9 +316,9 @@ function settleMusic(controller, fromMs, endMs) {
   ok(grooving.active, 'locked BPM grooves in music_listen');
   c.rhythm({ status: 'detecting', lockedBpm: null, at: 2000 });
   const held = c.update(4900, 1 / 60, musicInput(0.35, 3));
-  ok(held.active && held.bpm === 95, 'motion keeps running until the configured loss grace expires');
+  ok(held.active && held.bpm === 96, 'motion keeps running until the configured loss grace expires');
   const phaseBeforeRelock = held.beatPhase;
-  c.sync({ bpm: 97, lockedAt: 4900 });
+  c.sync({ bpm: 96, lockedAt: 4900 });
   const relocked = c.update(4900, 1 / 60, musicInput(0.35, 3));
   ok(Math.abs(relocked.beatPhase - phaseBeforeRelock) < 0.00001, 'same-bank re-lock cancels loss timer without restarting motion');
   c.rhythm({ status: 'detecting', lockedBpm: null, at: 5000 });

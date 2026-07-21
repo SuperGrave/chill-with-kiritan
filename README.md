@@ -40,7 +40,7 @@ models/kiritan.vrm
 | `01_wallpaper/` | React + Vite + TypeScript製の壁紙本体。3D表示と統合UI |
 | `02_ui-overlay/` | オーバーレイUIの単体開発・確認用画面 |
 | `03_companion/` | Tauri製Companionとlocalhost API |
-| `04_bpm-lab/` | 現行＋導入候補8方式のBPM推定を同じ音源で比較する独立ラボ |
+| `04_bpm-lab/` | 帯域8方式＋PCM 2方式のBPM推定を同じ音源で比較する独立ラボ |
 | `docs/` | 利用・設計・検証ドキュメント |
 | `tools/` | ビルド、検査、リリース作成用スクリプト |
 

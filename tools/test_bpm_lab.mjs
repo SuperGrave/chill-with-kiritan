@@ -15,7 +15,8 @@ execSync(
 );
 
 const algorithms = require(path.join(outDir, '04_bpm-lab', 'src', 'algorithms.js'));
-const { BpmComparisonAnalyzer, chooseConsensusCandidate, makeSyntheticBands } = algorithms;
+const { BpmComparisonAnalyzer, DETECTOR_IDS, chooseConsensusCandidate, makeSyntheticBands } = algorithms;
+const MusicTempo = require(path.join(root, '04_bpm-lab', 'node_modules', 'music-tempo'));
 
 let passed = 0;
 const failures = [];
@@ -50,6 +51,24 @@ function runJitteredSynthetic(bpm, seconds = 16) {
     index++;
   }
   return frame;
+}
+
+function runBeatrootPcm(bpm, seconds = 12) {
+  const sampleRate = 44_100;
+  const samples = new Float32Array(sampleRate * seconds);
+  for (let index = 0; index < samples.length; index++) {
+    const phase = (index / sampleRate) % (60 / bpm);
+    const kick = Math.sin(2 * Math.PI * 62 * phase) * Math.exp(-phase / 0.075);
+    const tick = Math.sin(2 * Math.PI * 1_250 * phase) * Math.exp(-phase / 0.018);
+    samples[index] = kick * 0.82 + tick * 0.24;
+  }
+  const tracker = new MusicTempo(samples, {
+    hopSize: 441,
+    timeStep: 0.01,
+    minBeatInterval: 60 / 220,
+    maxBeatInterval: 60 / 50,
+  });
+  return Number(tracker.tempo);
 }
 
 console.log('\n=== Full-band synthetic fixtures ===');
@@ -91,6 +110,18 @@ console.log('\n=== Callback jitter fixture ===');
   ok(Math.abs(frame.dp.bpm - 120) <= 5, 'dynamic pulse resamples callback jitter');
   ok(Math.abs(frame.pulse.bpm - 120) <= 5, 'state pulse bank remains stable with callback jitter');
   ok(Math.abs(frame.consensus.bpm - 120) <= 5, 'consensus remains stable with callback jitter');
+}
+
+console.log('\n=== PCM fixtures ===');
+ok(DETECTOR_IDS.length === 10, 'comparison registry exposes eight band and two PCM methods');
+for (const bpm of [88, 120, 174]) {
+  ok(Math.abs(runBeatrootPcm(bpm) - bpm) <= 2, `PCM BeatRoot finds ${bpm} BPM`);
+}
+{
+  const analyzer = new BpmComparisonAnalyzer({ stableMs: 1000 });
+  analyzer.updatePcmEstimate('pcm-realtime', 127, 0.75, 1000, 'test PCM event');
+  const frame = analyzer.process(makeSyntheticBands(120, 1000), 1000);
+  ok(frame.estimates['pcm-realtime'].bpm === 127, 'external PCM event is included in comparison frames');
 }
 
 console.log('\n=== Harmonic consensus ===');

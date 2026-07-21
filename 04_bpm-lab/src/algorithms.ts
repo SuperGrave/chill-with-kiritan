@@ -29,6 +29,8 @@ export type DetectorId =
   | 'autocorr'
   | 'comb'
   | 'dp'
+  | 'pcm-realtime'
+  | 'pcm-beatroot'
   | 'pulse'
   | 'consensus';
 
@@ -45,6 +47,8 @@ export const DETECTOR_DEFINITIONS: ReadonlyArray<{
   { id: 'autocorr', label: 'AUTOCORRELATION', shortLabel: 'AUTO', subtitle: 'オンセット包絡の周期相関', family: 'baseline' },
   { id: 'comb', label: 'MULTIBAND COMB', shortLabel: 'COMB', subtitle: '低・中・高域の共鳴テンポバンク', family: 'candidate' },
   { id: 'dp', label: 'DYNAMIC PULSE', shortLabel: 'DP', subtitle: '拍位置列の大域スコア', family: 'candidate' },
+  { id: 'pcm-realtime', label: 'PCM REALTIME', shortLabel: 'PCM-RT', subtitle: 'AudioWorklet / 低域ピーク間隔', family: 'candidate' },
+  { id: 'pcm-beatroot', label: 'PCM BEATROOT', shortLabel: 'BEATROOT', subtitle: '生波形FFT＋拍仮説エージェント', family: 'candidate' },
   { id: 'pulse', label: 'STATE PULSE BANK', shortLabel: 'STATE', subtitle: '連続性を優先する状態遷移追跡', family: 'combined' },
   { id: 'consensus', label: '5-WAY CONSENSUS', shortLabel: 'VOTE', subtitle: '独立候補5方式の倍・半分補正合議', family: 'combined' },
 ];
@@ -72,6 +76,8 @@ export interface AnalysisFrame {
   autocorr: DetectorEstimate;
   comb: DetectorEstimate;
   dp: DetectorEstimate;
+  pcmRealtime: DetectorEstimate;
+  pcmBeatroot: DetectorEstimate;
   pulse: DetectorEstimate;
   consensus: DetectorEstimate;
   bassEnergy: number;
@@ -823,6 +829,12 @@ export class BpmComparisonAnalyzer {
   private dp: DynamicPulseDetector;
   private pulse: StatePulseBankTracker;
   private consensus: ConsensusTracker;
+  private pcmTrackers: Record<'pcm-realtime' | 'pcm-beatroot', StableEstimateTracker>;
+  private pcmEstimates: Record<'pcm-realtime' | 'pcm-beatroot', DetectorEstimate>;
+  private pcmUpdatedAt: Record<'pcm-realtime' | 'pcm-beatroot', number> = {
+    'pcm-realtime': Number.NEGATIVE_INFINITY,
+    'pcm-beatroot': Number.NEGATIVE_INFINITY,
+  };
 
   constructor(config: Partial<LabConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -834,9 +846,44 @@ export class BpmComparisonAnalyzer {
     this.dp = new DynamicPulseDetector(this.config);
     this.pulse = new StatePulseBankTracker(this.config);
     this.consensus = new ConsensusTracker(this.config);
+    this.pcmTrackers = {
+      'pcm-realtime': new StableEstimateTracker(this.config),
+      'pcm-beatroot': new StableEstimateTracker(this.config),
+    };
+    this.pcmEstimates = {
+      'pcm-realtime': this.pcmTrackers['pcm-realtime'].update(
+        'pcm-realtime', 'PCM REALTIME', null, 0, 0, 'PCM入力待ち',
+      ),
+      'pcm-beatroot': this.pcmTrackers['pcm-beatroot'].update(
+        'pcm-beatroot', 'PCM BEATROOT', null, 0, 0, 'PCM入力待ち',
+      ),
+    };
+  }
+
+  updatePcmEstimate(
+    id: 'pcm-realtime' | 'pcm-beatroot',
+    bpm: number | null,
+    confidence: number,
+    at: number,
+    detail: string,
+  ): void {
+    this.pcmUpdatedAt[id] = at;
+    this.pcmEstimates[id] = this.pcmTrackers[id].update(
+      id,
+      id === 'pcm-realtime' ? 'PCM REALTIME' : 'PCM BEATROOT',
+      bpm,
+      confidence,
+      at,
+      detail,
+    );
   }
 
   process(bands: Float32Array, at: number): AnalysisFrame {
+    for (const id of ['pcm-realtime', 'pcm-beatroot'] as const) {
+      if (at - this.pcmUpdatedAt[id] > 6_000 && this.pcmEstimates[id].bpm !== null) {
+        this.updatePcmEstimate(id, null, 0, at, 'PCM推定が6秒以上更新されていません');
+      }
+    }
     const legacy = this.legacy.process(bands, at);
     const flux = this.flux.process(bands, at);
     const superflux = this.superflux.process(bands, at);
@@ -854,6 +901,8 @@ export class BpmComparisonAnalyzer {
       autocorr,
       comb,
       dp,
+      'pcm-realtime': this.pcmEstimates['pcm-realtime'],
+      'pcm-beatroot': this.pcmEstimates['pcm-beatroot'],
       pulse,
       consensus,
     };
@@ -866,6 +915,8 @@ export class BpmComparisonAnalyzer {
       autocorr,
       comb,
       dp,
+      pcmRealtime: this.pcmEstimates['pcm-realtime'],
+      pcmBeatroot: this.pcmEstimates['pcm-beatroot'],
       pulse,
       consensus,
       bassEnergy: legacy.bassEnergy,

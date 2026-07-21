@@ -30,7 +30,7 @@ app.innerHTML = `
     <div>
       <p class="eyebrow">KIRITAN AUDIO RESEARCH / STANDALONE</p>
       <h1>BPM COMPARISON LAB</h1>
-      <p class="lead">同じ音を8方式へ同時入力し、安定までの速さ・倍テンポ・取りこぼしをまとめて比較します。</p>
+      <p class="lead">同じ音を帯域8方式＋PCM 2方式へ同時入力し、安定までの速さ・倍テンポ・取りこぼしをまとめて比較します。</p>
     </div>
     <div class="live-badge" id="liveBadge"><span></span><b>STOPPED</b></div>
   </header>
@@ -96,16 +96,16 @@ app.innerHTML = `
         <button id="clearButton" class="secondary">消去</button>
       </div>
       <div class="table-wrap">
-        <table><thead><tr><th>曲</th><th>正解</th>${DETECTOR_DEFINITIONS.map((definition) => `<th>${definition.shortLabel}</th>`).join('')}<th>票</th></tr></thead><tbody id="recordRows"><tr class="empty"><td colspan="11">まだ記録がありません</td></tr></tbody></table>
+        <table><thead><tr><th>曲</th><th>正解</th>${DETECTOR_DEFINITIONS.map((definition) => `<th>${definition.shortLabel}</th>`).join('')}<th>票</th></tr></thead><tbody id="recordRows"><tr class="empty"><td colspan="${DETECTOR_IDS.length + 3}">まだ記録がありません</td></tr></tbody></table>
       </div>
     </section>
 
     <section class="panel method-panel">
       <div class="section-title"><span>05</span><div><h2>方式の範囲</h2><p>この128帯域プレビューだけで比較できるもの</p></div></div>
       <div class="method-grid">
-        <article><b>今回動かす 8方式</b><p>低域IOI、Spectral Flux、SuperFlux近似、自己相関、多帯域Comb、拍位置DP、状態遷移Pulse Bank、5方式合議を同時計算します。</p></article>
-        <article><b>本体へ移植しやすい</b><p>すべて周波数帯域値だけで動作します。Wallpaper Engineの128値コールバックへ移植可能な構成です。</p></article>
-        <article class="unavailable"><b>PCM経路が必要</b><p>TempoCNN・BeatNet・madmom RNNは波形またはMelスペクトログラムが必要なため、ここでは未実行として明示します。</p></article>
+        <article><b>今回動かす 10方式</b><p>帯域値だけで動く8方式に、AudioWorkletのリアルタイムPCM方式とBeatRoot系ローリング波形解析を追加しました。</p></article>
+        <article><b>PCM方式の入力</b><p>音声ファイル・PC音声・マイク・合成テストのすべてを同じWeb Audioグラフへ通し、波形を外部へ送信せずブラウザ内で解析します。</p></article>
+        <article class="unavailable"><b>AIモデルは保留</b><p>TempoCNNは非商用継承モデル、BeatNetはWindowsでPython・PyTorch等が必要です。配布負担とライセンスが軽い2方式を先に実測します。</p></article>
       </div>
     </section>
   </main>
@@ -141,12 +141,18 @@ function createAnalyzer(): BpmComparisonAnalyzer {
   return new BpmComparisonAnalyzer({ minBpm: min, maxBpm: max, stableMs: stable * 1000 });
 }
 
-const engine = new AudioInputEngine(handleInputFrame, (message, active) => {
-  element('sourceStatus').textContent = message;
-  const badge = element('liveBadge');
-  badge.classList.toggle('active', active);
-  badge.querySelector('b')!.textContent = active ? 'ANALYZING' : 'STOPPED';
-});
+const engine = new AudioInputEngine(
+  handleInputFrame,
+  (message, active) => {
+    element('sourceStatus').textContent = message;
+    const badge = element('liveBadge');
+    badge.classList.toggle('active', active);
+    badge.querySelector('b')!.textContent = active ? 'ANALYZING' : 'STOPPED';
+  },
+  (estimate) => analyzer.updatePcmEstimate(
+    estimate.id, estimate.bpm, estimate.confidence, estimate.at, estimate.detail,
+  ),
+);
 
 function handleInputFrame(input: InputFrame): void {
   latestSource = input.sourceLabel;
@@ -208,7 +214,8 @@ function drawTimeline(): void {
   }
   const colors: Record<string, string> = {
     legacy: '#62d6ff', flux: '#ffba6b', superflux: '#ff7f8c', autocorr: '#d99cff',
-    comb: '#54e0cf', dp: '#f1dd63', pulse: '#a8ff75', consensus: '#ffffff',
+    comb: '#54e0cf', dp: '#f1dd63', 'pcm-realtime': '#ff6fe1',
+    'pcm-beatroot': '#ff9d4f', pulse: '#a8ff75', consensus: '#ffffff',
   };
   for (const key of DETECTOR_IDS) {
     context.strokeStyle = colors[key];
@@ -304,7 +311,7 @@ function formatResult(value: number | null, expected: number): string {
 function renderRecords(): void {
   const rows = element<HTMLTableSectionElement>('recordRows');
   if (records.length === 0) {
-    rows.innerHTML = '<tr class="empty"><td colspan="11">まだ記録がありません</td></tr>';
+    rows.innerHTML = `<tr class="empty"><td colspan="${DETECTOR_IDS.length + 3}">まだ記録がありません</td></tr>`;
     return;
   }
   rows.innerHTML = records.map((record) => `<tr>

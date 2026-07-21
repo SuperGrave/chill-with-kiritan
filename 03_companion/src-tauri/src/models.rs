@@ -242,6 +242,7 @@ fn legacy_default_ui_state() -> UiState {
             "mirror": false, "colorMode": "mono", "showBpm": true,
             "bpmMethod": "consensus", "bpmLockSeconds": 5, "bpmOffset": 0,
             "rhythmMotionEnabled": true, "rhythmMotionStrength": 0.35,
+            "rhythmMotionHoldSeconds": 8,
             "standbyText": "AUDIO STANDBY"
         },
         "memoPanel": {
@@ -1105,6 +1106,10 @@ mod tests {
         assert_eq!(
             ui.settings["audioSpectrumPanel"]["rhythmMotionEnabled"],
             json!(true)
+        );
+        assert_eq!(
+            ui.settings["audioSpectrumPanel"]["rhythmMotionHoldSeconds"],
+            json!(8)
         );
         assert_eq!(ui.presets.len(), 2);
         assert!(ui.presets.iter().any(|preset| {

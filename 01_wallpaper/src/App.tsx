@@ -516,6 +516,7 @@ function App() {
   const [rhythmMotionSettings, setRhythmMotionSettings] = useState<RhythmMotionSettings>({
     enabled: defaultUiSettings.audioSpectrumPanel.rhythmMotionEnabled,
     strength: defaultUiSettings.audioSpectrumPanel.rhythmMotionStrength,
+    holdSeconds: defaultUiSettings.audioSpectrumPanel.rhythmMotionHoldSeconds,
   });
   const [backgroundQueueIndex, setBackgroundQueueIndex] = useState(0);
 
@@ -542,6 +543,7 @@ function App() {
       setRhythmMotionSettings({
         enabled: spectrum.rhythmMotionEnabled !== false,
         strength: finiteNumber(spectrum.rhythmMotionStrength, defaultUiSettings.audioSpectrumPanel.rhythmMotionStrength),
+        holdSeconds: finiteNumber(spectrum.rhythmMotionHoldSeconds, defaultUiSettings.audioSpectrumPanel.rhythmMotionHoldSeconds),
       });
       if (isRecord(wp.objectLayout)) {
         setLayout((prev) => applyObjectLayout(prev, wp.objectLayout));

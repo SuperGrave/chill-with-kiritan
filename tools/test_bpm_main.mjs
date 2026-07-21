@@ -17,7 +17,11 @@ execSync(
 const { BpmAnalyzer, chooseConsensusCandidate } = require(
   path.join(outDir, '02_ui-overlay', 'src', 'lib', 'bpmAnalyzer.js'),
 );
-const { RhythmMotionController } = require(
+const {
+  BPM_MOTION_BANK,
+  RhythmMotionController,
+  selectBpmMotionPreset,
+} = require(
   path.join(outDir, '01_wallpaper', 'src', 'lib', 'motion', 'rhythmMotionController.js'),
 );
 
@@ -88,6 +92,13 @@ for (const bpm of [88, 120, 174]) {
 }
 
 console.log('\n=== Rhythm motion bridge ===');
+ok(BPM_MOTION_BANK.length === 41, 'fixed bank contains 40..240 BPM in five-BPM steps');
+ok(
+  BPM_MOTION_BANK.every((preset, index) => preset.bpm === 40 + index * 5),
+  'every prepared motion-bank entry is exactly five BPM apart',
+);
+ok(selectBpmMotionPreset(128)?.bpm === 130, '128 BPM selects the prepared 130 BPM motion');
+ok(selectBpmMotionPreset(127)?.bpm === 125, '127 BPM selects the prepared 125 BPM motion');
 {
   const controller = new RhythmMotionController();
   let frame = controller.update(0, 1 / 60, { enabled: true, strength: 1, mode: 'work_normal' });
@@ -104,14 +115,14 @@ console.log('\n=== Rhythm motion bridge ===');
   ok(peak > 0 && peak < 0.04, 'head nod is visible but remains a small additive offset');
   const sleep = controller.update(1200, 1, { enabled: true, strength: 1, mode: 'sleep_desk' });
   ok(sleep.weight < frame.weight, 'sleep mode fades rhythm motion out');
-  controller.rhythm({ status: 'detecting', lockedBpm: null });
-  const unlocked = controller.update(1400, 1, { enabled: true, strength: 1, mode: 'work_normal' });
-  ok(!unlocked.active, 'unlock stops producing rhythm offsets');
+  controller.rhythm({ status: 'detecting', lockedBpm: null, at: 1300 });
+  const unlocked = controller.update(1400, 1, { enabled: true, strength: 1, holdSeconds: 0, mode: 'work_normal' });
+  ok(!unlocked.active, 'zero-second hold stops producing rhythm offsets immediately');
 }
 
 console.log('\n=== music_listen rhythm figures ===');
 
-const musicInput = (strength = 0.35) => ({ enabled: true, strength, mode: 'music_listen' });
+const musicInput = (strength = 0.35, holdSeconds = 8) => ({ enabled: true, strength, holdSeconds, mode: 'music_listen' });
 
 /** Run the controller at 60fps up to endMs, returning the last frame. */
 function settleMusic(controller, fromMs, endMs) {
@@ -120,6 +131,46 @@ function settleMusic(controller, fromMs, endMs) {
     frame = controller.update(at, 1 / 60, musicInput());
   }
   return frame;
+}
+
+{
+  // Same-bank jitter: re-locking 128 -> 132 selects 130 both times and must
+  // neither retime nor restart the fixed oscillator.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 128, lockedAt: 0 });
+  settleMusic(c, 0, 2000);
+  const before = c.update(2450, 1 / 60, musicInput());
+  c.rhythm({ status: 'detecting', lockedBpm: null, at: 2450 });
+  c.sync({ bpm: 132, lockedAt: 2700 });
+  const after = c.update(2700, 1 / 60, musicInput());
+  const expectedAdvance = (2700 - 2450) / (60_000 / 130);
+  const actualAdvance = ((after.beatPhase - before.beatPhase) % 1 + 1) % 1;
+  ok(before.bpm === 130 && after.bpm === 130, 'same five-BPM range keeps the selected 130 BPM bank');
+  ok(Math.abs(actualAdvance - expectedAdvance) < 0.002, 'same-bank re-lock continues phase instead of restarting');
+}
+
+{
+  // A real bank change preserves fractional phase while choosing the new
+  // fixed speed. This avoids a one-frame body snap at the hand-off.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 128, lockedAt: 0 });
+  settleMusic(c, 0, 2000);
+  const before = c.update(2345, 1 / 60, musicInput());
+  c.sync({ bpm: 136, lockedAt: 2345 });
+  const after = c.update(2345, 1 / 60, musicInput());
+  ok(after.bpm === 135, 'crossing a range boundary selects the next prepared bank');
+  ok(Math.abs(after.beatPhase - before.beatPhase) < 0.002, 'bank change preserves fractional beat phase');
+}
+
+{
+  // Raw onset jitter may update energy, but the selected bank owns phase.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 128, lockedAt: 0 });
+  settleMusic(c, 0, 2000);
+  const before = c.update(2200, 1 / 60, musicInput());
+  c.beat({ at: 2297, lockedBpm: 128, energy: 0.9 });
+  const after = c.update(2200, 1 / 60, musicInput());
+  ok(Math.abs(after.beatPhase - before.beatPhase) < 0.00001, 'noisy onset events do not tug the fixed-bank phase');
 }
 
 {
@@ -256,17 +307,27 @@ function settleMusic(controller, fromMs, endMs) {
 }
 
 {
-  // Unlock: losing the BPM fades everything out, including the smile.
+  // Unlock grace period: keep playing, preserve same-bank phase on re-lock,
+  // then stop only after the configured duration really expires.
   const c = new RhythmMotionController();
   c.sync({ bpm: 96, lockedAt: 0 });
   const grooving = settleMusic(c, 0, 2000);
   ok(grooving.active, 'locked BPM grooves in music_listen');
-  c.rhythm({ status: 'detecting', lockedBpm: null });
-  let frame = null;
-  for (let at = 2000; at <= 5000; at += 1000 / 60) {
-    frame = c.update(at, 1 / 60, musicInput());
+  c.rhythm({ status: 'detecting', lockedBpm: null, at: 2000 });
+  const held = c.update(4900, 1 / 60, musicInput(0.35, 3));
+  ok(held.active && held.bpm === 95, 'motion keeps running until the configured loss grace expires');
+  const phaseBeforeRelock = held.beatPhase;
+  c.sync({ bpm: 97, lockedAt: 4900 });
+  const relocked = c.update(4900, 1 / 60, musicInput(0.35, 3));
+  ok(Math.abs(relocked.beatPhase - phaseBeforeRelock) < 0.00001, 'same-bank re-lock cancels loss timer without restarting motion');
+  c.rhythm({ status: 'detecting', lockedBpm: null, at: 5000 });
+  const almostExpired = c.update(7999, 1 / 60, musicInput(0.35, 3));
+  ok(almostExpired.active, 'renewed loss timer runs for its full configured duration');
+  let frame = c.update(8000, 1 / 60, musicInput(0.35, 3));
+  ok(!frame.active, 'motion stops when the loss grace period expires');
+  for (let at = 8000; at <= 11_000; at += 1000 / 60) {
+    frame = c.update(at, 1 / 60, musicInput(0.35, 3));
   }
-  ok(!frame.active, 'unlock returns her to the listening idle');
   ok(frame.smile < 0.03, 'the smile relaxes after the music stops');
 }
 

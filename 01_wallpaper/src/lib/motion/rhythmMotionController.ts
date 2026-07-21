@@ -6,6 +6,8 @@ export interface RhythmSyncSignal {
 export interface RhythmStateSignal {
   status: 'standby' | 'detecting' | 'locked';
   lockedBpm: number | null;
+  /** Monotonic event time. Supplying it makes the BPM-loss grace period exact. */
+  at?: number;
 }
 
 export interface RhythmBeatSignal {
@@ -17,6 +19,8 @@ export interface RhythmBeatSignal {
 export interface RhythmMotionInput {
   enabled: boolean;
   strength: number;
+  /** Seconds to keep the selected motion bank running after BPM lock is lost. */
+  holdSeconds?: number;
   mode?: string | null;
 }
 
@@ -114,6 +118,52 @@ const REFERENCE_STRENGTH = 0.35;
 /** Above this BPM the music-figure head nod spans 2 beats (never buzzes). */
 const NOD_HALF_TIME_BPM = 150;
 
+/** Fixed motion-bank range. Every entry is authored on a five-BPM grid. */
+export const BPM_MOTION_BANK_MIN = 40;
+export const BPM_MOTION_BANK_MAX = 240;
+export const BPM_MOTION_BANK_STEP = 5;
+export const DEFAULT_RHYTHM_MOTION_HOLD_SECONDS = 8;
+
+export interface BpmMotionPreset {
+  bpm: number;
+  beatMs: number;
+  swayCycleMs: number;
+  tapBeats: 1 | 2;
+  nodBeats: 1 | 2;
+  openingFigure: Exclude<RhythmFigure, 'groove'>;
+}
+
+/**
+ * Prepared fixed-speed loops. Detection jitter can only select another entry;
+ * it can no longer continuously stretch the motion on every estimate.
+ */
+export const BPM_MOTION_BANK: readonly BpmMotionPreset[] = Object.freeze(
+  Array.from(
+    { length: (BPM_MOTION_BANK_MAX - BPM_MOTION_BANK_MIN) / BPM_MOTION_BANK_STEP + 1 },
+    (_, index): BpmMotionPreset => {
+      const bpm = BPM_MOTION_BANK_MIN + index * BPM_MOTION_BANK_STEP;
+      const beatMs = 60_000 / bpm;
+      return Object.freeze({
+        bpm,
+        beatMs,
+        swayCycleMs: beatMs * SWAY_CYCLE_BEATS,
+        tapBeats: bpm > TAP_HALF_TIME_BPM ? 2 : 1,
+        nodBeats: bpm > NOD_HALF_TIME_BPM ? 2 : 1,
+        openingFigure: bpm <= SWAY_MAX_BPM ? 'sway' : 'fingertap',
+      });
+    },
+  ),
+);
+
+export function selectBpmMotionPreset(rawBpm: number): BpmMotionPreset | null {
+  if (!Number.isFinite(rawBpm) || rawBpm < 30 || rawBpm > 300) return null;
+  const bucket = Math.max(
+    BPM_MOTION_BANK_MIN,
+    Math.min(BPM_MOTION_BANK_MAX, Math.round(rawBpm / BPM_MOTION_BANK_STEP) * BPM_MOTION_BANK_STEP),
+  );
+  return BPM_MOTION_BANK[(bucket - BPM_MOTION_BANK_MIN) / BPM_MOTION_BANK_STEP] ?? null;
+}
+
 /**
  * Percussive tap envelope over one tap period. 0 = fingers resting on the
  * keys; 1 = raised. The fall accelerates into phase 1 so the strike lands ON
@@ -137,8 +187,9 @@ function tapLiftCurve(phase: number): number {
  * wrist stays planted while the torso sways). That keeps hand pins, props,
  * transitions and authored motion intact.
  *
- * Everything is computed from the beat-phase oscillator each frame, so a BPM
- * re-sync changes the figure speed on the very next frame — no clip restarts.
+ * Everything is computed from one of the fixed five-BPM oscillators. A same-
+ * bucket re-lock keeps the oscillator running; a real bucket change preserves
+ * beat phase and crossfades the tempo-appropriate opening figure.
  *
  * Outside music_listen the controller keeps its original behaviour: a tiny
  * additive groove (small nod + sway) scaled well below the authored motion.
@@ -146,8 +197,10 @@ function tapLiftCurve(phase: number): number {
  * and 指トントン (finger tap) — rotating every few bars with a crossfade.
  */
 export class RhythmMotionController {
-  private bpm: number | null = null;
+  private preset: BpmMotionPreset | null = null;
   private phaseAnchorMs = 0;
+  private lostAtMs: number | null = null;
+  private lastUpdateMs = 0;
   private weight = 0;
   private lastEnergy = 0.5;
   private smile = 0;
@@ -159,54 +212,63 @@ export class RhythmMotionController {
   private figureBlend = 1; // 0 = fully prevFigure, 1 = fully current
 
   sync(signal: RhythmSyncSignal): void {
-    if (!Number.isFinite(signal.bpm) || signal.bpm < 30 || signal.bpm > 300) return;
-    const prevBpm = this.bpm;
-    this.bpm = signal.bpm;
-    this.phaseAnchorMs = Number.isFinite(signal.lockedAt) ? signal.lockedAt : 0;
-    // A (re)lock re-baselines the figure span on the new beat grid. A fresh
-    // session — or a real tempo change (new song), as opposed to a ±few-BPM
-    // re-estimate wobble — also re-picks the tempo-appropriate opening figure.
-    this.figureStartBeat = this.beatFloat(this.phaseAnchorMs);
-    this.prevFigure = null;
-    this.figureBlend = 1;
-    if (prevBpm === null || Math.abs(prevBpm - signal.bpm) > 6) {
-      this.figure = this.bpm <= SWAY_MAX_BPM ? 'sway' : 'fingertap';
-    } else if (this.figure === 'sway' && this.bpm > SWAY_MAX_BPM) {
-      this.figure = 'fingertap';
+    const next = selectBpmMotionPreset(signal.bpm);
+    if (!next) return;
+    const at = Number.isFinite(signal.lockedAt) ? signal.lockedAt : this.lastUpdateMs;
+    const previous = this.preset;
+    this.lostAtMs = null;
+
+    // Re-locking into the same five-BPM range only cancels the loss timer.
+    // Keeping the oscillator and figure state intact prevents a visible jump.
+    if (previous?.bpm === next.bpm) return;
+
+    const oldBeatFloat = previous ? this.beatFloat(at) : 0;
+    const oldBeatPhase = ((oldBeatFloat % 1) + 1) % 1;
+    this.preset = next;
+    // A bank change preserves the current fractional beat so tempo switches
+    // do not snap the body back to the first frame. A fresh lock starts at 0.
+    this.phaseAnchorMs = previous ? at - oldBeatPhase * next.beatMs : at;
+    this.figureStartBeat = this.beatFloat(at);
+
+    const nextFigure = next.openingFigure;
+    if (!previous) {
+      this.figure = nextFigure;
+      this.prevFigure = null;
+      this.figureBlend = 1;
+    } else if (this.figure !== nextFigure) {
+      this.prevFigure = this.figure;
+      this.figure = nextFigure;
+      this.figureBlend = 0;
     }
   }
 
   rhythm(signal: RhythmStateSignal): void {
-    if (signal.status !== 'locked' || signal.lockedBpm === null) this.bpm = null;
+    if (signal.status === 'locked' && signal.lockedBpm !== null) return;
+    if (this.preset !== null && this.lostAtMs === null) {
+      const at = Number(signal.at);
+      this.lostAtMs = Number.isFinite(at) ? at : this.lastUpdateMs;
+    }
   }
 
   beat(signal: RhythmBeatSignal): void {
-    if (this.bpm === null || signal.lockedBpm === null) return;
-    const period = 60_000 / this.bpm;
-    if (this.phaseAnchorMs <= 0) {
-      this.phaseAnchorMs = signal.at;
-    } else {
-      // Pull the local oscillator toward the closest observed onset. The
-      // partial correction filters snare subdivisions and timestamp jitter.
-      const nearest = this.phaseAnchorMs + Math.round((signal.at - this.phaseAnchorMs) / period) * period;
-      const error = Math.max(-period * 0.22, Math.min(period * 0.22, signal.at - nearest));
-      this.phaseAnchorMs += error * 0.55;
-    }
+    if (this.preset === null || signal.lockedBpm === null) return;
+    // The selected motion bank owns phase after lock. Per-onset corrections
+    // made noisy snare/subdivision detections visibly tug the character.
     this.lastEnergy = clamp01(Number.isFinite(signal.energy) ? signal.energy : 0.5);
   }
 
   /** Continuous beats elapsed since the phase anchor (fractional). */
   private beatFloat(nowMs: number): number {
-    if (this.bpm === null) return 0;
-    return (nowMs - this.phaseAnchorMs) / (60_000 / this.bpm);
+    if (this.preset === null) return 0;
+    return (nowMs - this.phaseAnchorMs) / this.preset.beatMs;
   }
 
   private rotateFigureIfDue(nowMs: number): void {
-    if (this.bpm === null) return;
+    if (this.preset === null) return;
     const beats = this.beatFloat(nowMs) - this.figureStartBeat;
     if (beats < FIGURE_SPAN_BEATS) return;
     const next: RhythmFigure =
-      this.bpm <= SWAY_MAX_BPM ? (this.figure === 'sway' ? 'fingertap' : 'sway') : 'fingertap';
+      this.preset.bpm <= SWAY_MAX_BPM ? (this.figure === 'sway' ? 'fingertap' : 'sway') : 'fingertap';
     if (next === this.figure) {
       this.figureStartBeat += FIGURE_SPAN_BEATS; // stay, restart the span
       return;
@@ -224,7 +286,8 @@ export class RhythmMotionController {
     out.chestPitch = 0; out.chestRoll = 0; out.spineRoll = 0;
     out.leftShoulderRoll = 0; out.rightShoulderRoll = 0;
     out.rightHandLift = 0; out.rightFingerLift = 0;
-    const bpm = this.bpm ?? 120;
+    const preset = this.preset;
+    const bpm = preset?.bpm ?? 120;
     const beatPhase = ((beatFloat % 1) + 1) % 1;
 
     // Groove keeps its original decaying pulse (test/back-compat for the
@@ -234,7 +297,7 @@ export class RhythmMotionController {
     // 2026-07-19). cos(2π·phase) peaks exactly ON the beat, is smooth across
     // the wrap, and spans 2 beats at racing tempi so the head never buzzes.
     const nod = Math.sin(Math.min(1, beatPhase * 4) * Math.PI) * Math.exp(-beatPhase * 4.2);
-    const nodBeats = bpm > NOD_HALF_TIME_BPM ? 2 : 1;
+    const nodBeats = preset?.nodBeats ?? (bpm > NOD_HALF_TIME_BPM ? 2 : 1);
     const nodPhase = ((beatFloat / nodBeats) % 1 + 1) % 1;
     const smoothNod = Math.cos(nodPhase * Math.PI * 2);
 
@@ -255,7 +318,7 @@ export class RhythmMotionController {
     } else if (figure === 'fingertap') {
       // 指トントン: palm + fingers lift together and drop ON the beat. Above
       // TAP_HALF_TIME_BPM the tap rides every 2nd beat to stay readable.
-      const tapBeats = bpm > TAP_HALF_TIME_BPM ? 2 : 1;
+      const tapBeats = preset?.tapBeats ?? (bpm > TAP_HALF_TIME_BPM ? 2 : 1);
       const tapPhase = ((beatFloat / tapBeats) % 1 + 1) % 1;
       const lift = tapLiftCurve(tapPhase);
       out.rightHandLift = lift * 0.085;
@@ -286,8 +349,16 @@ export class RhythmMotionController {
   };
 
   update(nowMs: number, deltaSeconds: number, input: RhythmMotionInput): RhythmMotionFrame {
+    this.lastUpdateMs = nowMs;
+    const holdSeconds = Number.isFinite(Number(input.holdSeconds))
+      ? Math.max(0, Math.min(60, Number(input.holdSeconds)))
+      : DEFAULT_RHYTHM_MOTION_HOLD_SECONDS;
+    if (this.preset !== null && this.lostAtMs !== null && nowMs - this.lostAtMs >= holdSeconds * 1000) {
+      this.preset = null;
+    }
+    const bpm = this.preset?.bpm ?? null;
     const music = input.mode === 'music_listen';
-    const target = input.enabled && this.bpm !== null
+    const target = input.enabled && this.preset !== null
       ? clamp01(input.strength) * (music ? 1 : modeScale(input.mode))
       : 0;
     const response = target > this.weight ? 5.5 : 3.2;
@@ -301,9 +372,9 @@ export class RhythmMotionController {
     this.smile += (smileTarget - this.smile) * (1 - Math.exp(-dt * smileResponse));
     if (this.smile < 0.001) this.smile = 0;
 
-    if (this.weight < 0.0001 || this.bpm === null) {
+    if (this.weight < 0.0001 || this.preset === null) {
       if (target === 0 && this.weight < 0.0001) this.weight = 0;
-      return { ...ZERO_FRAME, bpm: this.bpm, weight: this.weight, smile: this.smile };
+      return { ...ZERO_FRAME, bpm, weight: this.weight, smile: this.smile };
     }
 
     const beatFloat = this.beatFloat(nowMs);
@@ -343,7 +414,7 @@ export class RhythmMotionController {
       }
       return {
         active: true,
-        bpm: this.bpm,
+        bpm,
         weight: this.weight,
         figure: this.figure,
         beatPhase,
@@ -367,7 +438,7 @@ export class RhythmMotionController {
     const w = this.weight * energy;
     return {
       active: true,
-      bpm: this.bpm,
+      bpm,
       weight: this.weight,
       figure: 'groove',
       beatPhase,

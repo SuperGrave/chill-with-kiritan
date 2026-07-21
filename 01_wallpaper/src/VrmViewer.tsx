@@ -114,6 +114,7 @@ export interface MotionDirectorSettings {
 export interface RhythmMotionSettings {
   enabled?: boolean;
   strength?: number;
+  holdSeconds?: number;
 }
 
 // Path a user-supplied VRM Animation is loaded from (see public/motions/README).
@@ -453,7 +454,11 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       rhythmMotionRef.current.sync({ bpm: event.detail.bpm, lockedAt: event.detail.lockedAt });
     };
     const onRhythm = (event: CustomEvent<AudioRhythmInfo>) => {
-      rhythmMotionRef.current.rhythm({ status: event.detail.status, lockedBpm: event.detail.lockedBpm });
+      rhythmMotionRef.current.rhythm({
+        status: event.detail.status,
+        lockedBpm: event.detail.lockedBpm,
+        at: performance.now(),
+      });
     };
     const onBeat = (event: CustomEvent<AudioBeatEventDetail>) => {
       rhythmMotionRef.current.beat({
@@ -2522,6 +2527,7 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           const rhythmFrame = rhythmMotionRef.current.update(performance.now(), updateDelta, {
             enabled: rhythmSettings.enabled !== false,
             strength: Number.isFinite(Number(rhythmSettings.strength)) ? Number(rhythmSettings.strength) : 0.35,
+            holdSeconds: Number.isFinite(Number(rhythmSettings.holdSeconds)) ? Number(rhythmSettings.holdSeconds) : 8,
             mode: directorRef.current?.status().mode ?? null,
           });
           rhythmSmileRef.current = rhythmFrame.smile;

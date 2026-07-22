@@ -119,6 +119,8 @@ pub fn build_router(shared: Shared) -> Router {
             "/api/audio-rhythm/state",
             get(get_audio_rhythm_state).post(post_audio_rhythm_state),
         )
+        .route("/api/audio-rhythm/reset", post(reset_audio_rhythm))
+        .route("/api/audio-pcm/chunk", get(get_audio_pcm_chunk))
         // ── Display settings + presets ───────────────────────────────
         .route("/api/ui", get(get_ui).put(put_ui))
         .route("/api/presets", get(list_presets).post(create_preset))
@@ -615,6 +617,41 @@ async fn post_audio_rhythm_state(State(s): State<Shared>, Json(body): Json<Value
     });
     // Live runtime signal — deliberately NOT touch()/persist(), like kiritan.
     ok()
+}
+
+#[derive(Debug, Deserialize)]
+struct AudioPcmQuery {
+    #[serde(default)]
+    after: u64,
+}
+
+async fn get_audio_pcm_chunk(
+    State(s): State<Shared>,
+    Query(query): Query<AudioPcmQuery>,
+) -> Json<crate::pcm_capture::PcmChunkResponse> {
+    let pcm = { s.lock().unwrap().pcm_capture.clone() };
+    let response = pcm.lock().unwrap().chunk_after(query.after);
+    Json(response)
+}
+
+#[derive(Debug, Deserialize)]
+struct AudioRhythmResetBody {
+    reason: Option<String>,
+}
+
+async fn reset_audio_rhythm(
+    State(s): State<Shared>,
+    Json(body): Json<AudioRhythmResetBody>,
+) -> Json<Value> {
+    let pcm = { s.lock().unwrap().pcm_capture.clone() };
+    let mut state = pcm.lock().unwrap();
+    state.request_reset(body.reason.unwrap_or_else(|| "manual".into()));
+    Json(json!({
+        "ok": true,
+        "resetGeneration": state.reset_generation,
+        "resetReason": state.reset_reason,
+        "resetAt": state.reset_at,
+    }))
 }
 
 // ─── UI settings ───────────────────────────────────────────────────────────────

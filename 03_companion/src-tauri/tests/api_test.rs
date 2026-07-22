@@ -383,8 +383,8 @@ async fn audio_rhythm_state_post_and_get() {
     // The overlay's snapshot (schema owned by audioSpectrum.ts) round-trips
     // as-is; a client-echoed receivedAt is replaced by the server stamp.
     let body = serde_json::json!({
-        "source": "wallpaper-engine",
-        "method": "consensus",
+        "source": "companion-pcm",
+        "method": "pcm-beatroot",
         "stableMs": 5000,
         "bpmOffset": 0,
         "status": "locked",
@@ -392,8 +392,7 @@ async fn audio_rhythm_state_post_and_get() {
         "outputBpm": 128,
         "receivedAt": "1999-01-01T00:00:00.000Z",
         "estimates": [
-            { "id": "consensus", "status": "locked", "lockedBpm": 128, "detectedBpm": 128.4, "confidence": 0.9, "support": 3 },
-            { "id": "low-band", "status": "locked", "lockedBpm": 127, "detectedBpm": 127.2, "confidence": 0.8, "support": 1 }
+            { "id": "pcm-beatroot", "status": "locked", "lockedBpm": 128, "detectedBpm": 128.4, "confidence": 0.9, "support": 1 }
         ],
     });
     let posted: serde_json::Value = auth(c.post(format!("{base}/api/audio-rhythm/state")), &token)
@@ -414,9 +413,8 @@ async fn audio_rhythm_state_post_and_get() {
         .json()
         .await
         .unwrap();
-    assert_eq!(got["method"], "consensus");
-    assert_eq!(got["estimates"][0]["id"], "consensus");
-    assert_eq!(got["estimates"][1]["lockedBpm"], 127);
+    assert_eq!(got["method"], "pcm-beatroot");
+    assert_eq!(got["estimates"][0]["id"], "pcm-beatroot");
     let received_at = got["receivedAt"].as_str().unwrap_or_default();
     assert!(
         !received_at.is_empty() && !received_at.starts_with("1999"),
@@ -442,7 +440,40 @@ async fn audio_rhythm_state_post_and_get() {
         .json()
         .await
         .unwrap();
-    assert_eq!(still["method"], "consensus");
+    assert_eq!(still["method"], "pcm-beatroot");
+
+    let before_reset: serde_json::Value = c
+        .get(format!("{base}/api/audio-pcm/chunk?after=0"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let reset: serde_json::Value = auth(c.post(format!("{base}/api/audio-rhythm/reset")), &token)
+        .json(&serde_json::json!({ "reason": "test-manual" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(reset["ok"], true);
+    let after_reset: serde_json::Value = c
+        .get(format!("{base}/api/audio-pcm/chunk?after=0"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        after_reset["resetGeneration"].as_u64(),
+        before_reset["resetGeneration"]
+            .as_u64()
+            .map(|value| value + 1)
+    );
+    assert_eq!(after_reset["resetReason"], "test-manual");
 }
 
 #[tokio::test]

@@ -290,6 +290,15 @@ export type AudioRhythmRuntimeState = {
   outputBpm?: number | null;
   confidence?: number;
   stableForMs?: number;
+  accepted?: boolean;
+  retainedBpm?: number | null;
+  challengerBpm?: number | null;
+  challengerForMs?: number;
+  captureStatus?: string;
+  resetGeneration?: number;
+  resetReason?: string;
+  resetAt?: string | null;
+  detail?: string;
   estimates?: AudioRhythmEstimate[];
   receivedAt?: string;
 };
@@ -332,6 +341,7 @@ export const api = {
   kiritanState: () => req<KiritanRuntimeState | null>("/kiritan/state"),
   // Overlay-reported live BPM analyzer snapshot (null until it posts).
   audioRhythmState: () => req<AudioRhythmRuntimeState | null>("/audio-rhythm/state"),
+  audioRhythmReset: (reason = "manual") => post<{ ok: boolean; resetGeneration: number }>("/audio-rhythm/reset", { reason }),
 
   // Data folder / backup
   dataDir: () => req<{ ok: boolean; path: string }>("/data-dir"),

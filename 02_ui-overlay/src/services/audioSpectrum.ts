@@ -21,15 +21,13 @@ import type {
 } from '../lib/spectrumMath';
 import {
   BpmAnalyzer,
-  isBpmDetectionMethod,
-  type BpmAnalysisFrame,
-  type BpmDetectionMethod,
-  type BpmDetectorId,
-  type BpmDetectorEstimate,
 } from '../lib/bpmAnalyzer';
 import { pushAudioRhythmState } from './companionClient';
+import { pcmBeatroot, type BeatrootSnapshot } from './pcmBeatroot';
 
 export type AudioFrameSource = 'wallpaper-engine' | 'mock' | 'none';
+export type AudioRhythmSource = AudioFrameSource | 'companion-pcm';
+export type AudioBpmMethod = 'pcm-beatroot';
 
 export interface AudioFrameInfo {
   /** Latest capped frame (length 128). Reused buffer — copy if you keep it. */
@@ -46,10 +44,10 @@ export interface AudioFrameInfo {
 }
 
 export interface AudioRhythmInfo extends TempoSnapshot {
-  source: AudioFrameSource;
-  method: BpmDetectionMethod;
+  source: AudioRhythmSource;
+  method: AudioBpmMethod;
   support: number;
-  contributors: BpmDetectorId[];
+  contributors: string[];
   /** User taste adjustment (whole BPM, clamped ±10) applied to the locked bpm only. */
   bpmOffset: number;
   /** lockedBpm + bpmOffset — the value shown as final and handed to Kiritan. Null until locked. */
@@ -62,7 +60,7 @@ export interface AudioBeatEventDetail {
   source: AudioFrameSource;
   detectedBpm: number | null;
   lockedBpm: number | null;
-  method: BpmDetectionMethod;
+  method: AudioBpmMethod;
 }
 
 /** Contract for the later character-motion consumer. No motion is applied here. */
@@ -76,10 +74,10 @@ export interface AudioBpmSyncEventDetail {
   confidence: number;
   stableForMs: number;
   lockedAt: number;
-  source: AudioFrameSource;
-  method: BpmDetectionMethod;
+  source: AudioRhythmSource;
+  method: AudioBpmMethod;
   support: number;
-  contributors: BpmDetectorId[];
+  contributors: string[];
 }
 
 type Subscriber = (info: AudioFrameInfo) => void;
@@ -96,10 +94,10 @@ declare global {
 }
 
 const frame = new Float32Array(WE_FRAME_LENGTH);
-let selectedMethod: BpmDetectionMethod = 'consensus';
+const selectedMethod: AudioBpmMethod = 'pcm-beatroot';
 let stableMs = DEFAULT_TEMPO_CONFIG.stableMs;
 let bpmOffset = 0;
-let analyzer = new BpmAnalyzer({ stableMs });
+const analyzer = new BpmAnalyzer({ stableMs });
 const subscribers = new Set<Subscriber>();
 
 export const BPM_OFFSET_RANGE = 10;
@@ -115,7 +113,13 @@ function toOutputBpm(lockedBpm: number | null): number | null {
 }
 
 const initialRhythm: AudioRhythmInfo = {
-  ...analyzer.snapshot().estimates[selectedMethod],
+  status: 'standby',
+  detectedBpm: null,
+  lockedBpm: null,
+  confidence: 0,
+  stableForMs: 0,
+  lockedAt: null,
+  lastBeatAt: null,
   source: 'none',
   method: selectedMethod,
   support: 0,
@@ -159,7 +163,7 @@ function publishRhythmState(rhythm: AudioRhythmInfo, force = false): void {
   window.dispatchEvent(new CustomEvent('kiritan:audio-rhythm', { detail: { ...rhythm } }));
 }
 
-function updateRhythm(estimate: BpmDetectorEstimate, source: AudioFrameSource, force = false): void {
+function updateRhythm(estimate: BeatrootSnapshot, source: AudioRhythmSource, force = false): void {
   const rhythm: AudioRhythmInfo = {
     status: estimate.status,
     detectedBpm: estimate.detectedBpm,
@@ -167,11 +171,11 @@ function updateRhythm(estimate: BpmDetectorEstimate, source: AudioFrameSource, f
     confidence: estimate.confidence,
     stableForMs: estimate.stableForMs,
     lockedAt: estimate.lockedAt,
-    lastBeatAt: estimate.lastBeatAt,
+    lastBeatAt: null,
     source,
     method: selectedMethod,
-    support: estimate.support,
-    contributors: [...estimate.contributors],
+    support: estimate.accepted ? 1 : 0,
+    contributors: estimate.accepted ? ['pcm-beatroot'] : [],
     bpmOffset,
     outputBpm: toOutputBpm(estimate.lockedBpm),
   };
@@ -203,30 +207,18 @@ function updateRhythm(estimate: BpmDetectorEstimate, source: AudioFrameSource, f
   }
 }
 
-function resetRhythmForSource(source: AudioFrameSource, at: number): void {
-  analyzer = new BpmAnalyzer({ stableMs });
-  lastSyncLockedAt = null;
-  updateRhythm(analyzer.expire(at).estimates[selectedMethod], source, true);
-}
-
-// Live estimator snapshot for the Companion's スペクトラム settings tab: while
-// frames are flowing, a 1 Hz throttled fire-and-forget POST carries what every
-// detector is currently reading (the tab treats a stale receivedAt as 停止中).
+// Live BeatRoot snapshot for the Companion's スペクトラム settings tab. A
+// throttled fire-and-forget POST carries the retained/challenger state; the tab
+// treats a stale receivedAt as 停止中.
 const AUDIO_RHYTHM_POST_MS = 1000;
-const AUDIO_RHYTHM_ESTIMATE_IDS: readonly BpmDetectionMethod[] = [
-  'consensus',
-  'low-band',
-  'spectral-flux',
-  'autocorrelation',
-];
 let lastRhythmPostAt = 0;
 
-function maybePostRhythmState(analysis: BpmAnalysisFrame, source: AudioFrameSource, now: number): void {
+function maybePostRhythmState(snapshot: BeatrootSnapshot, now: number): void {
   if (now - lastRhythmPostAt < AUDIO_RHYTHM_POST_MS) return;
   lastRhythmPostAt = now;
   const rhythm = info.rhythm;
   void pushAudioRhythmState({
-    source,
+    source: 'companion-pcm',
     method: selectedMethod,
     stableMs,
     bpmOffset,
@@ -236,34 +228,45 @@ function maybePostRhythmState(analysis: BpmAnalysisFrame, source: AudioFrameSour
     outputBpm: rhythm.outputBpm,
     confidence: rhythm.confidence,
     stableForMs: rhythm.stableForMs,
-    estimates: AUDIO_RHYTHM_ESTIMATE_IDS.map((id) => {
-      const estimate = analysis.estimates[id];
-      return {
-        id,
-        status: estimate.status,
-        detectedBpm: estimate.detectedBpm,
-        lockedBpm: estimate.lockedBpm,
-        confidence: estimate.confidence,
-        stableForMs: estimate.stableForMs,
-        support: estimate.support,
-        contributors: [...estimate.contributors],
-      };
-    }),
+    accepted: snapshot.accepted,
+    retainedBpm: snapshot.retainedBpm,
+    challengerBpm: snapshot.challengerBpm,
+    challengerForMs: snapshot.challengerForMs,
+    captureStatus: snapshot.captureStatus,
+    resetGeneration: snapshot.resetGeneration,
+    resetReason: snapshot.resetReason,
+    resetAt: snapshot.resetAt,
+    detail: snapshot.detail,
+    estimates: [{
+      id: 'pcm-beatroot',
+      status: snapshot.status,
+      detectedBpm: snapshot.detectedBpm,
+      lockedBpm: snapshot.lockedBpm,
+      retainedBpm: snapshot.retainedBpm,
+      confidence: snapshot.confidence,
+      accepted: snapshot.accepted,
+      stableForMs: snapshot.stableForMs,
+      support: snapshot.accepted ? 1 : 0,
+      contributors: snapshot.accepted ? ['pcm-beatroot'] : [],
+    }],
   });
 }
 
+pcmBeatroot.subscribe((snapshot) => {
+  const now = performance.now();
+  updateRhythm(snapshot, 'companion-pcm', true);
+  maybePostRhythmState(snapshot, now);
+});
+
 function publishFrame(raw: ArrayLike<number>, source: AudioFrameSource): void {
   const now = performance.now();
-  if (info.source !== 'none' && info.source !== source) resetRhythmForSource(source, now);
   capFrame(raw, frame);
   const analysis = analyzer.process(frame, now);
-  const selected = analysis.estimates[selectedMethod];
   const onset = analysis.estimates['spectral-flux'].onset || analysis.estimates['low-band'].onset;
   info.seq += 1;
   info.at = now;
   info.source = source;
   info.bassEnergy = analysis.bassEnergy;
-  updateRhythm(selected, source, selected.onset);
   if (onset) {
     // Fine-grained onset hook. The later motion code may use this only after it
     // has received kiritan:audio-bpm-sync; this module never touches the VRM.
@@ -273,14 +276,13 @@ function publishFrame(raw: ArrayLike<number>, source: AudioFrameSource): void {
           energy: Math.max(analysis.bassEnergy, Math.min(1, analysis.fluxStrength * 12)),
           at: info.at,
           source,
-          detectedBpm: selected.detectedBpm,
-          lockedBpm: selected.lockedBpm,
+          detectedBpm: info.rhythm.detectedBpm,
+          lockedBpm: info.rhythm.lockedBpm,
           method: selectedMethod,
         },
       }),
     );
   }
-  maybePostRhythmState(analysis, source, now);
   for (const cb of subscribers) cb(info);
 }
 
@@ -309,8 +311,11 @@ export function hasReceivedWallpaperEngineFrames(): boolean {
 
 export function getLatestFrameInfo(): AudioFrameInfo {
   const now = performance.now();
-  const selected = analyzer.expire(now).estimates[selectedMethod];
-  updateRhythm(selected, info.source);
+  analyzer.expire(now);
+  const snapshot = pcmBeatroot.getSnapshot();
+  if (snapshot.lockedBpm !== info.rhythm.lockedBpm || snapshot.status !== info.rhythm.status) {
+    updateRhythm(snapshot, 'companion-pcm');
+  }
   return info;
 }
 
@@ -325,20 +330,18 @@ export function getLatestRhythmInfo(): AudioRhythmInfo {
  */
 export function configureTempoTracking(options: {
   stableMs?: number;
-  method?: BpmDetectionMethod;
   bpmOffset?: number;
+  confidenceThreshold?: number;
+  windowSeconds?: number;
+  analysisIntervalSeconds?: number;
+  changeConfirmMs?: number;
+  periodicResetMinutes?: number;
 }): void {
-  let changed = false;
   if (typeof options.stableMs === 'number' && Number.isFinite(options.stableMs)) {
     const nextStableMs = Math.max(3_000, Math.min(12_000, Math.round(options.stableMs)));
     if (nextStableMs !== stableMs) {
       stableMs = nextStableMs;
-      changed = true;
     }
-  }
-  if (isBpmDetectionMethod(options.method) && options.method !== selectedMethod) {
-    selectedMethod = options.method;
-    changed = true;
   }
   let offsetChanged = false;
   if (typeof options.bpmOffset === 'number') {
@@ -348,15 +351,19 @@ export function configureTempoTracking(options: {
       offsetChanged = true;
     }
   }
-  if (changed) {
-    analyzer = new BpmAnalyzer({ stableMs });
-    lastSyncLockedAt = null;
-    updateRhythm(analyzer.snapshot().estimates[selectedMethod], info.source, true);
-  } else if (offsetChanged) {
+  pcmBeatroot.configure({
+    stableMs,
+    confidenceThreshold: options.confidenceThreshold,
+    windowSeconds: options.windowSeconds,
+    analysisIntervalSeconds: options.analysisIntervalSeconds,
+    changeConfirmMs: options.changeConfirmMs,
+    periodicResetMinutes: options.periodicResetMinutes,
+  });
+  if (offsetChanged) {
     // Keep the analyzer (and any active lock); clearing lastSyncLockedAt makes
     // updateRhythm re-dispatch kiritan:audio-bpm-sync with the new output bpm.
     lastSyncLockedAt = null;
-    updateRhythm(analyzer.expire(performance.now()).estimates[selectedMethod], info.source, true);
+    updateRhythm(pcmBeatroot.getSnapshot(), 'companion-pcm', true);
   }
 }
 

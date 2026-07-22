@@ -119,8 +119,14 @@ export const audioSpectrumPanelDefaults = {
   mirror: false,
   colorMode: 'mono' as 'mono' | 'heat',
   showBpm: true,
-  bpmMethod: 'consensus' as 'consensus' | 'low-band' | 'spectral-flux' | 'autocorrelation',
+  bpmMethod: 'pcm-beatroot' as const,
   bpmLockSeconds: 5,
+  bpmConfidenceThreshold: 0.7,
+  bpmAnalysisWindowSeconds: 14,
+  bpmAnalysisIntervalSeconds: 3,
+  bpmChangeConfirmSeconds: 9,
+  bpmPeriodicResetMinutes: 0,
+  bpmResetOnSpotifyTrackChange: true,
   // User taste adjustment added to the LOCKED bpm only (display + kiritan sync).
   // Detection itself always runs on the raw signal.
   bpmOffset: 0,

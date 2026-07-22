@@ -167,8 +167,33 @@ pub async fn refresh_spotify_once(shared: &Shared) -> Result<SpotifyState, Strin
             return Err(error);
         }
     };
-    let (previous_lyrics, data_dir) = {
+    let (previous_lyrics, data_dir, reset_pcm) = {
         let mut g = shared.lock().unwrap();
+        let previous_key = g
+            .state
+            .spotify
+            .track
+            .as_ref()
+            .and_then(services::spotify_track_key);
+        let next_key = track.as_ref().and_then(services::spotify_track_key);
+        let previous_playing = g
+            .state
+            .spotify
+            .track
+            .as_ref()
+            .is_some_and(|item| item.is_playing);
+        let next_playing = track.as_ref().is_some_and(|item| item.is_playing);
+        let reset_enabled = g
+            .state
+            .ui
+            .settings
+            .get("audioSpectrumPanel")
+            .and_then(|settings| settings.get("bpmResetOnSpotifyTrackChange"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true);
+        let reset_pcm = reset_enabled
+            && ((previous_key.is_some() && previous_key != next_key)
+                || (previous_playing && !next_playing));
         let lyrics = match &track {
             Some(sampled) if lyrics_match_track(&g.state.spotify.lyrics, sampled) => {
                 g.state.spotify.lyrics.clone()
@@ -184,8 +209,12 @@ pub async fn refresh_spotify_once(shared: &Shared) -> Result<SpotifyState, Strin
             error: None,
         };
         g.state.updated_at = now_iso();
-        (lyrics, g.data_dir.clone())
+        (lyrics, g.data_dir.clone(), reset_pcm)
     };
+    if reset_pcm {
+        let pcm = { shared.lock().unwrap().pcm_capture.clone() };
+        pcm.lock().unwrap().request_reset("spotify-track-change");
+    }
 
     if let Some(sampled) = &track {
         let lyrics =

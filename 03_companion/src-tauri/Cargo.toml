@@ -31,5 +31,6 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 dirs = "5"
 base64 = "0.22"
+wasapi = "0.23"
 tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"

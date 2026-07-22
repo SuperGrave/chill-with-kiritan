@@ -3,6 +3,7 @@
 pub mod api;
 pub mod lyrics_cache;
 pub mod models;
+pub mod pcm_capture;
 pub mod personal_news;
 pub mod services;
 pub mod startup;
@@ -39,6 +40,7 @@ pub fn run() {
     let shared: Shared = Arc::new(Mutex::new(AppState::load()));
     let state_for_api = Arc::clone(&shared);
     let state_for_tasks = Arc::clone(&shared);
+    let state_for_pcm = Arc::clone(&shared);
 
     tauri::Builder::default()
         // Must be registered first: it needs to intercept a second launch
@@ -83,6 +85,11 @@ pub fn run() {
             });
             // Background pollers (weather / news / spotify).
             tasks::spawn_all(state_for_tasks);
+            // Production BPM input: Windows system-output PCM via WASAPI loopback.
+            pcm_capture::spawn({
+                let g = state_for_pcm.lock().unwrap();
+                g.pcm_capture.clone()
+            });
 
             // System tray: left-click toggles the window (unchanged); the
             // attached menu (right-click, or the OS default for a tray with a

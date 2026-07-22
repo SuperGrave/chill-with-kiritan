@@ -24,6 +24,8 @@ pub struct AppState {
     /// Serializes automatic/manual Spotify sampling so a UI refresh cannot
     /// overlap the background poller and trigger an avoidable rate-limit burst.
     pub spotify_refresh_guard: Arc<tokio::sync::Mutex<()>>,
+    /// Short, memory-only WASAPI loopback ring buffer used by PCM BeatRoot.
+    pub pcm_capture: crate::pcm_capture::SharedPcmCapture,
 }
 
 pub type Shared = Arc<Mutex<AppState>>;
@@ -106,6 +108,7 @@ impl AppState {
                 .unwrap_or_default(),
             spotify_token: None,
             spotify_refresh_guard: Arc::new(tokio::sync::Mutex::new(())),
+            pcm_capture: crate::pcm_capture::new_shared(),
         }
     }
 

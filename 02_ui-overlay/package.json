@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "lucide-react": "^1.17.0",
+    "music-tempo": "^1.0.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

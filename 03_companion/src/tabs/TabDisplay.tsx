@@ -88,14 +88,6 @@ const kiritanSmallActionOptions = [
   { value: "amb_slp_mumble", label: "休憩: 寝言" },
 ];
 
-// スペクトラムタブのBPM判定方式（値は overlay bpmAnalyzer の id と一致）。
-const bpmMethodOptions = [
-  { value: "consensus", label: "コンセンサス（3方式の合議・推奨）", sub: "2/3 CONSENSUS" },
-  { value: "low-band", label: "低域ビート間隔", sub: "LOW-BAND IOI" },
-  { value: "spectral-flux", label: "全帯域の立ち上がり", sub: "SPECTRAL FLUX" },
-  { value: "autocorrelation", label: "自己相関", sub: "AUTOCORRELATION" },
-];
-
 /** 判定スナップショットがこの時間より古ければ「停止中」と見なす。 */
 const AUDIO_RHYTHM_STALE_MS = 5_000;
 
@@ -1570,62 +1562,75 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
               </span>
               <span className="hint">
                 {rhythmLive
-                  ? `音声入力: ${audioRhythm?.source === "wallpaper-engine" ? "Wallpaper Engine" : audioRhythm?.source === "mock" ? "開発モック" : "なし"}`
+                  ? `音声入力: ${audioRhythm?.source === "companion-pcm" ? "Companion PCM（WASAPI）" : audioRhythm?.source === "mock" ? "開発モック" : "なし"}`
                   : "壁紙から判定データが届いていません（音楽の再生中だけ更新されます。対応版の壁紙が必要です）"}
               </span>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={async () => {
+                  try {
+                    await api.audioRhythmReset("manual");
+                    setAudioRhythm(null);
+                    setError(null);
+                  } catch {
+                    setError("BPM履歴のリセットに失敗しました");
+                  }
+                }}
+              >
+                BPM履歴を今すぐリセット
+              </button>
             </div>
             <div className="bpm-monitor">
-              {bpmMethodOptions.map((m) => {
-                const est = audioRhythm?.estimates?.find((e) => e.id === m.value);
-                const adopted = (spectrum.bpmMethod ?? "consensus") === m.value;
-                const locked = rhythmLive && est?.status === "locked" && est.lockedBpm != null;
-                const bpmText = !rhythmLive || !est
-                  ? "—"
-                  : locked
-                    ? `${Math.round(est.lockedBpm as number)}`
-                    : est.detectedBpm != null
-                      ? `~${Math.round(est.detectedBpm)}`
-                      : "—";
-                const statusText = !rhythmLive || !est
-                  ? "待機"
-                  : est.status === "locked" ? "確定" : est.status === "detecting" ? "検知中" : "待機";
-                const support = m.value === "consensus" && rhythmLive && est?.support != null ? ` ${est.support}/3` : "";
-                const confidence = rhythmLive && est?.confidence != null ? Math.max(0, Math.min(1, est.confidence)) : 0;
+              {(() => {
+                const est = audioRhythm?.estimates?.find((item) => item.id === "pcm-beatroot");
+                const locked = rhythmLive && audioRhythm?.status === "locked" && audioRhythm.outputBpm != null;
+                const confidence = rhythmLive && audioRhythm?.confidence != null
+                  ? Math.max(0, Math.min(1, audioRhythm.confidence))
+                  : 0;
                 return (
-                  <div key={m.value} className={`bpm-monitor-row ${adopted ? "adopted" : ""}`}>
+                  <div className="bpm-monitor-row adopted">
                     <div className="bpm-monitor-name">
-                      <span>{m.label}</span>
-                      <span className="bpm-monitor-sub mono">{m.sub}</span>
+                      <span>PCM BeatRoot（固定）</span>
+                      <span className="bpm-monitor-sub mono">WASAPI LOOPBACK / ROLLING HISTORY</span>
                     </div>
-                    <span className={`bpm-monitor-bpm mono ${locked ? "locked" : ""}`}>{bpmText}</span>
-                    <span className="bpm-monitor-status">{statusText}{support}</span>
+                    <span className={`bpm-monitor-bpm mono ${locked ? "locked" : ""}`}>
+                      {locked ? `${Math.round(audioRhythm?.outputBpm as number)}` : est?.detectedBpm != null ? `~${Math.round(est.detectedBpm)}` : "—"}
+                    </span>
+                    <span className="bpm-monitor-status">
+                      {!rhythmLive ? "待機" : audioRhythm?.accepted === false ? "70%未満・不採用" : locked ? "確定" : "検知中"}
+                    </span>
                     <span className="bpm-monitor-conf" title={`信頼度 ${Math.round(confidence * 100)}%`}>
                       <span className="bpm-monitor-conf-fill" style={{ width: `${Math.round(confidence * 100)}%` }} />
                     </span>
-                    <button
-                      type="button"
-                      className={`secondary-btn bpm-adopt ${adopted ? "active" : ""}`}
-                      disabled={adopted}
-                      onClick={() => setSettingValue("audioSpectrumPanel", "bpmMethod", m.value)}
-                    >
-                      {adopted ? "採用中" : "採用"}
-                    </button>
+                    <span className="pill ok">採用中</span>
                   </div>
                 );
-              })}
+              })()}
             </div>
-            <p className="hint">音楽を再生している間、各判定方式がいま割り出しているBPMが約1秒ごとに更新されます。「採用」した方式の確定BPMがSPECTRUMパネルの表示ときりたんのBPM連動に使われます。</p>
+            <p className="hint">
+              {audioRhythm?.detail ?? "CompanionがWindowsの再生音PCMを取得し、直近の波形をBeatRootで解析します。"}
+              {audioRhythm?.retainedBpm != null ? ` 保持中の統計: BPM ${Math.round(audioRhythm.retainedBpm)}。` : ""}
+              {audioRhythm?.challengerBpm != null ? ` 変更候補: BPM ${Math.round(audioRhythm.challengerBpm)}（${Math.round((audioRhythm.challengerForMs ?? 0) / 1000)}秒）。` : ""}
+              {audioRhythm?.resetAt ? ` 最終リセット: ${audioRhythm.resetReason ?? "不明"}。` : ""}
+            </p>
           </DisplaySection>
 
           <div className="settings-divider" />
           <div className="control-grid">
             <NumberControl label="BPM確定待ち（秒）" value={spectrum.bpmLockSeconds ?? 5} min={3} max={12} step={0.5} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmLockSeconds", v)} />
+            <NumberControl label="最低信頼度" value={spectrum.bpmConfidenceThreshold ?? 0.7} min={0.5} max={0.95} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmConfidenceThreshold", v)} />
+            <NumberControl label="解析窓（秒）" value={spectrum.bpmAnalysisWindowSeconds ?? 14} min={8} max={24} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmAnalysisWindowSeconds", v)} />
+            <NumberControl label="解析間隔（秒）" value={spectrum.bpmAnalysisIntervalSeconds ?? 3} min={1} max={10} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmAnalysisIntervalSeconds", v)} />
+            <NumberControl label="別BPMへの切替確認（秒）" value={spectrum.bpmChangeConfirmSeconds ?? 9} min={3} max={30} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmChangeConfirmSeconds", v)} />
+            <NumberControl label="定期リセット（分・0で無効）" value={spectrum.bpmPeriodicResetMinutes ?? 0} min={0} max={120} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmPeriodicResetMinutes", v)} />
+            <CheckControl label="Spotify曲切替でリセット" checked={spectrum.bpmResetOnSpotifyTrackChange !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmResetOnSpotifyTrackChange", v)} />
             <NumberControl label="BPM補正（±10）" value={spectrum.bpmOffset ?? 0} min={-10} max={10} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmOffset", v)} />
             <CheckControl label="きりたんをBPM連動" checked={spectrum.rhythmMotionEnabled !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionEnabled", v)} />
             <NumberControl label="BPM連動の強さ" value={spectrum.rhythmMotionStrength ?? 0.35} min={0} max={1} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionStrength", v)} />
             <NumberControl label="BPMロスト後の継続（秒）" value={spectrum.rhythmMotionHoldSeconds ?? 8} min={0} max={30} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionHoldSeconds", v)} />
           </div>
-          <p className="hint">確定待ちは同じテンポが続いてから確定するまでの秒数。BPM補正は確定BPMにだけ足す好み調整（検知そのものは生値のまま）。連動モーションは1 BPM刻みの固定速度から選ばれ、高速時も半分のテンポへ落としません。検出が途切れても指定秒数はそのまま継続し、同じBPMへ戻れば再始動せず続きから再生します。</p>
+          <p className="hint">70%未満の推定は表示・モーションへ渡しません。リセットまでは確定BPMの統計を保持し、一時的に離れた推定が出ても「別BPMへの切替確認」を満たすまで現在値を守ります。Spotifyは既存の曲終了+0.8秒更新で曲切替を確認した時点で履歴を消します。</p>
         </div>
         )}
         {studioObj === "system" && (

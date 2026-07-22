@@ -240,7 +240,10 @@ fn legacy_default_ui_state() -> UiState {
             "contentTopGap": 12, "barCount": 24, "segmentCount": 14, "barGap": 4,
             "peakHold": true, "peakFallSpeed": 0.008, "sensitivity": 1, "decaySpeed": 0.12,
             "mirror": false, "colorMode": "mono", "showBpm": true,
-            "bpmMethod": "consensus", "bpmLockSeconds": 5, "bpmOffset": 0,
+            "bpmMethod": "pcm-beatroot", "bpmLockSeconds": 5, "bpmOffset": 0,
+            "bpmConfidenceThreshold": 0.7, "bpmAnalysisWindowSeconds": 14,
+            "bpmAnalysisIntervalSeconds": 3, "bpmChangeConfirmSeconds": 9,
+            "bpmPeriodicResetMinutes": 0, "bpmResetOnSpotifyTrackChange": true,
             "rhythmMotionEnabled": true, "rhythmMotionStrength": 0.35,
             "rhythmMotionHoldSeconds": 8,
             "standbyText": "AUDIO STANDBY"
@@ -1092,7 +1095,11 @@ mod tests {
         assert_eq!(ui.layout["canvas"]["height"], json!(1080));
         assert_eq!(
             ui.settings["audioSpectrumPanel"]["bpmMethod"],
-            json!("consensus")
+            json!("pcm-beatroot")
+        );
+        assert_eq!(
+            ui.settings["audioSpectrumPanel"]["bpmConfidenceThreshold"],
+            json!(0.7)
         );
         // 2026-07-19: the samples ship master's live v0.8.9 tuning — panel on,
         // spectrum placed in the right column, quicker 3s lock.

@@ -538,21 +538,19 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <SliderInput label="Peak Fall Speed" value={sp.peakFallSpeed ?? 0.008} onChange={(v: number) => updateSection('audioSpectrumPanel', 'peakFallSpeed', v)} min={0.002} max={0.05} step={0.002} />
         <SectionDivider label="RHYTHM SYNC" />
         <CheckRow label="Show BPM Status" checked={sp.showBpm !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'showBpm', v)} />
-        <SelectRow
-          label="BPM Detector"
-          value={sp.bpmMethod ?? 'consensus'}
-          onChange={(v: string) => updateSection('audioSpectrumPanel', 'bpmMethod', v)}
-          options={[
-            { value: 'consensus', label: 'Consensus (recommended)' },
-            { value: 'low-band', label: 'Low-band IOI' },
-            { value: 'spectral-flux', label: 'Spectral Flux' },
-            { value: 'autocorrelation', label: 'Autocorrelation' },
-          ]}
-        />
         <SliderInput label="BPM Lock Seconds" value={sp.bpmLockSeconds ?? 5} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmLockSeconds', v)} min={3} max={12} step={0.5} />
+        <SliderInput label="Minimum Confidence" value={sp.bpmConfidenceThreshold ?? 0.7} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmConfidenceThreshold', v)} min={0.5} max={0.95} step={0.05} />
+        <SliderInput label="BeatRoot Window (sec)" value={sp.bpmAnalysisWindowSeconds ?? 14} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmAnalysisWindowSeconds', v)} min={8} max={24} step={1} />
+        <SliderInput label="Analysis Interval (sec)" value={sp.bpmAnalysisIntervalSeconds ?? 3} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmAnalysisIntervalSeconds', v)} min={1} max={10} step={1} />
+        <SliderInput label="Tempo Change Confirmation (sec)" value={sp.bpmChangeConfirmSeconds ?? 9} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmChangeConfirmSeconds', v)} min={3} max={30} step={1} />
+        <SliderInput label="Periodic Reset (min, 0=off)" value={sp.bpmPeriodicResetMinutes ?? 0} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmPeriodicResetMinutes', v)} min={0} max={120} step={1} />
+        <CheckRow label="Reset on Spotify Track Change" checked={sp.bpmResetOnSpotifyTrackChange !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'bpmResetOnSpotifyTrackChange', v)} />
         <SliderInput label="BPM Offset (±10)" value={sp.bpmOffset ?? 0} onChange={(v: number) => updateSection('audioSpectrumPanel', 'bpmOffset', v)} min={-10} max={10} step={1} />
         <CheckRow label="Kiritan Rhythm Motion" checked={sp.rhythmMotionEnabled !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'rhythmMotionEnabled', v)} />
         <SliderInput label="Rhythm Motion Strength" value={sp.rhythmMotionStrength ?? 0.35} onChange={(v: number) => updateSection('audioSpectrumPanel', 'rhythmMotionStrength', v)} min={0} max={1} step={0.05} />
+        <SliderInput label="Motion Hold After BPM Loss" value={sp.rhythmMotionHoldSeconds ?? 8} onChange={(v: number) => updateSection('audioSpectrumPanel', 'rhythmMotionHoldSeconds', v)} min={0} max={30} step={1} />
+        <CheckRow label="Work Mode: Head/Neck Sync Only" checked={sp.workHeadSyncEnabled !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'workHeadSyncEnabled', v)} />
+        <SliderInput label="Work Head Sync Strength" value={sp.workHeadSyncStrength ?? 0.35} onChange={(v: number) => updateSection('audioSpectrumPanel', 'workHeadSyncStrength', v)} min={0} max={1} step={0.05} />
         <SectionDivider label="STYLE" />
         <CheckRow label="Mirror Layout" checked={sp.mirror === true} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'mirror', v)} />
         <SelectRow

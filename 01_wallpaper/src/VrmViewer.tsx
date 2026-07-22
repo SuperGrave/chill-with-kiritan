@@ -114,6 +114,9 @@ export interface MotionDirectorSettings {
 export interface RhythmMotionSettings {
   enabled?: boolean;
   strength?: number;
+  holdSeconds?: number;
+  workHeadSyncEnabled?: boolean;
+  workHeadSyncStrength?: number;
 }
 
 // Path a user-supplied VRM Animation is loaded from (see public/motions/README).
@@ -236,12 +239,14 @@ const CAMERA_PRESETS: Record<Exclude<CameraMode, 'free'>, { pos: [number, number
 
 // Director runtime content lanes:
 // Auto-run keeps the完成組. Fixed mode may also use authored secondary loops.
-// music_listen (音楽ノリノリ, 2026-07-18) is FIXED-ONLY: she should never
-// wander into the listening pose while no music is playing, so it is playable
-// (selectable from the Companion) but absent from the auto rotation.
+// music_listen (音楽ノリノリ) was fixed-only at first; master decision
+// 2026-07-19: it may also appear in the auto rotation (MODE_TABLE's low-weight
+// edges into it now apply). Without a BPM lock it reads as 「音楽を聴きたい
+// 気分で耳を澄ませる」待機. Users who dislike that exclude it via
+// disabledModes (the Companion lists it in 出さないモード).
 type DirectorPlayableMode = 'work_normal' | 'video_relax' | 'sleep_desk' | 'music_listen';
 
-const DIRECTOR_AUTO_MODES: readonly DirectorPlayableMode[] = ['work_normal', 'video_relax', 'sleep_desk'];
+const DIRECTOR_AUTO_MODES: readonly DirectorPlayableMode[] = ['work_normal', 'video_relax', 'sleep_desk', 'music_listen'];
 const DIRECTOR_PLAYABLE_MODES: readonly DirectorPlayableMode[] = ['work_normal', 'video_relax', 'sleep_desk', 'music_listen'];
 const DIRECTOR_PLAYABLE_MODE_SET = new Set<ModeId>(DIRECTOR_PLAYABLE_MODES);
 
@@ -451,7 +456,11 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
       rhythmMotionRef.current.sync({ bpm: event.detail.bpm, lockedAt: event.detail.lockedAt });
     };
     const onRhythm = (event: CustomEvent<AudioRhythmInfo>) => {
-      rhythmMotionRef.current.rhythm({ status: event.detail.status, lockedBpm: event.detail.lockedBpm });
+      rhythmMotionRef.current.rhythm({
+        status: event.detail.status,
+        lockedBpm: event.detail.lockedBpm,
+        at: performance.now(),
+      });
     };
     const onBeat = (event: CustomEvent<AudioBeatEventDetail>) => {
       rhythmMotionRef.current.beat({
@@ -946,9 +955,8 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
     if (vrmRef.current) vrmRef.current.scene.visible = true;
     const directorSettings = normalizeDirectorSettings(propsRef.current.motionSettings);
     directorSettingsKeyRef.current = directorSettingsKey(propsRef.current.motionSettings);
-    // Lab override first (lets __motionLab.director exercise any fixed mode —
-    // incl. music_listen, which only enters via fixed mode), else the
-    // Companion-provided settings.
+    // Lab override first (lets __motionLab.director exercise any fixed mode),
+    // else the Companion-provided settings.
     const fixedMode = opts?.fixedMode && isDirectorPlayableMode(opts.fixedMode)
       ? opts.fixedMode
       : directorSettings.directorMode === 'fixed' ? directorSettings.fixedMode : null;
@@ -2521,6 +2529,11 @@ const VrmViewer: React.FC<VrmViewerProps> = (props) => {
           const rhythmFrame = rhythmMotionRef.current.update(performance.now(), updateDelta, {
             enabled: rhythmSettings.enabled !== false,
             strength: Number.isFinite(Number(rhythmSettings.strength)) ? Number(rhythmSettings.strength) : 0.35,
+            holdSeconds: Number.isFinite(Number(rhythmSettings.holdSeconds)) ? Number(rhythmSettings.holdSeconds) : 8,
+            workHeadSyncEnabled: rhythmSettings.workHeadSyncEnabled !== false,
+            workHeadSyncStrength: Number.isFinite(Number(rhythmSettings.workHeadSyncStrength))
+              ? Number(rhythmSettings.workHeadSyncStrength)
+              : 0.35,
             mode: directorRef.current?.status().mode ?? null,
           });
           rhythmSmileRef.current = rhythmFrame.smile;

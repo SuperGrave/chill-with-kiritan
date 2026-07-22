@@ -17,7 +17,11 @@ execSync(
 const { BpmAnalyzer, chooseConsensusCandidate } = require(
   path.join(outDir, '02_ui-overlay', 'src', 'lib', 'bpmAnalyzer.js'),
 );
-const { RhythmMotionController } = require(
+const {
+  BPM_MOTION_BANK,
+  RhythmMotionController,
+  selectBpmMotionPreset,
+} = require(
   path.join(outDir, '01_wallpaper', 'src', 'lib', 'motion', 'rhythmMotionController.js'),
 );
 
@@ -88,6 +92,13 @@ for (const bpm of [88, 120, 174]) {
 }
 
 console.log('\n=== Rhythm motion bridge ===');
+ok(BPM_MOTION_BANK.length === 201, 'fixed bank contains 40..240 BPM in one-BPM steps');
+ok(
+  BPM_MOTION_BANK.every((preset, index) => preset.bpm === 40 + index),
+  'every prepared motion-bank entry is exactly one BPM apart',
+);
+ok(selectBpmMotionPreset(128)?.bpm === 128, '128 BPM selects the prepared 128 BPM motion');
+ok(selectBpmMotionPreset(127)?.bpm === 127, '127 BPM selects the prepared 127 BPM motion');
 {
   const controller = new RhythmMotionController();
   let frame = controller.update(0, 1 / 60, { enabled: true, strength: 1, mode: 'work_normal' });
@@ -102,16 +113,41 @@ console.log('\n=== Rhythm motion bridge ===');
     controller.update(1000 + i * (1000 / 60), 1 / 60, { enabled: true, strength: 1, mode: 'work_normal' }).headPitch,
   ).reduce((max, value) => Math.max(max, Math.abs(value)), 0);
   ok(peak > 0 && peak < 0.04, 'head nod is visible but remains a small additive offset');
+  const workFrame = controller.update(1500, 1 / 60, {
+    enabled: true,
+    strength: 1,
+    workHeadSyncEnabled: true,
+    workHeadSyncStrength: 0.35,
+    mode: 'work_normal',
+  });
+  ok(
+    workFrame.chestPitch === 0 && workFrame.chestRoll === 0 && workFrame.spineRoll === 0
+      && workFrame.leftShoulderRoll === 0 && workFrame.rightShoulderRoll === 0
+      && workFrame.rightHandLift === 0 && workFrame.rightFingerLift === 0,
+    'normal work rhythm sync moves only the head and neck',
+  );
   const sleep = controller.update(1200, 1, { enabled: true, strength: 1, mode: 'sleep_desk' });
   ok(sleep.weight < frame.weight, 'sleep mode fades rhythm motion out');
-  controller.rhythm({ status: 'detecting', lockedBpm: null });
-  const unlocked = controller.update(1400, 1, { enabled: true, strength: 1, mode: 'work_normal' });
-  ok(!unlocked.active, 'unlock stops producing rhythm offsets');
+  controller.rhythm({ status: 'detecting', lockedBpm: null, at: 1300 });
+  const unlocked = controller.update(1400, 1, { enabled: true, strength: 1, holdSeconds: 0, mode: 'work_normal' });
+  ok(!unlocked.active, 'zero-second hold stops producing rhythm offsets immediately');
+}
+
+{
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 120, lockedAt: 0 });
+  const frame = c.update(1000, 1, {
+    enabled: true,
+    strength: 1,
+    workHeadSyncEnabled: false,
+    mode: 'work_normal',
+  });
+  ok(!frame.active && frame.weight === 0, 'normal work head sync can be disabled independently');
 }
 
 console.log('\n=== music_listen rhythm figures ===');
 
-const musicInput = (strength = 0.35) => ({ enabled: true, strength, mode: 'music_listen' });
+const musicInput = (strength = 0.35, holdSeconds = 8) => ({ enabled: true, strength, holdSeconds, mode: 'music_listen' });
 
 /** Run the controller at 60fps up to endMs, returning the last frame. */
 function settleMusic(controller, fromMs, endMs) {
@@ -120,6 +156,46 @@ function settleMusic(controller, fromMs, endMs) {
     frame = controller.update(at, 1 / 60, musicInput());
   }
   return frame;
+}
+
+{
+  // Same-bank jitter below half a BPM must neither retime nor restart the
+  // fixed oscillator.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 128.1, lockedAt: 0 });
+  settleMusic(c, 0, 2000);
+  const before = c.update(2450, 1 / 60, musicInput());
+  c.rhythm({ status: 'detecting', lockedBpm: null, at: 2450 });
+  c.sync({ bpm: 128.4, lockedAt: 2700 });
+  const after = c.update(2700, 1 / 60, musicInput());
+  const expectedAdvance = (2700 - 2450) / (60_000 / 128);
+  const actualAdvance = ((after.beatPhase - before.beatPhase) % 1 + 1) % 1;
+  ok(before.bpm === 128 && after.bpm === 128, 'same one-BPM entry keeps the selected 128 BPM bank');
+  ok(Math.abs(actualAdvance - expectedAdvance) < 0.002, 'same-bank re-lock continues phase instead of restarting');
+}
+
+{
+  // A real bank change preserves fractional phase while choosing the new
+  // fixed speed. This avoids a one-frame body snap at the hand-off.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 128, lockedAt: 0 });
+  settleMusic(c, 0, 2000);
+  const before = c.update(2345, 1 / 60, musicInput());
+  c.sync({ bpm: 129, lockedAt: 2345 });
+  const after = c.update(2345, 1 / 60, musicInput());
+  ok(after.bpm === 129, 'one-BPM change selects the matching prepared bank');
+  ok(Math.abs(after.beatPhase - before.beatPhase) < 0.002, 'bank change preserves fractional beat phase');
+}
+
+{
+  // Raw onset jitter may update energy, but the selected bank owns phase.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 128, lockedAt: 0 });
+  settleMusic(c, 0, 2000);
+  const before = c.update(2200, 1 / 60, musicInput());
+  c.beat({ at: 2297, lockedBpm: 128, energy: 0.9 });
+  const after = c.update(2200, 1 / 60, musicInput());
+  ok(Math.abs(after.beatPhase - before.beatPhase) < 0.00001, 'noisy onset events do not tug the fixed-bank phase');
 }
 
 {
@@ -180,7 +256,20 @@ function settleMusic(controller, fromMs, endMs) {
 }
 
 {
-  // Fast tempo: sway is gated out and the tap drops to half time.
+  // The VRM's negative X pitch is visually downward. Both the neck and the
+  // tapping fingers must reach their low point together on the beat.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 120, lockedAt: 0 });
+  settleMusic(c, 0, 4000);
+  const onBeat = c.update(5000, 1 / 60, musicInput());
+  const halfBeat = c.update(5250, 1 / 60, musicInput());
+  ok(onBeat.headPitch < 0 && onBeat.neckPitch < 0, 'head and neck reach their visible lower endpoint on the beat');
+  ok(onBeat.rightFingerLift === 0 && onBeat.rightHandLift === 0, 'fingers and palm are down when the neck is down');
+  ok(halfBeat.headPitch > 0 && halfBeat.neckPitch > 0 && halfBeat.rightFingerLift > 0, 'neck and fingers rise together after the beat');
+}
+
+{
+  // Fast tempo: sway is gated out, but the visible tap stays on every beat.
   const c = new RhythmMotionController();
   c.sync({ bpm: 170, lockedAt: 0 });
   const settled = settleMusic(c, 0, 2000);
@@ -193,7 +282,48 @@ function settleMusic(controller, fromMs, endMs) {
     if (prev < 0.1 && f.rightFingerLift >= 0.1) crossings++;
     prev = f.rightFingerLift;
   }
-  ok(crossings === 4, 'above 150 BPM the tap rides every 2nd beat');
+  ok(crossings === 8, '170 BPM keeps tapping on every detected beat');
+}
+
+{
+  // 首振り smoothness (master FB 2026-07-19): the music-figure head nod is a
+  // continuous cosine — the motion spreads across the whole beat instead of
+  // the old quarter-beat pulse that parked the head for the rest of the beat.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 128, lockedAt: 0 });
+  settleMusic(c, 0, 3000);
+  const beatMs = 60_000 / 128;
+  const deltas = [];
+  let prev = c.update(3000, 1 / 60, musicInput()).headPitch;
+  for (let at = 3000 + 1000 / 60; at < 3000 + beatMs * 4; at += 1000 / 60) {
+    const f = c.update(at, 1 / 60, musicInput());
+    deltas.push(Math.abs(f.headPitch - prev));
+    prev = f.headPitch;
+  }
+  const maxD = Math.max(...deltas);
+  const meanD = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+  ok(maxD < meanD * 1.8, 'nod frame deltas stay uniform (sine wave, not a pulse)');
+  const still = deltas.filter((d) => d < maxD * 0.05).length;
+  ok(still < deltas.length * 0.2, 'the head never parks mid-beat');
+  const h0 = c.update(5000, 1 / 60, musicInput()).headPitch;
+  const hHalf = c.update(5000 + beatMs / 2, 1 / 60, musicInput()).headPitch;
+  const h1 = c.update(5000 + beatMs, 1 / 60, musicInput()).headPitch;
+  ok(Math.abs(h0 - h1) < 0.0015, 'nod repeats after exactly 1 beat');
+  ok(Math.abs(h0 + hHalf) < 0.0015, 'nod mirrors after half a beat (pure sinusoid)');
+}
+
+{
+  // Fast tempo: the nod also stays at the detected tempo instead of silently
+  // dividing it by two.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 170, lockedAt: 0 });
+  settleMusic(c, 0, 3000);
+  const beatMs = 60_000 / 170;
+  const n0 = c.update(4000, 1 / 60, musicInput()).headPitch;
+  const n1 = c.update(4000 + beatMs, 1 / 60, musicInput()).headPitch;
+  const nHalf = c.update(4000 + beatMs / 2, 1 / 60, musicInput()).headPitch;
+  ok(Math.abs(n0 - n1) < 0.0015, '170 BPM nod repeats after exactly 1 beat');
+  ok(Math.abs(n0 + nHalf) < 0.0015, '170 BPM nod mirrors after half a beat');
 }
 
 {
@@ -216,17 +346,27 @@ function settleMusic(controller, fromMs, endMs) {
 }
 
 {
-  // Unlock: losing the BPM fades everything out, including the smile.
+  // Unlock grace period: keep playing, preserve same-bank phase on re-lock,
+  // then stop only after the configured duration really expires.
   const c = new RhythmMotionController();
   c.sync({ bpm: 96, lockedAt: 0 });
   const grooving = settleMusic(c, 0, 2000);
   ok(grooving.active, 'locked BPM grooves in music_listen');
-  c.rhythm({ status: 'detecting', lockedBpm: null });
-  let frame = null;
-  for (let at = 2000; at <= 5000; at += 1000 / 60) {
-    frame = c.update(at, 1 / 60, musicInput());
+  c.rhythm({ status: 'detecting', lockedBpm: null, at: 2000 });
+  const held = c.update(4900, 1 / 60, musicInput(0.35, 3));
+  ok(held.active && held.bpm === 96, 'motion keeps running until the configured loss grace expires');
+  const phaseBeforeRelock = held.beatPhase;
+  c.sync({ bpm: 96, lockedAt: 4900 });
+  const relocked = c.update(4900, 1 / 60, musicInput(0.35, 3));
+  ok(Math.abs(relocked.beatPhase - phaseBeforeRelock) < 0.00001, 'same-bank re-lock cancels loss timer without restarting motion');
+  c.rhythm({ status: 'detecting', lockedBpm: null, at: 5000 });
+  const almostExpired = c.update(7999, 1 / 60, musicInput(0.35, 3));
+  ok(almostExpired.active, 'renewed loss timer runs for its full configured duration');
+  let frame = c.update(8000, 1 / 60, musicInput(0.35, 3));
+  ok(!frame.active, 'motion stops when the loss grace period expires');
+  for (let at = 8000; at <= 11_000; at += 1000 / 60) {
+    frame = c.update(at, 1 / 60, musicInput(0.35, 3));
   }
-  ok(!frame.active, 'unlock returns her to the listening idle');
   ok(frame.smile < 0.03, 'the smile relaxes after the music stops');
 }
 

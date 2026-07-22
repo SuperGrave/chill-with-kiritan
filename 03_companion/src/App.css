@@ -1456,3 +1456,70 @@ button svg { width: 15px; height: 15px; }
   .studio-objlist { flex-direction: row; flex-wrap: wrap; position: static; }
   .studio-obj { flex: 1 1 120px; }
 }
+
+/* ── スペクトラムタブ: BPM判定モニター ─────────────────────────── */
+.bpm-monitor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.bpm-monitor-big {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.bpm-monitor { display: flex; flex-direction: column; gap: 6px; }
+.bpm-monitor-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.4fr) 60px 84px minmax(56px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface);
+}
+.bpm-monitor-row.adopted {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.bpm-monitor-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bpm-monitor-name > span:first-child {
+  font-size: 12.5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bpm-monitor-sub { font-size: 10px; color: var(--text-faint); letter-spacing: 0.08em; }
+.bpm-monitor-bpm {
+  font-size: 17px;
+  text-align: right;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.bpm-monitor-bpm.locked { color: var(--accent-text); font-weight: 600; }
+.bpm-monitor-status { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.bpm-monitor-conf {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.bpm-monitor-conf-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.bpm-adopt.active { border-color: var(--accent-strong); color: var(--accent-text); }
+@media (max-width: 840px) {
+  .bpm-monitor-row { grid-template-columns: minmax(120px, 1fr) 56px auto; }
+  .bpm-monitor-status, .bpm-monitor-conf { display: none; }
+}

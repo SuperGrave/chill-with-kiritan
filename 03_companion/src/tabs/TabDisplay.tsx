@@ -9,10 +9,19 @@ import {
   MotionIcon,
   PlusIcon,
   RefreshIcon,
+  SpectrumIcon,
   VideoIcon,
   XIcon,
 } from "../icons";
-import { API_BASE, api, type BackgroundMediaItem, type BackgroundUploadKind, type UiPreset, type UiState } from "../api";
+import {
+  API_BASE,
+  api,
+  type AudioRhythmRuntimeState,
+  type BackgroundMediaItem,
+  type BackgroundUploadKind,
+  type UiPreset,
+  type UiState,
+} from "../api";
 import { InfoHint } from "../controls";
 import { overlayLayout as defaultLayout } from "../../../02_ui-overlay/src/config/layout";
 import {
@@ -55,23 +64,32 @@ const kiritanModeOptions = [
   { value: "work_normal", label: "通常作業" },
   { value: "video_relax", label: "動画くつろぎ" },
   { value: "sleep_desk", label: "机で休む" },
-  // 音楽ノリノリは固定モード専用: 音楽が鳴っていない時に自動で入らないよう、
-  // 自動ローテーション（kiritanAutoModeOptions）には含めない。
   { value: "music_listen", label: "音楽ノリノリ" },
 ];
 
-const kiritanAutoModeOptions = kiritanModeOptions.filter((mode) => mode.value !== "music_listen");
+// 2026-07-19 マスター決定: 音楽ノリノリも自動ローテーションに登場し得る
+// （壁紙側 DIRECTOR_AUTO_MODES と対応）。混ぜたくない人は下の
+// 「通常モードで出さないモード」で除外できる。
+const kiritanAutoModeOptions = kiritanModeOptions;
 
 const kiritanSmallActionOptions = [
   { value: "amb_work_neck_roll", label: "通常作業: 首を回す" },
   { value: "amb_work_posture_reset", label: "通常作業: 姿勢を直す" },
   { value: "amb_work_stretch", label: "通常作業: 伸び" },
+  { value: "amb_work_wrist_flex", label: "通常作業: 手首ほぐし" },
+  { value: "amb_work_window_gaze", label: "通常作業: ふと遠くを見る" },
+  { value: "amb_work_window_gaze_mirror", label: "通常作業: ふと逆側を見る" },
   { value: "amb_vid_chuckle", label: "動画: くすっと笑う" },
   { value: "amb_vid_nod_watch", label: "動画: うなずく" },
   { value: "amb_vid_eyes_widen", label: "動画: 目を見開く" },
+  { value: "amb_vid_drowse", label: "動画: うとうと→ハッと起きる" },
   { value: "amb_slp_head_shift", label: "休憩: 頭をもぞっと動かす" },
   { value: "amb_slp_dream_smile", label: "休憩: 寝笑い" },
+  { value: "amb_slp_mumble", label: "休憩: 寝言" },
 ];
+
+/** 判定スナップショットがこの時間より古ければ「停止中」と見なす。 */
+const AUDIO_RHYTHM_STALE_MS = 5_000;
 
 const intervalPresets = {
   mode: [
@@ -107,13 +125,16 @@ const objectPlacementLabels: Array<{ bucket: "objectLayout" | "itemLayout"; id: 
 ];
 
 // STUDIO 左ペインの対象一覧。1つ選ぶと右のエディタにその対象だけを出す。
-type StudioObj = "kiritan" | "bg" | "layout" | "camera" | "motion" | "system";
+// 並び順・7分割は 2026-07-19 マスター指定:
+// 3Dモデル・モーション・背景・視点・パネル位置・スペクトラム・システム。
+type StudioObj = "kiritan" | "bg" | "layout" | "camera" | "motion" | "spectrum" | "system";
 const STUDIO_OBJECTS: { id: StudioObj; label: string; icon: ReactNode }[] = [
   { id: "kiritan", label: "3Dモデル", icon: <AvatarIcon /> },
-  { id: "bg", label: "背景", icon: <ImageIcon /> },
-  { id: "layout", label: "パネル表示", icon: <LayoutIcon /> },
-  { id: "camera", label: "視点", icon: <CameraIcon /> },
   { id: "motion", label: "モーション", icon: <MotionIcon /> },
+  { id: "bg", label: "背景", icon: <ImageIcon /> },
+  { id: "camera", label: "視点", icon: <CameraIcon /> },
+  { id: "layout", label: "パネル位置", icon: <LayoutIcon /> },
+  { id: "spectrum", label: "スペクトラム", icon: <SpectrumIcon /> },
   { id: "system", label: "システム", icon: <GearIcon /> },
 ];
 
@@ -345,6 +366,9 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
   // Wallpaper reports kiritan state only while a VRM is loaded, so a stale/missing
   // report means camera/placement edits won't visibly apply until the next sync.
   const [kiritanReceivedAt, setKiritanReceivedAt] = useState<string | null>(null);
+  // Live BPM-analyzer snapshot (overlay POSTs ~1×/s while audio frames flow).
+  // Polled only while the スペクトラム tab is open.
+  const [audioRhythm, setAudioRhythm] = useState<AudioRhythmRuntimeState | null>(null);
   const [presets, setPresets] = useState<UiPreset[]>([]);
   const initial = defaultsWith(null);
   const [draftLayout, setDraftLayout] = useState<JsonMap>(initial.layout);
@@ -400,6 +424,25 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
     const id = setInterval(() => load(false), 4000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (studioObj !== "spectrum") return;
+    let alive = true;
+    const poll = async () => {
+      try {
+        const snapshot = await api.audioRhythmState();
+        if (alive) setAudioRhythm(snapshot ?? null);
+      } catch {
+        // Keep the last snapshot; staleness is judged from receivedAt anyway.
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 1000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [studioObj]);
 
   const setLayoutValue = (section: string, key: string, value: number) => {
     setDraftLayout((prev) => ({ ...prev, [section]: { ...(prev[section] ?? {}), [key]: value } }));
@@ -621,6 +664,7 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
     { section: "musicPanel", label: "音楽" },
     { section: "lyricsPanel", label: "歌詞" },
     { section: "personalNewsPanel", label: "個人" },
+    { section: "audioSpectrumPanel", label: "スペクトラム" },
     { section: "memoPanel", label: "メモ" },
     { section: "timerPanel", label: "タイマー" },
   ];
@@ -662,6 +706,10 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
     </div>
   );
   const syncLabel = saving === "saving" ? "自動反映中..." : saving === "saved" ? "反映済み" : dirty ? "反映待ち" : "反映済み";
+
+  // スペクトラムタブ: 判定スナップショットの鮮度（サーバー時刻 stamp）。
+  const rhythmReceivedMs = audioRhythm?.receivedAt ? Date.parse(audioRhythm.receivedAt) : NaN;
+  const rhythmLive = Number.isFinite(rhythmReceivedMs) && Date.now() - rhythmReceivedMs <= AUDIO_RHYTHM_STALE_MS;
 
   useEffect(() => {
     if (!dirty) return;
@@ -1191,7 +1239,7 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
               options={kiritanModeOptions}
             />
           </div>
-          <p className="hint">固定モードは通常作業・動画くつろぎ・机で休む・音楽ノリノリから選べます。音楽ノリノリは音楽再生中にBPMを検知するとリズムに合わせて動くモードです（SPECTRUMパネルの「きりたんをBPM連動」がONの時）。通常モードでは、下の除外設定を使って混ぜたくないモードや小アクションを外せます。</p>
+          <p className="hint">固定モードは通常作業・動画くつろぎ・机で休む・音楽ノリノリから選べます。音楽ノリノリは音楽再生中にBPMを検知するとリズムに合わせて動くモードです（「スペクトラム」の「きりたんをBPM連動」がONの時）。通常モードのローテーションにも音楽ノリノリが低頻度で登場します（音楽なしの間は耳を澄ませる待機姿勢）。混ぜたくないモードや小アクションは下の除外設定で外せます。</p>
 
           <div className="settings-divider" />
           <ControlRow label="モード切替間隔">
@@ -1412,21 +1460,6 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
                 <CheckControl label="ピークホールド" checked={spectrum.peakHold !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "peakHold", v)} />
                 <NumberControl label="ピーク落下速度" value={spectrum.peakFallSpeed ?? 0.008} min={0.002} max={0.05} step={0.002} onChange={(v) => setSettingValue("audioSpectrumPanel", "peakFallSpeed", v)} />
                 <CheckControl label="BPM・同期状態を表示" checked={spectrum.showBpm !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "showBpm", v)} />
-                <SelectControl
-                  label="BPM判定方式"
-                  value={spectrum.bpmMethod ?? "consensus"}
-                  onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmMethod", v)}
-                  options={[
-                    { value: "consensus", label: "コンセンサス（推奨）" },
-                    { value: "low-band", label: "低域ビート間隔" },
-                    { value: "spectral-flux", label: "全帯域の立ち上がり" },
-                    { value: "autocorrelation", label: "自己相関" },
-                  ]}
-                />
-                <NumberControl label="BPM確定待ち（秒）" value={spectrum.bpmLockSeconds ?? 5} min={3} max={12} step={0.5} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmLockSeconds", v)} />
-                <NumberControl label="BPM補正（±10）" value={spectrum.bpmOffset ?? 0} min={-10} max={10} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmOffset", v)} />
-                <CheckControl label="きりたんをBPM連動" checked={spectrum.rhythmMotionEnabled !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionEnabled", v)} />
-                <NumberControl label="BPM連動の強さ" value={spectrum.rhythmMotionStrength ?? 0.35} min={0} max={1} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionStrength", v)} />
                 <CheckControl label="ミラー配置" checked={spectrum.mirror === true} onChange={(v) => setSettingValue("audioSpectrumPanel", "mirror", v)} />
                 <SelectControl
                   label="カラー"
@@ -1435,6 +1468,7 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
                   options={[{ value: "mono", label: "モノ" }, { value: "heat", label: "ヒート" }]}
                 />
               </div>
+              <p className="hint">BPM判定方式・確定待ち・補正・きりたん連動の設定は、左メニューの「スペクトラム」に移動しました。</p>
             </DisplaySection>
 
             {renderPlacement("memoPanel", "メモパネル", memoPanelDefaults)}
@@ -1512,6 +1546,98 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
             </DisplaySection>
           </div>
         </DisplaySection>
+        )}
+        {studioObj === "spectrum" && (
+        <div className="display-editor">
+          <DisplaySection title="BPM判定モニター（リアルタイム）" open>
+            <div className="bpm-monitor-head">
+              <span className={`pill ${rhythmLive ? (audioRhythm?.status === "locked" ? "ok" : "warn") : "warn"}`}>
+                {audioRhythm?.captureStatus === "reconnecting"
+                  ? "音声再接続中"
+                  : rhythmLive ? (audioRhythm?.status === "locked" ? "BPM同期中" : "検知中") : "停止中"}
+              </span>
+              <span className="bpm-monitor-big mono">
+                {rhythmLive && audioRhythm?.outputBpm != null ? `BPM ${Math.round(audioRhythm.outputBpm)}` : "BPM —"}
+                {rhythmLive && (audioRhythm?.bpmOffset ?? 0) !== 0
+                  ? ` (${(audioRhythm?.bpmOffset ?? 0) > 0 ? "+" : ""}${audioRhythm?.bpmOffset})`
+                  : ""}
+              </span>
+              <span className="hint">
+                {rhythmLive
+                  ? `音声入力: ${audioRhythm?.source === "companion-pcm" ? "Companion PCM（WASAPI）" : audioRhythm?.source === "mock" ? "開発モック" : "なし"}`
+                  : "壁紙から判定データが届いていません（音楽の再生中だけ更新されます。対応版の壁紙が必要です）"}
+              </span>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={async () => {
+                  try {
+                    await api.audioRhythmReset("manual");
+                    setAudioRhythm(null);
+                    setError(null);
+                  } catch {
+                    setError("BPM履歴のリセットに失敗しました");
+                  }
+                }}
+              >
+                BPM履歴を今すぐリセット
+              </button>
+            </div>
+            <div className="bpm-monitor">
+              {(() => {
+                const est = audioRhythm?.estimates?.find((item) => item.id === "pcm-beatroot");
+                const locked = rhythmLive && audioRhythm?.status === "locked" && audioRhythm.outputBpm != null;
+                const confidence = rhythmLive && audioRhythm?.confidence != null
+                  ? Math.max(0, Math.min(1, audioRhythm.confidence))
+                  : 0;
+                return (
+                  <div className="bpm-monitor-row adopted">
+                    <div className="bpm-monitor-name">
+                      <span>PCM BeatRoot（固定）</span>
+                      <span className="bpm-monitor-sub mono">WASAPI LOOPBACK / ROLLING HISTORY</span>
+                    </div>
+                    <span className={`bpm-monitor-bpm mono ${locked ? "locked" : ""}`}>
+                      {locked ? `${Math.round(audioRhythm?.outputBpm as number)}` : est?.detectedBpm != null ? `~${Math.round(est.detectedBpm)}` : "—"}
+                    </span>
+                    <span className="bpm-monitor-status">
+                      {audioRhythm?.captureStatus === "reconnecting"
+                        ? "再接続中"
+                        : !rhythmLive ? "待機" : audioRhythm?.accepted === false ? "70%未満・不採用" : locked ? "確定" : "検知中"}
+                    </span>
+                    <span className="bpm-monitor-conf" title={`信頼度 ${Math.round(confidence * 100)}%`}>
+                      <span className="bpm-monitor-conf-fill" style={{ width: `${Math.round(confidence * 100)}%` }} />
+                    </span>
+                    <span className="pill ok">採用中</span>
+                  </div>
+                );
+              })()}
+            </div>
+            <p className="hint">
+              {audioRhythm?.detail ?? "CompanionがWindowsの再生音PCMを取得し、直近の波形をBeatRootで解析します。"}
+              {audioRhythm?.retainedBpm != null ? ` 保持中の統計: BPM ${Math.round(audioRhythm.retainedBpm)}。` : ""}
+              {audioRhythm?.challengerBpm != null ? ` 変更候補: BPM ${Math.round(audioRhythm.challengerBpm)}（${Math.round((audioRhythm.challengerForMs ?? 0) / 1000)}秒）。` : ""}
+              {audioRhythm?.resetAt ? ` 最終リセット: ${audioRhythm.resetReason ?? "不明"}。` : ""}
+            </p>
+          </DisplaySection>
+
+          <div className="settings-divider" />
+          <div className="control-grid">
+            <NumberControl label="BPM確定待ち（秒）" value={spectrum.bpmLockSeconds ?? 5} min={3} max={12} step={0.5} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmLockSeconds", v)} />
+            <NumberControl label="最低信頼度" value={spectrum.bpmConfidenceThreshold ?? 0.7} min={0.5} max={0.95} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmConfidenceThreshold", v)} />
+            <NumberControl label="解析窓（秒）" value={spectrum.bpmAnalysisWindowSeconds ?? 14} min={8} max={24} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmAnalysisWindowSeconds", v)} />
+            <NumberControl label="解析間隔（秒）" value={spectrum.bpmAnalysisIntervalSeconds ?? 3} min={1} max={10} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmAnalysisIntervalSeconds", v)} />
+            <NumberControl label="別BPMへの切替確認（秒）" value={spectrum.bpmChangeConfirmSeconds ?? 9} min={3} max={30} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmChangeConfirmSeconds", v)} />
+            <NumberControl label="定期リセット（分・0で無効）" value={spectrum.bpmPeriodicResetMinutes ?? 0} min={0} max={120} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmPeriodicResetMinutes", v)} />
+            <CheckControl label="Spotify曲切替でリセット" checked={spectrum.bpmResetOnSpotifyTrackChange !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmResetOnSpotifyTrackChange", v)} />
+            <NumberControl label="BPM補正（±10）" value={spectrum.bpmOffset ?? 0} min={-10} max={10} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "bpmOffset", v)} />
+            <CheckControl label="きりたんをBPM連動" checked={spectrum.rhythmMotionEnabled !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionEnabled", v)} />
+            <NumberControl label="BPM連動の強さ" value={spectrum.rhythmMotionStrength ?? 0.35} min={0} max={1} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionStrength", v)} />
+            <NumberControl label="BPMロスト後の継続（秒）" value={spectrum.rhythmMotionHoldSeconds ?? 8} min={0} max={30} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionHoldSeconds", v)} />
+            <CheckControl label="通常作業中は首だけBPM連動" checked={spectrum.workHeadSyncEnabled !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "workHeadSyncEnabled", v)} />
+            <NumberControl label="通常作業中の首連動の強さ" value={spectrum.workHeadSyncStrength ?? 0.35} min={0} max={1} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "workHeadSyncStrength", v)} />
+          </div>
+          <p className="hint">70%未満の推定は表示・モーションへ渡しません。リセットまでは確定BPMの統計を保持し、一時的に離れた推定が出ても「別BPMへの切替確認」を満たすまで現在値を守ります。Spotifyは既存の曲終了+0.8秒更新で曲切替を確認した時点で履歴を消します。</p>
+        </div>
         )}
         {studioObj === "system" && (
         <DisplaySection title="システム設定" open>

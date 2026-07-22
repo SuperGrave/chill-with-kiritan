@@ -138,25 +138,37 @@ if ($exe) {
 
 Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 
+## Start here
+
+1. Read ``README_DISTRIBUTION_JP.md`` and extract the entire zip.
+2. Install and start Companion from ``companion\``.
+3. Import ``wallpaper-engine\Chill with Kiritan\project.json`` into Wallpaper Engine.
+4. Select your local VRM from Companion's ``STUDIO > 3D model``.
+5. Apply one of the four bundled 1920x1080 / 1920x1200 standard or spectrum presets.
+
 ## Wallpaper Engine
 
-- Folder: `wallpaper-engine\Chill with Kiritan`
+- Folder: ``wallpaper-engine\Chill with Kiritan``
 - Zip: ``$WallpaperZipName``
 
 $WallpaperModelNote
 
 ## Companion
 
-- Installer/exe: `companion\`
+- Installer/exe: ``companion\``
 
-Companion stores live user data under `%APPDATA%\tohoku-companion`; this release
+Companion stores live user data under ``%APPDATA%\tohoku-companion``; this release
 folder does not include Spotify credentials, memos, UI presets, API keys, or
 other local user data.
 
+Use ``SYSTEM > Data / Backup`` before updating. The JSON export includes settings,
+presets, memos, links, timer state, and personal-news playback state. Backgrounds,
+VRM files, personal-news scripts, and the downloaded lyrics cache remain external.
+
 ## Start Guide
 
-- Quick start: README_DISTRIBUTION_JP.md
-- Japanese manual: START_GUIDE_JP.md
+- Quick start: ``README_DISTRIBUTION_JP.md``
+- Japanese manual: ``START_GUIDE_JP.md``
 "@ | Set-Content -LiteralPath (Join-Path $ReleaseRoot "README_RELEASE.md") -Encoding UTF8
 
 if (Test-Path $ReleaseZipPath) {

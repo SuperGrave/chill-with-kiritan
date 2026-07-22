@@ -158,42 +158,112 @@ const activeSupplement = (supplements: PersonalNewsSupplement[], elapsedMs: numb
 };
 
 interface TickerProps {
-  text: string;
-  /** Total time this block owns on the state timeline. */
-  durationMs: number;
-  /** State-synced elapsed within the block, captured at render time. */
-  elapsedMs: number;
+  script: PersonalNewsScript;
+  /** State-synced current block + elapsed within it, captured at render time. */
+  lineIndex: number;
+  lineElapsedMs: number;
   playing: boolean;
+  loopEnabled: boolean;
   fontSize: number;
 }
 
-// LED-board ticker. The strip enters from the shell's right edge and its tail
-// exits the left edge exactly at durationMs: x(t) = shellW - (shellW + textW) * t/dur.
-// Block durations are proportional to text length (companion CHAR_MS), so the
-// pixel speed stays a steady reading pace across blocks. Driven by rAF writing
-// transform directly — the old CSS animation re-seeked every 250ms state tick
-// (animation-delay rewritten per render), which stuttered, and its scrollSpeed/
-// 180s-clamped duration could finish early or get cut before the tail exited.
-const PersonalNewsTicker: React.FC<TickerProps> = ({ text, durationMs, elapsedMs, playing, fontSize }) => {
+/** Blocks kept flowing to the left of the current one (≫ shell width of text). */
+const TICKER_PREV_KEEP = 12;
+/** Blocks pre-rendered to the right of the current one (they sit off-screen
+ *  until their timeline slot starts, so the rAF can cross block boundaries
+ *  without waiting for the next React render). */
+const TICKER_NEXT_KEEP = 2;
+
+// LED-board conveyor ticker (rebuilt 2026-07-19, master FB 文字送りがおかしい).
+//
+// The old per-block pass — x(t) = shellW − (shellW+textW)·t/dur — had three
+// visible defects: (1) each block traveled shellW+textW px in CHAR_MS×chars ms,
+// so short blocks FLEW across (the shellW term dominates); (2) textW was padded
+// to max(textW, shellW), so short blocks fully exited early and left dead air
+// for the rest of their slot; (3) the rAF only extrapolated INSIDE the current
+// block, so every block boundary stalled until the next 250ms React tick, then
+// snapped.
+//
+// Now the blocks ride one continuous conveyor, head-to-tail with a ◆ separator:
+// during block k, the conveyor advances by exactly w_k (that block's rendered
+// width) over its timeline slot dur_k, i.e. block k's head crosses the shell's
+// right edge exactly when its slot starts. Because dur_k = CHAR_MS×chars and
+// w_k ≈ fontSize×chars for CJK text, the pixel speed stays near-constant across
+// blocks; the shell stays full of flowing text (no resets, no dead air); and a
+// long-duration short block (explicit Wait) simply slows the conveyor down.
+// The rAF advances across block boundaries itself (the next blocks' spans are
+// pre-rendered off-screen right), so boundaries are seamless; the 250ms React
+// tick only re-anchors to the companion timeline and shifts the render window.
+const PersonalNewsTicker: React.FC<TickerProps> = ({ script, lineIndex, lineElapsedMs, playing, loopEnabled, fontSize }) => {
   const shellRef = React.useRef<HTMLDivElement | null>(null);
-  const stripRef = React.useRef<HTMLDivElement | null>(null);
+  const rowRef = React.useRef<HTMLDivElement | null>(null);
+  const itemRefs = React.useRef(new Map<number, HTMLSpanElement>());
   // Anchor from the latest state render; the rAF loop extrapolates between
   // renders on the same wall clock, so re-anchoring is seamless while pause /
   // seek / block changes from the companion snap to the corrected position.
-  const anchorRef = React.useRef({ elapsedMs: 0, at: 0, playing: false, durationMs: 1 });
-  anchorRef.current = { elapsedMs, at: performance.now(), playing, durationMs: Math.max(durationMs, 1) };
+  const anchorRef = React.useRef({ script, lineIndex: 0, lineElapsedMs: 0, at: 0, playing: false, loopEnabled: false });
+  React.useLayoutEffect(() => {
+    anchorRef.current = { script, lineIndex, lineElapsedMs, at: performance.now(), playing, loopEnabled };
+  }, [script, lineIndex, lineElapsedMs, playing, loopEnabled]);
+
+  // Looping scripts use virtual slots outside 0..N-1.  For example, after the
+  // last real block, slot N renders block 0 again.  Keeping those clones in the
+  // same flex row is what lets the conveyor cross the loop seam without
+  // briefly replaying/parking the final block until the next React state tick.
+  const windowStart = loopEnabled ? lineIndex - TICKER_PREV_KEEP : Math.max(0, lineIndex - TICKER_PREV_KEEP);
+  const windowEnd = loopEnabled ? lineIndex + TICKER_NEXT_KEEP : Math.min(script.lines.length - 1, lineIndex + TICKER_NEXT_KEEP);
 
   const place = React.useCallback(() => {
     const shell = shellRef.current;
-    const strip = stripRef.current;
-    if (!shell || !strip) return;
+    const row = rowRef.current;
+    if (!shell || !row) return;
     const a = anchorRef.current;
-    const t = a.playing ? a.elapsedMs + (performance.now() - a.at) : a.elapsedMs;
-    const progress = clamp(t / a.durationMs, 0, 1);
-    const shellW = shell.clientWidth;
-    const textW = Math.max(strip.scrollWidth, shellW);
-    const x = shellW - (shellW + textW) * progress;
-    strip.style.transform = `translate3d(${x}px, 0, 0)`;
+    const lines = a.script.lines;
+    if (lines.length === 0) return;
+
+    // Advance (block, elapsed) across the script on the extrapolated clock —
+    // the same walk materialize() does, kept here so boundaries never wait for
+    // a React tick.
+    let idx = clamp(a.lineIndex, 0, lines.length - 1);
+    let slot = idx;
+    let elapsed = a.lineElapsedMs + (a.playing ? performance.now() - a.at : 0);
+    let guard = lines.length + 1;
+    while (elapsed >= Math.max(lines[idx].durationMs || 1, 1) && guard-- > 0) {
+      elapsed -= Math.max(lines[idx].durationMs || 1, 1);
+      idx += 1;
+      slot += 1;
+      if (idx >= lines.length) {
+        if (a.loopEnabled) {
+          idx = 0;
+        } else {
+          idx = lines.length - 1;
+          elapsed = Math.max(lines[idx].durationMs || 1, 1);
+          break;
+        }
+      }
+    }
+
+    // Only blocks inside the rendered window can be measured; if the rAF ran
+    // ahead of React (rare — two blocks inside one 250ms tick, or a loop
+    // wrap), park at the window edge until the next render catches up.
+    const first = itemRefs.current.get(slot);
+    const firstRendered = itemRefs.current.size > 0 ? Math.min(...itemRefs.current.keys()) : slot;
+    let head: HTMLSpanElement | undefined = first;
+    let frac = clamp(elapsed / Math.max(lines[idx].durationMs || 1, 1), 0, 1);
+    if (!first) {
+      const last = itemRefs.current.size > 0 ? Math.max(...itemRefs.current.keys()) : -1;
+      const parked = itemRefs.current.get(slot > last ? last : firstRendered);
+      if (!parked) return;
+      head = parked;
+      frac = slot > last ? 1 : 0;
+    }
+    if (!head) return;
+
+    // Conveyor: block k's head sits at the shell's right edge at frac 0 and has
+    // advanced by its own width at frac 1 (offsetLeft/offsetWidth are layout-
+    // space, unaffected by the transform we write).
+    const x = shell.clientWidth - head.offsetLeft - head.offsetWidth * frac;
+    row.style.transform = `translate3d(${x}px, 0, 0)`;
   }, []);
 
   React.useEffect(() => {
@@ -206,24 +276,46 @@ const PersonalNewsTicker: React.FC<TickerProps> = ({ text, durationMs, elapsedMs
     return () => window.cancelAnimationFrame(raf);
   }, [place]);
 
-  // Re-place synchronously when the block text swaps so the new strip never
-  // paints one frame at the previous block's offset.
+  // Re-place synchronously whenever the render window shifts (or the script
+  // swaps) so the row never paints one frame at a stale offset.
   React.useLayoutEffect(() => {
     place();
-  }, [place, text]);
+  });
+
+  const items = Array.from({ length: windowEnd - windowStart + 1 }, (_, offset) => {
+    const slot = windowStart + offset;
+    const i = ((slot % script.lines.length) + script.lines.length) % script.lines.length;
+    const line = script.lines[i];
+    const text = stripSupplementMarkers(line.text);
+    return (
+      <span
+        key={`${slot}:${line.id ?? i}`}
+        className="personal-news-ticker-item"
+        ref={(el) => {
+          if (el) itemRefs.current.set(slot, el);
+          else itemRefs.current.delete(slot);
+        }}
+      >
+        {text || ' '}
+        <span className="personal-news-ticker-sep" aria-hidden>
+          ◆
+        </span>
+      </span>
+    );
+  });
 
   return (
     <div ref={shellRef} className="personal-news-marquee-shell continuous">
       <div
-        ref={stripRef}
-        className="personal-news-marquee"
+        ref={rowRef}
+        className="personal-news-marquee personal-news-ticker-row"
         style={{
           fontSize: `${fontSize}px`,
           // Pre-rAF fallback: park off the right edge (first place() corrects it).
           transform: 'translate3d(100vw, 0, 0)',
         }}
       >
-        {text}
+        {items}
       </div>
     </div>
   );
@@ -259,11 +351,10 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
   const chapterIndex = Math.max(0, script.chapters.findIndex((item) => item.id === chapter?.id));
   const durationMs = script.estimatedDurationMs || personalNews.durationMs || 1;
   const totalProgress = clamp(live.elapsedMs / durationMs, 0, 1);
-  const lineText = stripSupplementMarkers(line.text) || script.title;
-  const lineDurationMs = Math.max(line.durationMs || 1, 1);
-  // NOTE: personalNewsScrollSpeed is deliberately NOT applied here — the block
-  // owns lineDurationMs on the shared state timeline, so any display-side speed
-  // scaling either cuts the tail off early or leaves dead air (v0.8.6 bug).
+  // NOTE: personalNewsScrollSpeed is deliberately NOT applied here — timing is
+  // owned by the script timeline (CHAR_MS × chars + explicit waits); any
+  // display-side speed scaling desyncs the ticker from the companion state
+  // (v0.8.6 bug).
   const panelStatus = offline ? 'OFFLINE' : live.status.toUpperCase();
   const supplements = supplementsFor(script);
   const supplement = activeSupplement(supplements, live.elapsedMs);
@@ -298,10 +389,11 @@ const PersonalNewsPanel: React.FC<PersonalNewsPanelProps> = ({
 
       {s.personalNewsShowBody && (
         <PersonalNewsTicker
-          text={lineText}
-          durationMs={lineDurationMs}
-          elapsedMs={live.lineElapsedMs}
+          script={script}
+          lineIndex={live.lineIndex}
+          lineElapsedMs={live.lineElapsedMs}
           playing={live.status === 'playing'}
+          loopEnabled={personalNews.loopEnabled === true}
           fontSize={s.personalNewsBodySize}
         />
       )}

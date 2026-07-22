@@ -101,6 +101,46 @@ export function installReviewPanel(lab: MotionLab): () => void {
     btn('停止/idle', () => guard('stop', () => lab.stop())),
   ]);
 
+  // 音楽ノリノリ (music_listen) — fixed-mode Director + synthetic BPM injection.
+  // Production locks BPM from real audio via the overlay analyzer; here the
+  // master can audition the rhythm figures at ANY tempo. The sync event locks
+  // the beat-phase oscillator and a timer then fires kiritan:audio-beat every
+  // beat exactly like the production pipeline (energy jitter included), so the
+  // figures ride a real beat stream, not just the free-running oscillator.
+  section('音楽ノリノリ（BPM注入）');
+  const bpmIn = document.createElement('input');
+  bpmIn.type = 'number'; bpmIn.min = '40'; bpmIn.max = '240'; bpmIn.step = '1'; bpmIn.value = '120';
+  bpmIn.style.cssText = 'width:64px;background:#222734;color:#e8e8ee;border:1px solid #444b5a;border-radius:6px;padding:3px';
+  let beatTimer = 0;
+  const stopBeats = () => { if (beatTimer) { window.clearInterval(beatTimer); beatTimer = 0; } };
+  const lockBpm = () => {
+    const bpm = Math.max(40, Math.min(240, Number(bpmIn.value) || 120));
+    stopBeats();
+    window.dispatchEvent(new CustomEvent('kiritan:audio-bpm-sync', {
+      detail: { bpm, rawBpm: bpm, bpmOffset: 0, lockedAt: performance.now() },
+    }));
+    beatTimer = window.setInterval(() => {
+      window.dispatchEvent(new CustomEvent('kiritan:audio-beat', {
+        detail: { at: performance.now(), lockedBpm: bpm, energy: 0.6 + Math.random() * 0.3 },
+      }));
+    }, 60_000 / bpm);
+    setStatus(`BPM ${bpm} ロック（ビート送出中）— フィギュアは32拍ごとに交代`);
+  };
+  const unlockBpm = () => {
+    stopBeats();
+    window.dispatchEvent(new CustomEvent('kiritan:audio-rhythm', { detail: { status: 'detecting', lockedBpm: null } }));
+    setStatus('BPMロック解除（待機ループへフェード）');
+  };
+  const bpmWrap = document.createElement('label');
+  bpmWrap.append(document.createTextNode('BPM '), bpmIn);
+  panel.appendChild(bpmWrap);
+  rowOf([
+    btn('▶ モード開始', () => guard('music_listen fixed', () => lab.director(true, { fixedMode: 'music_listen' as never })), 'go'),
+    btn('♪ ロック', lockBpm, 'go'),
+    btn('□ 解除', unlockBpm),
+  ]);
+  rowOf([btn('待機Loop単体（袖・ポーズ確認）', () => playId('loop_music_listen', false))]);
+
   // Debug overlays.
   section('デバッグ表示');
   const gaze = document.createElement('input'); gaze.type = 'checkbox';
@@ -147,6 +187,7 @@ export function installReviewPanel(lab: MotionLab): () => void {
   console.log('[REVIEW] Phase 1 review panel installed (?phase1Review=1). Press P to hide.');
 
   return () => {
+    stopBeats();
     window.clearInterval(statusInterval);
     window.removeEventListener('keydown', onKeyDown);
     panel.remove();

@@ -15,7 +15,6 @@ import {
   startMock,
   stopMock,
 } from '../../services/audioSpectrum';
-import { isBpmDetectionMethod } from '../../lib/bpmAnalyzer';
 
 interface AudioSpectrumPanelProps {
   settings?: any;
@@ -69,11 +68,31 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
   }, [allowMock]);
 
   const bpmLockSeconds = Math.max(3, Math.min(12, Number(s.bpmLockSeconds ?? 5)));
-  const bpmMethod = isBpmDetectionMethod(s.bpmMethod) ? s.bpmMethod : 'consensus';
   const bpmOffset = Math.max(-10, Math.min(10, Math.round(Number(s.bpmOffset ?? 0) || 0)));
+  const bpmConfidenceThreshold = Math.max(0.5, Math.min(0.95, Number(s.bpmConfidenceThreshold ?? 0.7)));
+  const bpmAnalysisWindowSeconds = Math.max(8, Math.min(24, Number(s.bpmAnalysisWindowSeconds ?? 14)));
+  const bpmAnalysisIntervalSeconds = Math.max(1, Math.min(10, Number(s.bpmAnalysisIntervalSeconds ?? 3)));
+  const bpmChangeConfirmSeconds = Math.max(3, Math.min(30, Number(s.bpmChangeConfirmSeconds ?? 9)));
+  const bpmPeriodicResetMinutes = Math.max(0, Math.min(120, Number(s.bpmPeriodicResetMinutes ?? 0)));
   React.useEffect(() => {
-    configureTempoTracking({ stableMs: bpmLockSeconds * 1000, method: bpmMethod, bpmOffset });
-  }, [bpmLockSeconds, bpmMethod, bpmOffset]);
+    configureTempoTracking({
+      stableMs: bpmLockSeconds * 1000,
+      bpmOffset,
+      confidenceThreshold: bpmConfidenceThreshold,
+      windowSeconds: bpmAnalysisWindowSeconds,
+      analysisIntervalSeconds: bpmAnalysisIntervalSeconds,
+      changeConfirmMs: bpmChangeConfirmSeconds * 1000,
+      periodicResetMinutes: bpmPeriodicResetMinutes,
+    });
+  }, [
+    bpmLockSeconds,
+    bpmOffset,
+    bpmConfidenceThreshold,
+    bpmAnalysisWindowSeconds,
+    bpmAnalysisIntervalSeconds,
+    bpmChangeConfirmSeconds,
+    bpmPeriodicResetMinutes,
+  ]);
 
   React.useEffect(() => {
     let raf = 0;
@@ -215,9 +234,7 @@ const AudioSpectrumPanel: React.FC<AudioSpectrumPanelProps> = ({ settings, allow
         const right = standby
           ? 'WAITING FOR AUDIO'
           : rhythm.status === 'locked'
-            ? rhythm.method === 'consensus'
-              ? `KIRITAN SYNC ${rhythm.support}/3`
-              : 'KIRITAN SYNC'
+            ? 'KIRITAN SYNC'
             : rhythm.detectedBpm !== null
               ? `DETECTING ${progress}%`
               : 'LISTENING';

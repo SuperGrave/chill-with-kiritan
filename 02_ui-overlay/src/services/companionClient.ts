@@ -79,6 +79,18 @@ export type CompanionTimerState = {
   commandSeq: number;
 };
 
+export type CompanionPcmChunk = {
+  status: string;
+  sampleRate: number;
+  from: number;
+  to: number;
+  resetGeneration: number;
+  resetReason: string;
+  resetAt: string;
+  samplesB64: string;
+  error?: string | null;
+};
+
 const defaultTimerState = (): CompanionTimerState => ({
   mode: 'pomodoro',
   phase: 'focus',
@@ -246,6 +258,54 @@ export async function pushCompanionUi(layout: any, settings: any): Promise<boole
       method: 'PUT',
       headers,
       body: JSON.stringify({ layout, settings }),
+    });
+    if (res.status === 401) tokenPromise = null;
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Push the live BPM-analyzer snapshot (per-method estimates) to the Companion
+ * so its スペクトラム settings tab can show what each detector is reading in
+ * real time. Fire-and-forget semantics: best effort, never throws.
+ */
+export async function pushAudioRhythmState(payload: Record<string, unknown>): Promise<boolean> {
+  try {
+    const token = await companionToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers[TOKEN_HEADER] = token;
+
+    const res = await fetch(`${API_BASE}/audio-rhythm/state`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401) tokenPromise = null;
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchAudioPcmChunk(after: number): Promise<CompanionPcmChunk | null> {
+  try {
+    return await getJson<CompanionPcmChunk>(`/audio-pcm/chunk?after=${Math.max(0, Math.floor(after))}`, 1800);
+  } catch {
+    return null;
+  }
+}
+
+export async function requestAudioRhythmReset(reason: string): Promise<boolean> {
+  try {
+    const token = await companionToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers[TOKEN_HEADER] = token;
+    const res = await fetch(`${API_BASE}/audio-rhythm/reset`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ reason }),
     });
     if (res.status === 401) tokenPromise = null;
     return res.ok;

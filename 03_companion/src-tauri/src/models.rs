@@ -28,6 +28,12 @@ pub struct WallpaperState {
     /// not written to disk (see `state::Persist`), since it's a live runtime
     /// signal re-sent on every mode change / ~30s heartbeat.
     pub kiritan: Option<KiritanRuntimeState>,
+    /// Latest BPM-analyzer snapshot the overlay POSTed (~1 Hz while audio
+    /// frames are flowing). Memory-only, same rationale as `kiritan`. The
+    /// Companion's スペクトラム settings tab polls this to show what every
+    /// detection method is currently reading.
+    #[serde(default)]
+    pub audio_rhythm: Option<AudioRhythmRuntimeState>,
     pub updated_at: String,
 }
 
@@ -47,6 +53,7 @@ impl Default for WallpaperState {
             ui: UiState::default(),
             settings: AppSettings::default(),
             kiritan: None,
+            audio_rhythm: None,
             updated_at: now_iso(),
         }
     }
@@ -130,12 +137,54 @@ impl Default for UiState {
 struct BuiltInUiPresetPack {
     default_preset_id: String,
     presets: Vec<UiPreset>,
+    #[serde(default)]
+    variants: Vec<BuiltInUiPresetVariant>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuiltInUiPresetVariant {
+    id: String,
+    name: String,
+    base_preset_id: String,
+    #[serde(default)]
+    layout_patch: Value,
+    #[serde(default)]
+    settings_patch: Value,
+    created_at: String,
+    updated_at: String,
+}
+
+impl BuiltInUiPresetPack {
+    fn materialize_variants(&mut self) {
+        for variant in std::mem::take(&mut self.variants) {
+            if self.presets.iter().any(|preset| preset.id == variant.id) {
+                continue;
+            }
+            let Some(mut preset) = self
+                .presets
+                .iter()
+                .find(|preset| preset.id == variant.base_preset_id)
+                .cloned()
+            else {
+                continue;
+            };
+            preset.id = variant.id;
+            preset.name = variant.name;
+            merge_json(&mut preset.layout, variant.layout_patch);
+            merge_json(&mut preset.settings, variant.settings_patch);
+            preset.created_at = variant.created_at;
+            preset.updated_at = variant.updated_at;
+            self.presets.push(preset);
+        }
+    }
 }
 
 fn default_ui_state() -> UiState {
     let pack =
         serde_json::from_str::<BuiltInUiPresetPack>(include_str!("built_in_ui_presets.json"));
-    if let Ok(pack) = pack {
+    if let Ok(mut pack) = pack {
+        pack.materialize_variants();
         if let Some(default_preset) = pack
             .presets
             .iter()
@@ -233,8 +282,13 @@ fn legacy_default_ui_state() -> UiState {
             "contentTopGap": 12, "barCount": 24, "segmentCount": 14, "barGap": 4,
             "peakHold": true, "peakFallSpeed": 0.008, "sensitivity": 1, "decaySpeed": 0.12,
             "mirror": false, "colorMode": "mono", "showBpm": true,
-            "bpmMethod": "consensus", "bpmLockSeconds": 5, "bpmOffset": 0,
+            "bpmMethod": "pcm-beatroot", "bpmLockSeconds": 5, "bpmOffset": 0,
+            "bpmConfidenceThreshold": 0.7, "bpmAnalysisWindowSeconds": 14,
+            "bpmAnalysisIntervalSeconds": 3, "bpmChangeConfirmSeconds": 9,
+            "bpmPeriodicResetMinutes": 0, "bpmResetOnSpotifyTrackChange": true,
             "rhythmMotionEnabled": true, "rhythmMotionStrength": 0.35,
+            "rhythmMotionHoldSeconds": 8,
+            "workHeadSyncEnabled": true, "workHeadSyncStrength": 0.35,
             "standbyText": "AUDIO STANDBY"
         },
         "memoPanel": {
@@ -311,6 +365,20 @@ pub fn repair_ui_state(ui: &mut UiState) {
     merge_json(&mut settings, ui.settings.clone());
     repair_wallpaper_settings(&mut settings, &defaults.settings);
     ui.settings = settings;
+
+    // Ship newly added built-ins to existing installations as well as clean
+    // ones. A same-name user preset is treated as that built-in's authored
+    // predecessor, so the two spectrum presets created before this release do
+    // not appear twice after upgrade.
+    for preset in defaults.presets {
+        let already_present = ui
+            .presets
+            .iter()
+            .any(|current| current.id == preset.id || current.name == preset.name);
+        if !already_present {
+            ui.presets.push(preset);
+        }
+    }
 
     for preset in &mut ui.presets {
         let mut preset_layout = defaults.layout.clone();
@@ -1051,6 +1119,23 @@ impl From<KiritanStatePost> for KiritanRuntimeState {
     }
 }
 
+// ─── Audio rhythm runtime state (スペクトラム設定タブ, 2026-07-19) ───────────
+// The overlay's audioSpectrum service POSTs a live BPM-analyzer snapshot to
+// `/api/audio-rhythm/state` about once a second while audio frames are
+// flowing. The payload schema is owned by the sender
+// (02_ui-overlay/src/services/audioSpectrum.ts — maybePostRhythmState), so it
+// is stored as-is and only stamped with the server clock; the Companion UI
+// treats a stale `receivedAt` as 停止中 / 旧バージョンの壁紙.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioRhythmRuntimeState {
+    /// Overlay-sent snapshot (selected method, per-detector estimates, …).
+    #[serde(flatten)]
+    pub payload: Map<String, Value>,
+    pub received_at: String, // ISO, server clock
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1067,18 +1152,34 @@ mod tests {
         assert_eq!(ui.layout["canvas"]["height"], json!(1080));
         assert_eq!(
             ui.settings["audioSpectrumPanel"]["bpmMethod"],
-            json!("consensus")
+            json!("pcm-beatroot")
         );
         assert_eq!(
+            ui.settings["audioSpectrumPanel"]["bpmConfidenceThreshold"],
+            json!(0.7)
+        );
+        // 2026-07-19: the samples ship master's live v0.8.9 tuning — panel on,
+        // spectrum placed in the right column, quicker 3s lock.
+        assert_eq!(ui.settings["audioSpectrumPanel"]["show"], json!(true));
+        assert_eq!(
             ui.settings["audioSpectrumPanel"]["bpmLockSeconds"],
-            json!(5)
+            json!(3)
         );
         assert_eq!(ui.settings["audioSpectrumPanel"]["bpmOffset"], json!(0));
+        assert_eq!(ui.layout["audioSpectrumPanel"]["x"], json!(1396));
         assert_eq!(
             ui.settings["audioSpectrumPanel"]["rhythmMotionEnabled"],
             json!(true)
         );
-        assert_eq!(ui.presets.len(), 2);
+        assert_eq!(
+            ui.settings["audioSpectrumPanel"]["rhythmMotionHoldSeconds"],
+            json!(8)
+        );
+        assert_eq!(
+            ui.settings["audioSpectrumPanel"]["workHeadSyncEnabled"],
+            json!(true)
+        );
+        assert_eq!(ui.presets.len(), 4);
         assert!(ui.presets.iter().any(|preset| {
             preset.id == "builtin-1920x1200-sample"
                 && preset.settings["baseResolution"] == json!("1920x1200")
@@ -1087,6 +1188,34 @@ mod tests {
             preset.id == "builtin-1920x1080-sample"
                 && preset.settings["baseResolution"] == json!("1920x1080")
         }));
+        let spectrum_1200 = ui
+            .presets
+            .iter()
+            .find(|preset| preset.id == "builtin-1920x1200-spectrum")
+            .expect("1200p spectrum preset");
+        assert_eq!(spectrum_1200.name, "1920x1200用サンプル(スペクトラム含)");
+        assert_eq!(
+            spectrum_1200.settings["motion"]["fixedMode"],
+            json!("music_listen")
+        );
+        assert_eq!(
+            spectrum_1200.settings["audioSpectrumPanel"]["bpmMethod"],
+            json!("pcm-beatroot")
+        );
+        assert_eq!(
+            spectrum_1200.settings["wallpaper"]["vrmModelPath"],
+            json!("")
+        );
+        let spectrum_1080 = ui
+            .presets
+            .iter()
+            .find(|preset| preset.id == "builtin-1920x1080-spectrum")
+            .expect("1080p spectrum preset");
+        assert_eq!(spectrum_1080.layout["audioSpectrumPanel"]["y"], json!(597));
+        assert_eq!(
+            spectrum_1080.layout["audioSpectrumPanel"]["height"],
+            json!(180)
+        );
     }
 
     #[test]
@@ -1114,6 +1243,50 @@ mod tests {
         assert_eq!(
             ui.settings["wallpaper"]["objectLayout"]["laptop"]["rotation"][1].as_f64(),
             Some(1.569)
+        );
+    }
+
+    #[test]
+    fn repair_adds_missing_builtins_without_duplicating_authored_spectrum_presets() {
+        let defaults = default_ui_state();
+        let mut authored_1200 = defaults
+            .presets
+            .iter()
+            .find(|preset| preset.id == "builtin-1920x1200-spectrum")
+            .unwrap()
+            .clone();
+        authored_1200.id = "user-spectrum-1200".into();
+        let mut authored_1080 = defaults
+            .presets
+            .iter()
+            .find(|preset| preset.id == "builtin-1920x1080-spectrum")
+            .unwrap()
+            .clone();
+        authored_1080.id = "user-spectrum-1080".into();
+        let mut ui = UiState {
+            layout: authored_1080.layout.clone(),
+            settings: authored_1080.settings.clone(),
+            presets: vec![authored_1200, authored_1080],
+            active_preset_id: Some("user-spectrum-1080".into()),
+        };
+
+        repair_ui_state(&mut ui);
+
+        assert_eq!(ui.presets.len(), 4);
+        assert!(ui
+            .presets
+            .iter()
+            .any(|preset| preset.id == "builtin-1920x1200-sample"));
+        assert!(ui
+            .presets
+            .iter()
+            .any(|preset| preset.id == "builtin-1920x1080-sample"));
+        assert_eq!(
+            ui.presets
+                .iter()
+                .filter(|preset| preset.name.contains("スペクトラム含"))
+                .count(),
+            2
         );
     }
 }

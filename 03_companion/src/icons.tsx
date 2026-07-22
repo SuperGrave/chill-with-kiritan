@@ -347,6 +347,16 @@ export const LayersIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const SpectrumIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 18V12" />
+    <path d="M8 18V7" />
+    <path d="M12 18V4" />
+    <path d="M16 18V9" />
+    <path d="M20 18V14" />
+  </Icon>
+);
+
 export const GearIcon = (p: IconProps) => (
   <Icon {...p}>
     <circle cx="12" cy="12" r="3" />

@@ -4,9 +4,9 @@
 
 ## 現在の本流
 
-**本流バージョン**: v0.8.1。以前の `v4` を v0.8.0 として扱い、以降は
-`v0.8.1`, `v0.8.2` のように v0.8 系で積み上げる。過去の `v2` / `v3`
-表記はレガシー版として保持する。
+**本流バージョン**: v0.9.2。以前の `v4` を v0.8.0 として扱い、v0.8系の
+公開版を積み上げた後、BPM・音楽連動・個人ニュース連続表示をまとめた
+v0.9.0を経て、BPMモーション安定化のv0.9.1、PCM BeatRoot一本化とモーション位相改善のv0.9.2へ更新した。過去の `v2` / `v3` 表記はレガシー版として保持する。
 
 バージョン規則は [MAINLINE_VERSIONING.md](MAINLINE_VERSIONING.md)、Gitツリー運用は
 [GIT_TREE_POLICY.md](GIT_TREE_POLICY.md) を正典にする。
@@ -22,6 +22,10 @@
 | [V0.8.X_IMPROVEMENT_FEATURE_PLAN_2026-07-10.md](V0.8.X_IMPROVEMENT_FEATURE_PLAN_2026-07-10.md) | v0.8.2調査にもとづく次期実装の候補計画（A系=修正 / B系=新機能、選定待ち） |
 | [STATUS_REPORT_2026-06-10.md](STATUS_REPORT_2026-06-10.md) | プロジェクト全体の現状スナップショット |
 | [RELEASE_V0.8.1.md](RELEASE_V0.8.1.md) | v0.8.1 の変更点・検証メモ |
+| [RELEASE_V0.9.0.md](RELEASE_V0.9.0.md) | v0.9.0 のBPM推定・音楽連動・個人ニュース連続表示と配布物 |
+| [RELEASE_V0.9.1.md](RELEASE_V0.9.1.md) | v0.9.1 の5 BPM固定モーションバンクとBPMロスト猶予 |
+| [RELEASE_V0.9.2.md](RELEASE_V0.9.2.md) | v0.9.2 のPCM BeatRoot・履歴安定化・リセットとモーション位相改善 |
+| [BPM_ALGORITHM_RESEARCH_2026-07-21.md](BPM_ALGORITHM_RESEARCH_2026-07-21.md) | 現行BPM推定の弱点、SuperFlux・コームフィルタ・状態空間方式の比較と推奨実装順 |
 | [MAINLINE_VERSIONING.md](MAINLINE_VERSIONING.md) | v0.8 系の命名・表示・release生成ルール |
 | [GIT_TREE_POLICY.md](GIT_TREE_POLICY.md) | main / tag / archive branch の運用ルール |
 | [INFO_DISPLAY_UI_STYLE_REPORT_2026-07-09.md](INFO_DISPLAY_UI_STYLE_REPORT_2026-07-09.md) | 情報表示部UIの雰囲気・構成・Companion移植向けスタイルメモ |

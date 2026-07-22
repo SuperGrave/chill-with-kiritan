@@ -7,7 +7,7 @@ use axum::{
     routing::{get, patch, post, put},
     Router,
 };
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::{json, Value};
 use std::{net::SocketAddr, path::Path as FsPath, time::Instant};
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -114,6 +114,13 @@ pub fn build_router(shared: Shared) -> Router {
             "/api/kiritan/state",
             get(get_kiritan_state).post(post_kiritan_state),
         )
+        // ── Live BPM-analyzer snapshot (スペクトラム設定タブ) ─────────
+        .route(
+            "/api/audio-rhythm/state",
+            get(get_audio_rhythm_state).post(post_audio_rhythm_state),
+        )
+        .route("/api/audio-rhythm/reset", post(reset_audio_rhythm))
+        .route("/api/audio-pcm/chunk", get(get_audio_pcm_chunk))
         // ── Display settings + presets ───────────────────────────────
         .route("/api/ui", get(get_ui).put(put_ui))
         .route("/api/presets", get(list_presets).post(create_preset))
@@ -583,6 +590,70 @@ async fn post_kiritan_state(
     ok()
 }
 
+// ─── Audio rhythm runtime state ─────────────────────────────────────────────
+// The overlay's BPM analyzer POSTs a per-method estimate snapshot ~1×/s while
+// audio frames flow (02_ui-overlay audioSpectrum.ts). Same lifecycle as the
+// kiritan state: memory-only, never persisted, `null` until first report.
+
+async fn get_audio_rhythm_state(State(s): State<Shared>) -> Json<Value> {
+    match &s.lock().unwrap().state.audio_rhythm {
+        Some(a) => Json(serde_json::to_value(a).unwrap_or(json!(null))),
+        None => Json(json!(null)),
+    }
+}
+
+async fn post_audio_rhythm_state(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    let Value::Object(mut payload) = body else {
+        return Json(json!({ "ok": false, "error": "body must be a JSON object" }));
+    };
+    // The server clock owns receivedAt (the struct field is flattened next to
+    // the payload, so an echoed key would otherwise serialize twice).
+    payload.remove("receivedAt");
+
+    let mut g = s.lock().unwrap();
+    g.state.audio_rhythm = Some(AudioRhythmRuntimeState {
+        payload,
+        received_at: now_iso(),
+    });
+    // Live runtime signal — deliberately NOT touch()/persist(), like kiritan.
+    ok()
+}
+
+#[derive(Debug, Deserialize)]
+struct AudioPcmQuery {
+    #[serde(default)]
+    after: u64,
+}
+
+async fn get_audio_pcm_chunk(
+    State(s): State<Shared>,
+    Query(query): Query<AudioPcmQuery>,
+) -> Json<crate::pcm_capture::PcmChunkResponse> {
+    let pcm = { s.lock().unwrap().pcm_capture.clone() };
+    let response = pcm.lock().unwrap().chunk_after(query.after);
+    Json(response)
+}
+
+#[derive(Debug, Deserialize)]
+struct AudioRhythmResetBody {
+    reason: Option<String>,
+}
+
+async fn reset_audio_rhythm(
+    State(s): State<Shared>,
+    Json(body): Json<AudioRhythmResetBody>,
+) -> Json<Value> {
+    let pcm = { s.lock().unwrap().pcm_capture.clone() };
+    let mut state = pcm.lock().unwrap();
+    state.request_reset(body.reason.unwrap_or_else(|| "manual".into()));
+    Json(json!({
+        "ok": true,
+        "resetGeneration": state.reset_generation,
+        "resetReason": state.reset_reason,
+        "resetAt": state.reset_at,
+    }))
+}
+
 // ─── UI settings ───────────────────────────────────────────────────────────────
 
 async fn get_ui(State(s): State<Shared>) -> Json<UiState> {
@@ -1010,62 +1081,95 @@ async fn backup_export(State(s): State<Shared>, Json(body): Json<Value>) -> Json
     }
 }
 
+fn parse_backup_field<T: DeserializeOwned>(data: &Value, key: &str) -> Result<Option<T>, String> {
+    let Some(value) = data.get(key) else {
+        return Ok(None);
+    };
+    serde_json::from_value(value.clone())
+        .map(Some)
+        .map_err(|error| format!("{key} の形式が不正です: {error}"))
+}
+
 /// Restore a settings backup produced by `backup_export`. Accepts the full
 /// bundle (`{ data: {...}, secrets? }`) or a bare data object. The current data
 /// is written to `.bak` by `persist()` before being replaced, so a bad import
 /// can be rolled back. Secrets are only touched when present in the bundle.
 async fn backup_import(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    if let Some(kind) = body.get("kind").and_then(Value::as_str) {
+        if kind != "companion-backup" {
+            return Json(json!({ "ok": false, "error": "Companion用ではないバックアップです" }));
+        }
+    }
+    if let Some(app) = body.get("app").and_then(Value::as_str) {
+        if app != "tohoku-companion" {
+            return Json(json!({ "ok": false, "error": "対象アプリが異なるバックアップです" }));
+        }
+    }
+
     let data = body.get("data").cloned().unwrap_or_else(|| body.clone());
+    let parsed = (|| -> Result<_, String> {
+        Ok((
+            parse_backup_field::<UiState>(&data, "ui")?,
+            parse_backup_field::<AppSettings>(&data, "settings")?,
+            parse_backup_field::<Vec<MemoItem>>(&data, "memos")?,
+            parse_backup_field::<Vec<BookmarkItem>>(&data, "bookmarks")?,
+            parse_backup_field::<TimerState>(&data, "timer")?,
+            parse_backup_field::<PersonalNewsState>(&data, "personalNews")?,
+            parse_backup_field::<Secrets>(&body, "secrets")?,
+        ))
+    })();
+    let (mut ui, settings, memos, bookmarks, timer, personal_news, secrets) = match parsed {
+        Ok(value) => value,
+        Err(error) => return Json(json!({ "ok": false, "error": error })),
+    };
+    if ui.is_none()
+        && settings.is_none()
+        && memos.is_none()
+        && bookmarks.is_none()
+        && timer.is_none()
+        && personal_news.is_none()
+        && secrets.is_none()
+    {
+        return Json(json!({ "ok": false, "error": "有効なバックアップデータが見つかりません" }));
+    }
+    if let Some(value) = ui.as_mut() {
+        repair_ui_state(value);
+    }
+
+    // Every field is parsed before the lock is taken. A malformed field can
+    // therefore never leave the live state half-restored.
     let mut applied: Vec<&str> = Vec::new();
     let startup_config;
     {
         let mut g = s.lock().unwrap();
-        if let Some(v) = data.get("ui") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.ui = x;
-                applied.push("ui");
-            }
+        if let Some(value) = ui {
+            g.state.ui = value;
+            applied.push("ui");
         }
-        if let Some(v) = data.get("settings") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.settings = x;
-                applied.push("settings");
-            }
+        if let Some(value) = settings {
+            g.state.settings = value;
+            applied.push("settings");
         }
-        if let Some(v) = data.get("memos") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.memos = x;
-                applied.push("memos");
-            }
+        if let Some(value) = memos {
+            g.state.memos = value;
+            applied.push("memos");
         }
-        if let Some(v) = data.get("bookmarks") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.bookmarks = x;
-                applied.push("bookmarks");
-            }
+        if let Some(value) = bookmarks {
+            g.state.bookmarks = value;
+            applied.push("bookmarks");
         }
-        if let Some(v) = data.get("timer") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.timer = x;
-                applied.push("timer");
-            }
+        if let Some(value) = timer {
+            g.state.timer = value;
+            applied.push("timer");
         }
-        if let Some(v) = data.get("personalNews") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.personal_news = x;
-                applied.push("personalNews");
-            }
+        if let Some(value) = personal_news {
+            g.state.personal_news = value;
+            applied.push("personalNews");
         }
-        if let Some(v) = body.get("secrets") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.secrets = x;
-                applied.push("secrets");
-            }
-        }
-        if applied.is_empty() {
-            return Json(
-                json!({ "ok": false, "error": "有効なバックアップデータが見つかりません" }),
-            );
+        if let Some(value) = secrets {
+            g.secrets = value;
+            g.spotify_token = None;
+            applied.push("secrets");
         }
         touch(&mut g);
         startup_config = g.state.settings.startup.clone();

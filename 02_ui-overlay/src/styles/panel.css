@@ -441,3 +441,23 @@
   padding: 16px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+/* Conveyor ticker (2026-07-19 rebuild): one flex row of blocks riding a single
+   rAF-driven transform; ◆ separators live INSIDE each item so measured widths
+   drive the conveyor math. */
+.personal-news-ticker-row {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+}
+.personal-news-ticker-item {
+  flex: none;
+  white-space: nowrap;
+}
+.personal-news-ticker-sep {
+  display: inline-block;
+  margin: 0 0.9em;
+  font-size: 0.55em;
+  opacity: 0.42;
+  transform: translateY(-0.18em);
+}

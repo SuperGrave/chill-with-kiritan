@@ -2,26 +2,23 @@ import './style.css';
 import { AudioInputEngine, type InputFrame } from './audioEngine';
 import {
   BpmComparisonAnalyzer,
+  DETECTOR_DEFINITIONS,
+  DETECTOR_IDS,
   type AnalysisFrame,
+  type DetectorId,
   type DetectorEstimate,
 } from './algorithms';
 
 interface HistoryPoint {
   at: number;
-  legacy: number | null;
-  flux: number | null;
-  autocorr: number | null;
-  consensus: number | null;
+  values: Record<DetectorId, number | null>;
 }
 
 interface ComparisonRecord {
   source: string;
   expected: number;
   recordedAt: string;
-  legacy: number | null;
-  flux: number | null;
-  autocorr: number | null;
-  consensus: number | null;
+  values: Record<DetectorId, number | null>;
   support: number;
 }
 
@@ -33,7 +30,7 @@ app.innerHTML = `
     <div>
       <p class="eyebrow">KIRITAN AUDIO RESEARCH / STANDALONE</p>
       <h1>BPM COMPARISON LAB</h1>
-      <p class="lead">同じ音を4方式へ同時入力し、倍テンポ・取りこぼし・曲ごとの得手不得手を比較します。</p>
+      <p class="lead">同じ音を帯域8方式＋PCM 2方式へ同時入力し、安定までの速さ・倍テンポ・取りこぼしをまとめて比較します。</p>
     </div>
     <div class="live-badge" id="liveBadge"><span></span><b>STOPPED</b></div>
   </header>
@@ -65,17 +62,19 @@ app.innerHTML = `
     <section class="panel monitor-panel">
       <div class="section-title"><span>02</span><div><h2>同時推定</h2><p>生の推定値と信頼度を比較</p></div></div>
       <div class="detector-grid">
-        ${detectorCard('legacy', 'LOW-BAND IOI', '現行方式 / 低域4バケット')}
-        ${detectorCard('flux', 'SPECTRAL FLUX', '全帯域の立ち上がり')}
-        ${detectorCard('autocorr', 'AUTOCORRELATION', '約12秒の周期相関')}
-        ${detectorCard('consensus', '2/3 CONSENSUS', '倍・半分補正つき合議')}
+        ${DETECTOR_DEFINITIONS.map((definition) => detectorCard(
+          definition.id,
+          definition.label,
+          definition.subtitle,
+          definition.family,
+        )).join('')}
       </div>
       <div class="signal-row">
         <div><span>BASS ENERGY</span><i><b id="bassMeter"></b></i></div>
-        <div><span>SPECTRAL FLUX</span><i><b id="fluxMeter"></b></i></div>
+        <div><span>SUPERFLUX NOVELTY</span><i><b id="fluxMeter"></b></i></div>
       </div>
       <canvas id="timeline" aria-label="BPM timeline"></canvas>
-      <div class="legend"><span class="legacy">LOW</span><span class="flux">FLUX</span><span class="autocorr">AUTO</span><span class="consensus">VOTE</span></div>
+      <div class="legend">${DETECTOR_DEFINITIONS.map((definition) => `<span class="${definition.id}">${definition.shortLabel}</span>`).join('')}</div>
     </section>
 
     <section class="panel settings-panel">
@@ -97,14 +96,23 @@ app.innerHTML = `
         <button id="clearButton" class="secondary">消去</button>
       </div>
       <div class="table-wrap">
-        <table><thead><tr><th>曲</th><th>正解</th><th>LOW</th><th>FLUX</th><th>AUTO</th><th>合議</th><th>票</th></tr></thead><tbody id="recordRows"><tr class="empty"><td colspan="7">まだ記録がありません</td></tr></tbody></table>
+        <table><thead><tr><th>曲</th><th>正解</th>${DETECTOR_DEFINITIONS.map((definition) => `<th>${definition.shortLabel}</th>`).join('')}<th>票</th></tr></thead><tbody id="recordRows"><tr class="empty"><td colspan="${DETECTOR_IDS.length + 3}">まだ記録がありません</td></tr></tbody></table>
+      </div>
+    </section>
+
+    <section class="panel method-panel">
+      <div class="section-title"><span>05</span><div><h2>方式の範囲</h2><p>この128帯域プレビューだけで比較できるもの</p></div></div>
+      <div class="method-grid">
+        <article><b>今回動かす 10方式</b><p>帯域値だけで動く8方式に、AudioWorkletのリアルタイムPCM方式とBeatRoot系ローリング波形解析を追加しました。</p></article>
+        <article><b>PCM方式の入力</b><p>音声ファイル・PC音声・マイク・合成テストのすべてを同じWeb Audioグラフへ通し、波形を外部へ送信せずブラウザ内で解析します。</p></article>
+        <article class="unavailable"><b>AIモデルは保留</b><p>TempoCNNは非商用継承モデル、BeatNetはWindowsでPython・PyTorch等が必要です。配布負担とライセンスが軽い2方式を先に実測します。</p></article>
       </div>
     </section>
   </main>
 `;
 
-function detectorCard(id: string, title: string, subtitle: string): string {
-  return `<article class="detector-card" id="card-${id}">
+function detectorCard(id: string, title: string, subtitle: string, family: string): string {
+  return `<article class="detector-card ${family}" id="card-${id}">
     <div class="card-heading"><span>${title}</span><em id="status-${id}">STANDBY</em></div>
     <div class="bpm"><strong id="bpm-${id}">---</strong><small>BPM</small></div>
     <p>${subtitle}</p><div class="confidence"><i><b id="confidence-${id}"></b></i><span id="confidenceText-${id}">0%</span></div>
@@ -133,12 +141,18 @@ function createAnalyzer(): BpmComparisonAnalyzer {
   return new BpmComparisonAnalyzer({ minBpm: min, maxBpm: max, stableMs: stable * 1000 });
 }
 
-const engine = new AudioInputEngine(handleInputFrame, (message, active) => {
-  element('sourceStatus').textContent = message;
-  const badge = element('liveBadge');
-  badge.classList.toggle('active', active);
-  badge.querySelector('b')!.textContent = active ? 'ANALYZING' : 'STOPPED';
-});
+const engine = new AudioInputEngine(
+  handleInputFrame,
+  (message, active) => {
+    element('sourceStatus').textContent = message;
+    const badge = element('liveBadge');
+    badge.classList.toggle('active', active);
+    badge.querySelector('b')!.textContent = active ? 'ANALYZING' : 'STOPPED';
+  },
+  (estimate) => analyzer.updatePcmEstimate(
+    estimate.id, estimate.bpm, estimate.confidence, estimate.at, estimate.detail,
+  ),
+);
 
 function handleInputFrame(input: InputFrame): void {
   latestSource = input.sourceLabel;
@@ -146,20 +160,14 @@ function handleInputFrame(input: InputFrame): void {
   if (input.at - lastHistoryAt >= 180) {
     history.push({
       at: input.at,
-      legacy: latest.legacy.bpm,
-      flux: latest.flux.bpm,
-      autocorr: latest.autocorr.bpm,
-      consensus: latest.consensus.bpm,
+      values: Object.fromEntries(DETECTOR_IDS.map((id) => [id, shownBpm(latest!.estimates[id])])) as Record<DetectorId, number | null>,
     });
     while (history.length > 320) history.shift();
     lastHistoryAt = input.at;
   }
-  renderEstimate(latest.legacy);
-  renderEstimate(latest.flux);
-  renderEstimate(latest.autocorr);
-  renderEstimate(latest.consensus);
+  DETECTOR_IDS.forEach((id) => renderEstimate(latest!.estimates[id]));
   element<HTMLDivElement>('bassMeter').style.width = `${Math.min(100, latest.bassEnergy * 120)}%`;
-  element<HTMLDivElement>('fluxMeter').style.width = `${Math.min(100, latest.fluxStrength * 1800)}%`;
+  element<HTMLDivElement>('fluxMeter').style.width = `${Math.min(100, latest.superFluxStrength * 1100)}%`;
   drawTimeline();
 }
 
@@ -205,16 +213,17 @@ function drawTimeline(): void {
     context.fillText(String(bpm), 4, y + 3);
   }
   const colors: Record<string, string> = {
-    legacy: '#62d6ff', flux: '#ffba6b', autocorr: '#d99cff', consensus: '#80ffb5',
+    legacy: '#62d6ff', flux: '#ffba6b', superflux: '#ff7f8c', autocorr: '#d99cff',
+    comb: '#54e0cf', dp: '#f1dd63', 'pcm-realtime': '#ff6fe1',
+    'pcm-beatroot': '#ff9d4f', pulse: '#a8ff75', consensus: '#ffffff',
   };
-  const keys: Array<keyof Omit<HistoryPoint, 'at'>> = ['legacy', 'flux', 'autocorr', 'consensus'];
-  for (const key of keys) {
+  for (const key of DETECTOR_IDS) {
     context.strokeStyle = colors[key];
-    context.lineWidth = key === 'consensus' ? 2.5 : 1.35;
+    context.lineWidth = key === 'consensus' ? 2.8 : key === 'pulse' ? 2.1 : 1.15;
     context.beginPath();
     let drawing = false;
     history.forEach((point, index) => {
-      const value = point[key];
+      const value = point.values[key];
       if (value === null || value < min || value > max) { drawing = false; return; }
       const x = 38 + (index / Math.max(1, history.length - 1)) * (width - 46);
       const y = height - ((value - min) / (max - min)) * (height - 24) - 12;
@@ -228,9 +237,10 @@ function resetAnalysis(): void {
   analyzer = createAnalyzer();
   latest = null;
   history.length = 0;
-  (['legacy', 'flux', 'autocorr', 'consensus'] as const).forEach((id) => {
-    renderEstimate({ id, label: id, bpm: null, lockedBpm: null, confidence: 0, status: 'standby', onset: false, detail: '履歴をリセットしました' });
-  });
+  DETECTOR_IDS.forEach((id) => renderEstimate({
+    id, label: id, bpm: null, lockedBpm: null, confidence: 0,
+    status: 'standby', onset: false, detail: '履歴をリセットしました',
+  }));
   drawTimeline();
 }
 
@@ -301,14 +311,13 @@ function formatResult(value: number | null, expected: number): string {
 function renderRecords(): void {
   const rows = element<HTMLTableSectionElement>('recordRows');
   if (records.length === 0) {
-    rows.innerHTML = '<tr class="empty"><td colspan="7">まだ記録がありません</td></tr>';
+    rows.innerHTML = `<tr class="empty"><td colspan="${DETECTOR_IDS.length + 3}">まだ記録がありません</td></tr>`;
     return;
   }
   rows.innerHTML = records.map((record) => `<tr>
     <td>${escapeHtml(record.source)}</td><td>${record.expected}</td>
-    <td>${formatResult(record.legacy, record.expected)}</td><td>${formatResult(record.flux, record.expected)}</td>
-    <td>${formatResult(record.autocorr, record.expected)}</td><td>${formatResult(record.consensus, record.expected)}</td>
-    <td>${record.support}/3</td></tr>`).join('');
+    ${DETECTOR_IDS.map((id) => `<td>${formatResult(record.values[id], record.expected)}</td>`).join('')}
+    <td>${record.support}/5</td></tr>`).join('');
 }
 
 function escapeHtml(value: string): string {
@@ -328,10 +337,7 @@ element('recordButton').addEventListener('click', () => {
     source: name,
     expected,
     recordedAt: new Date().toISOString(),
-    legacy: shownBpm(latest.legacy),
-    flux: shownBpm(latest.flux),
-    autocorr: shownBpm(latest.autocorr),
-    consensus: shownBpm(latest.consensus),
+    values: Object.fromEntries(DETECTOR_IDS.map((id) => [id, shownBpm(latest!.estimates[id])])) as Record<DetectorId, number | null>,
     support: latest.consensus.support ?? 0,
   });
   renderRecords();
@@ -340,8 +346,8 @@ element('recordButton').addEventListener('click', () => {
 element('clearButton').addEventListener('click', () => { records.length = 0; renderRecords(); });
 element('exportButton').addEventListener('click', () => {
   if (records.length === 0) { showError(new Error('出力する比較記録がありません')); return; }
-  const header = ['source', 'expected_bpm', 'legacy_bpm', 'flux_bpm', 'autocorr_bpm', 'consensus_bpm', 'support', 'recorded_at'];
-  const lines = records.map((record) => [record.source, record.expected, record.legacy ?? '', record.flux ?? '', record.autocorr ?? '', record.consensus ?? '', record.support, record.recordedAt]
+  const header = ['source', 'expected_bpm', ...DETECTOR_IDS.map((id) => `${id}_bpm`), 'support', 'recorded_at'];
+  const lines = records.map((record) => [record.source, record.expected, ...DETECTOR_IDS.map((id) => record.values[id] ?? ''), record.support, record.recordedAt]
     .map((value) => `"${String(value).replaceAll('"', '""')}"`).join(','));
   const blob = new Blob([`\uFEFF${[header.join(','), ...lines].join('\r\n')}`], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);

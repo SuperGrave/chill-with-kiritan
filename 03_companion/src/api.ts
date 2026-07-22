@@ -265,6 +265,44 @@ export type KiritanRuntimeState = {
   receivedAt?: string;
 };
 
+// Live BPM-analyzer snapshot the overlay POSTs (~1s cadence while audio frames
+// flow). Schema is owned by 02_ui-overlay/src/services/audioSpectrum.ts
+// (maybePostRhythmState); everything is optional-tolerant so an older or newer
+// wallpaper can't break the settings tab. `null` until the overlay reports.
+export type AudioRhythmEstimate = {
+  id: string;
+  status?: string;
+  detectedBpm?: number | null;
+  lockedBpm?: number | null;
+  confidence?: number;
+  stableForMs?: number;
+  support?: number;
+  contributors?: string[];
+};
+export type AudioRhythmRuntimeState = {
+  source?: string;
+  method?: string;
+  stableMs?: number;
+  bpmOffset?: number;
+  status?: string;
+  detectedBpm?: number | null;
+  lockedBpm?: number | null;
+  outputBpm?: number | null;
+  confidence?: number;
+  stableForMs?: number;
+  accepted?: boolean;
+  retainedBpm?: number | null;
+  challengerBpm?: number | null;
+  challengerForMs?: number;
+  captureStatus?: string;
+  resetGeneration?: number;
+  resetReason?: string;
+  resetAt?: string | null;
+  detail?: string;
+  estimates?: AudioRhythmEstimate[];
+  receivedAt?: string;
+};
+
 export const api = {
   health: () => req<{ ok: boolean; app: string; version: string }>("/health"),
   state: () => req<any>("/state"),
@@ -301,6 +339,9 @@ export const api = {
 
   // Wallpaper-reported kiritan runtime state (null until the wallpaper posts).
   kiritanState: () => req<KiritanRuntimeState | null>("/kiritan/state"),
+  // Overlay-reported live BPM analyzer snapshot (null until it posts).
+  audioRhythmState: () => req<AudioRhythmRuntimeState | null>("/audio-rhythm/state"),
+  audioRhythmReset: (reason = "manual") => post<{ ok: boolean; resetGeneration: number }>("/audio-rhythm/reset", { reason }),
 
   // Data folder / backup
   dataDir: () => req<{ ok: boolean; path: string }>("/data-dir"),

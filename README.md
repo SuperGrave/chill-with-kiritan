@@ -2,24 +2,31 @@
 
 東北きりたんの3Dモデル、情報パネル、音楽・天気・ニュース連携を組み合わせた、Windows / Wallpaper Engine向けのデスクトップ壁紙プロジェクトです。
 
-現在公開している動作確認済みセットは **v0.8.9** です。
+現在公開している動作確認済みセットは **v0.9.2** です。
 
 ## どちらを使いますか？
 
 ### そのまま使いたい方
 
-[v0.8.9 Release](https://github.com/SuperGrave/chill-with-kiritan/releases/tag/v0.8.9) から、用途に合うファイルを入手してください。
+[v0.9.2 Release](https://github.com/SuperGrave/chill-with-kiritan/releases/tag/v0.9.2) から、用途に合うファイルを入手してください。
 
-- `Chill-with-Kiritan-v0.8.9-release.zip`: Wallpaper Engine用データ、Companion、説明書の全部入り
-- `Chill-with-Kiritan-WallpaperEngine-v0.8.9.zip`: Wallpaper Engine用データのみ
-- `Tohoku Companion_0.8.9_x64-setup.exe`: Companionインストーラー
+- `Chill-with-Kiritan-v0.9.2-release.zip`: Wallpaper Engine用データ、Companion、説明書の全部入り
+- `Chill-with-Kiritan-WallpaperEngine-v0.9.2.zip`: Wallpaper Engine用データのみ
+- `Tohoku Companion_0.9.2_x64-setup.exe`: Companionインストーラー
 - `tohoku-companion.exe`: Companionポータブル版
 
 導入手順は [README_DISTRIBUTION_JP.md](README_DISTRIBUTION_JP.md) を参照してください。
 
+最短手順は次のとおりです。
+
+1. ZIPを「すべて展開」し、`companion/Tohoku Companion_0.9.2_x64-setup.exe` をインストールして起動します。
+2. Wallpaper Engineから `wallpaper-engine/Chill with Kiritan/project.json` をWeb wallpaperとして開きます。スペクトラムの音声処理設定もここから読み込まれます。
+3. Companionの `STUDIO（調律）> 3Dモデル` で、自分が正規に入手した `.vrm` を選びます。
+4. 1920×1080または1920×1200の通常／スペクトラム対応プリセットから1つを適用します。4Kは `3840x2160` を選んで調整・保存できます。
+
 ### 機能を改造・開発したい方
 
-このリポジトリの `main`、またはv0.8.9 Releaseの `Chill-with-Kiritan-v0.8.9-source.zip` が制作版です。コンパイル済みアプリ、再配布できないVRM/VRMA、APIキー、Spotify認証情報、個人設定、個人用原稿は含みません。
+このリポジトリの `main`、またはv0.9.2 Releaseの `Chill-with-Kiritan-v0.9.2-source.zip` が制作版です。コンパイル済みアプリ、再配布できないVRM/VRMA、APIキー、Spotify認証情報、個人設定、個人用原稿は含みません。
 
 セットアップ、構成、ビルド方法は [README_SOURCE_JP.md](README_SOURCE_JP.md) にまとめています。IssueやPull Requestも歓迎します。
 
@@ -40,15 +47,17 @@ models/kiritan.vrm
 | `01_wallpaper/` | React + Vite + TypeScript製の壁紙本体。3D表示と統合UI |
 | `02_ui-overlay/` | オーバーレイUIの単体開発・確認用画面 |
 | `03_companion/` | Tauri製Companionとlocalhost API |
-| `04_bpm-lab/` | 4方式のBPM推定を同じ音源で比較する独立ラボ |
+| `04_bpm-lab/` | 帯域8方式＋PCM 2方式のBPM推定を同じ音源で比較する独立ラボ |
 | `docs/` | 利用・設計・検証ドキュメント |
 | `tools/` | ビルド、検査、リリース作成用スクリプト |
 
-制作版 `main` のスペクトラム機能は、低域ビート間隔・スペクトルフラックス・自己相関のコンセンサスBPM推定に対応しています。3〜12秒の安定待ち、判定方式、確定BPMへのユーザー補正（±10）、きりたんの加算型リズムモーションはCompanionのスペクトラム設定から変更できます。さらに固定モード「音楽ノリノリ」を選ぶと、きりたんが左手を耳にかざして待機し、BPM確定と同時にテンポへ位相同期した横揺れ（低テンポ時）と右手の指トントン（毎拍、高速時は半拍）を数小節ごとに切り替えながらリズムを刻みます。
+制作版 `main` のスペクトラム機能は、Windowsの再生音をPCMで取り込み、BeatRootでBPMを推定します。信頼度70%未満は表示・モーションへ送らず、履歴による一時的なブレ抑制、Spotify曲切替・定期・手動の解析リセット、確定BPMへのユーザー補正（±10）をCompanionから調整できます。リズムモーションは40〜240 BPMの範囲を1 BPM刻みの固定ループから選び、検出が一時的に途切れた場合も設定秒数だけ同じ位相で継続します。固定モード「音楽ノリノリ」では横揺れと右手の指トントンを切り替え、高速時も動きを半分のテンポへ落としません。通常作業中は専用設定により、胸・肩・手を動かさず頭と首だけを弱くBPM同調できます。
+
+Companionの `SYSTEM（環境）> データ / バックアップ` では、設定、4種類を含む表示プリセット、メモ、リンク、タイマー、個人ニュースの再生状態をJSONへ書き出せます。APIキー類は明示的に選んだ場合だけ含めます。復元は全項目の検証後にまとめて行い、壊れたバックアップで一部だけ上書きされることはありません。背景・VRM・個人ニュース原稿・歌詞キャッシュのファイル本体は別途保管してください。
 
 ## バージョンとサポート範囲
 
-- 公開配布版: v0.8.9
+- 公開配布版: v0.9.2
 - 制作版: `main`（変更途中の場合があります）
 - 対象OS: Windows
 - Wallpaper Engineは別途必要です

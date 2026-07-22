@@ -21,6 +21,10 @@ export interface RhythmMotionInput {
   strength: number;
   /** Seconds to keep the selected motion bank running after BPM lock is lost. */
   holdSeconds?: number;
+  /** In work_normal, keep only a small head/neck nod instead of full-body groove. */
+  workHeadSyncEnabled?: boolean;
+  /** 0..1 multiplier applied to the master rhythm strength in work_normal. */
+  workHeadSyncStrength?: number;
   mode?: string | null;
 }
 
@@ -295,7 +299,10 @@ export class RhythmMotionController {
     const nod = Math.sin(Math.min(1, beatPhase * 4) * Math.PI) * Math.exp(-beatPhase * 4.2);
     const nodBeats = preset?.nodBeats ?? 1;
     const nodPhase = ((beatFloat / nodBeats) % 1 + 1) % 1;
-    const smoothNod = Math.cos(nodPhase * Math.PI * 2);
+    // VRM normalized bones face -Z: negative X is the visible downward nod.
+    // Keep that low point on phase 0, where tapLiftCurve is also resting on
+    // the key, so the neck and tapping fingers reach their bottoms together.
+    const smoothNod = -Math.cos(nodPhase * Math.PI * 2);
 
     if (figure === 'sway') {
       // 腰より上をゆっくり横揺れ: full cycle over 2 beats, throw tapering as
@@ -353,8 +360,13 @@ export class RhythmMotionController {
     }
     const bpm = this.preset?.bpm ?? null;
     const music = input.mode === 'music_listen';
+    const work = input.mode === 'work_normal';
+    const workHeadSyncEnabled = input.workHeadSyncEnabled !== false;
+    const workHeadSyncStrength = Number.isFinite(Number(input.workHeadSyncStrength))
+      ? clamp01(Number(input.workHeadSyncStrength))
+      : 0.35;
     const target = input.enabled && this.preset !== null
-      ? clamp01(input.strength) * (music ? 1 : modeScale(input.mode))
+      ? clamp01(input.strength) * (music ? 1 : work ? (workHeadSyncEnabled ? workHeadSyncStrength : 0) : modeScale(input.mode))
       : 0;
     const response = target > this.weight ? 5.5 : 3.2;
     const dt = Math.max(0, deltaSeconds);
@@ -423,6 +435,32 @@ export class RhythmMotionController {
         rightShoulderRoll: mixed.rightShoulderRoll * w,
         rightHandLift: mixed.rightHandLift * w,
         rightFingerLift: mixed.rightFingerLift * w,
+        smile: this.smile,
+      };
+    }
+
+    if (work) {
+      // While working, only the head and neck follow the locked tempo. The
+      // dedicated option/strength keep typing shoulders, torso and hands free
+      // from rhythm offsets while preserving a faint, continuous nod.
+      const nod = -Math.cos(beatPhase * Math.PI * 2);
+      const w = this.weight * energy;
+      return {
+        active: true,
+        bpm,
+        weight: this.weight,
+        figure: 'groove',
+        beatPhase,
+        headPitch: nod * 0.026 * w,
+        headRoll: 0,
+        neckPitch: nod * 0.015 * w,
+        chestPitch: 0,
+        chestRoll: 0,
+        spineRoll: 0,
+        leftShoulderRoll: 0,
+        rightShoulderRoll: 0,
+        rightHandLift: 0,
+        rightFingerLift: 0,
         smile: this.smile,
       };
     }

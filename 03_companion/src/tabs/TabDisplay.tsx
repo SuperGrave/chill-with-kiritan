@@ -1629,6 +1629,8 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
             <CheckControl label="きりたんをBPM連動" checked={spectrum.rhythmMotionEnabled !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionEnabled", v)} />
             <NumberControl label="BPM連動の強さ" value={spectrum.rhythmMotionStrength ?? 0.35} min={0} max={1} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionStrength", v)} />
             <NumberControl label="BPMロスト後の継続（秒）" value={spectrum.rhythmMotionHoldSeconds ?? 8} min={0} max={30} step={1} onChange={(v) => setSettingValue("audioSpectrumPanel", "rhythmMotionHoldSeconds", v)} />
+            <CheckControl label="通常作業中は首だけBPM連動" checked={spectrum.workHeadSyncEnabled !== false} onChange={(v) => setSettingValue("audioSpectrumPanel", "workHeadSyncEnabled", v)} />
+            <NumberControl label="通常作業中の首連動の強さ" value={spectrum.workHeadSyncStrength ?? 0.35} min={0} max={1} step={0.05} onChange={(v) => setSettingValue("audioSpectrumPanel", "workHeadSyncStrength", v)} />
           </div>
           <p className="hint">70%未満の推定は表示・モーションへ渡しません。リセットまでは確定BPMの統計を保持し、一時的に離れた推定が出ても「別BPMへの切替確認」を満たすまで現在値を守ります。Spotifyは既存の曲終了+0.8秒更新で曲切替を確認した時点で履歴を消します。</p>
         </div>

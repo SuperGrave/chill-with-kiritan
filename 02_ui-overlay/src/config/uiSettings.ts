@@ -134,6 +134,9 @@ export const audioSpectrumPanelDefaults = {
   rhythmMotionStrength: 0.35,
   // Keep the selected one-BPM motion bank alive through brief detector gaps.
   rhythmMotionHoldSeconds: 8,
+  // In normal work mode, use a faint head/neck-only nod (no torso or hands).
+  workHeadSyncEnabled: true,
+  workHeadSyncStrength: 0.35,
   standbyText: 'AUDIO STANDBY',
 };
 

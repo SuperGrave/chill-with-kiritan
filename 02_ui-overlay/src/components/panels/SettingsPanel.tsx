@@ -549,6 +549,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ layout, settings, setLayo
         <CheckRow label="Kiritan Rhythm Motion" checked={sp.rhythmMotionEnabled !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'rhythmMotionEnabled', v)} />
         <SliderInput label="Rhythm Motion Strength" value={sp.rhythmMotionStrength ?? 0.35} onChange={(v: number) => updateSection('audioSpectrumPanel', 'rhythmMotionStrength', v)} min={0} max={1} step={0.05} />
         <SliderInput label="Motion Hold After BPM Loss" value={sp.rhythmMotionHoldSeconds ?? 8} onChange={(v: number) => updateSection('audioSpectrumPanel', 'rhythmMotionHoldSeconds', v)} min={0} max={30} step={1} />
+        <CheckRow label="Work Mode: Head/Neck Sync Only" checked={sp.workHeadSyncEnabled !== false} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'workHeadSyncEnabled', v)} />
+        <SliderInput label="Work Head Sync Strength" value={sp.workHeadSyncStrength ?? 0.35} onChange={(v: number) => updateSection('audioSpectrumPanel', 'workHeadSyncStrength', v)} min={0} max={1} step={0.05} />
         <SectionDivider label="STYLE" />
         <CheckRow label="Mirror Layout" checked={sp.mirror === true} onChange={(v: boolean) => updateSection('audioSpectrumPanel', 'mirror', v)} />
         <SelectRow

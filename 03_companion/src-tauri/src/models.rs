@@ -246,6 +246,7 @@ fn legacy_default_ui_state() -> UiState {
             "bpmPeriodicResetMinutes": 0, "bpmResetOnSpotifyTrackChange": true,
             "rhythmMotionEnabled": true, "rhythmMotionStrength": 0.35,
             "rhythmMotionHoldSeconds": 8,
+            "workHeadSyncEnabled": true, "workHeadSyncStrength": 0.35,
             "standbyText": "AUDIO STANDBY"
         },
         "memoPanel": {
@@ -1117,6 +1118,10 @@ mod tests {
         assert_eq!(
             ui.settings["audioSpectrumPanel"]["rhythmMotionHoldSeconds"],
             json!(8)
+        );
+        assert_eq!(
+            ui.settings["audioSpectrumPanel"]["workHeadSyncEnabled"],
+            json!(true)
         );
         assert_eq!(ui.presets.len(), 2);
         assert!(ui.presets.iter().any(|preset| {

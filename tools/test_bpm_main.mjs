@@ -113,11 +113,36 @@ ok(selectBpmMotionPreset(127)?.bpm === 127, '127 BPM selects the prepared 127 BP
     controller.update(1000 + i * (1000 / 60), 1 / 60, { enabled: true, strength: 1, mode: 'work_normal' }).headPitch,
   ).reduce((max, value) => Math.max(max, Math.abs(value)), 0);
   ok(peak > 0 && peak < 0.04, 'head nod is visible but remains a small additive offset');
+  const workFrame = controller.update(1500, 1 / 60, {
+    enabled: true,
+    strength: 1,
+    workHeadSyncEnabled: true,
+    workHeadSyncStrength: 0.35,
+    mode: 'work_normal',
+  });
+  ok(
+    workFrame.chestPitch === 0 && workFrame.chestRoll === 0 && workFrame.spineRoll === 0
+      && workFrame.leftShoulderRoll === 0 && workFrame.rightShoulderRoll === 0
+      && workFrame.rightHandLift === 0 && workFrame.rightFingerLift === 0,
+    'normal work rhythm sync moves only the head and neck',
+  );
   const sleep = controller.update(1200, 1, { enabled: true, strength: 1, mode: 'sleep_desk' });
   ok(sleep.weight < frame.weight, 'sleep mode fades rhythm motion out');
   controller.rhythm({ status: 'detecting', lockedBpm: null, at: 1300 });
   const unlocked = controller.update(1400, 1, { enabled: true, strength: 1, holdSeconds: 0, mode: 'work_normal' });
   ok(!unlocked.active, 'zero-second hold stops producing rhythm offsets immediately');
+}
+
+{
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 120, lockedAt: 0 });
+  const frame = c.update(1000, 1, {
+    enabled: true,
+    strength: 1,
+    workHeadSyncEnabled: false,
+    mode: 'work_normal',
+  });
+  ok(!frame.active && frame.weight === 0, 'normal work head sync can be disabled independently');
 }
 
 console.log('\n=== music_listen rhythm figures ===');
@@ -228,6 +253,19 @@ function settleMusic(controller, fromMs, endMs) {
   }
   ok(crossings === 4, 'fingers lift once per beat over 4 beats');
   ok(maxHand > 0.02 && maxHand < 0.2, 'palm lift is visible but small');
+}
+
+{
+  // The VRM's negative X pitch is visually downward. Both the neck and the
+  // tapping fingers must reach their low point together on the beat.
+  const c = new RhythmMotionController();
+  c.sync({ bpm: 120, lockedAt: 0 });
+  settleMusic(c, 0, 4000);
+  const onBeat = c.update(5000, 1 / 60, musicInput());
+  const halfBeat = c.update(5250, 1 / 60, musicInput());
+  ok(onBeat.headPitch < 0 && onBeat.neckPitch < 0, 'head and neck reach their visible lower endpoint on the beat');
+  ok(onBeat.rightFingerLift === 0 && onBeat.rightHandLift === 0, 'fingers and palm are down when the neck is down');
+  ok(halfBeat.headPitch > 0 && halfBeat.neckPitch > 0 && halfBeat.rightFingerLift > 0, 'neck and fingers rise together after the beat');
 }
 
 {

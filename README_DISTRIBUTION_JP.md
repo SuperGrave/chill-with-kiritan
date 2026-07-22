@@ -1,8 +1,8 @@
-# Chill with Kiritan v0.9.1 かんたん導入
+# Chill with Kiritan v0.9.2 かんたん導入
 
 ## 1. Companionを入れる
 
-`companion/Tohoku Companion_0.9.1_x64-setup.exe` を実行します。起動すると、操作用の小さなウィンドウとローカルAPIが立ち上がります。
+`companion/Tohoku Companion_0.9.2_x64-setup.exe` を実行します。起動すると、操作用の小さなウィンドウとローカルAPIが立ち上がります。
 
 ## 2. Wallpaper Engineへ入れる
 
@@ -33,6 +33,12 @@ models/kiritan.vrm
 歌詞がない間だけ個人ニュースを出す設定は、ホームの「いま更新」カード下部、または表示設定の「パネル表示」から切り替えられます。
 
 Spotifyで一度取得できた歌詞は `%APPDATA%\tohoku-companion\lyrics-cache.json` に最大500曲まで保存されます。過去の曲へ戻ったときはLRCLIBへの再問い合わせを待たず、ローカルキャッシュから表示します。
+
+## 6. BPM連動を調整する
+
+Companionの `STUDIO（調律）> スペクトラム` で、PCM BeatRootの解析窓・解析間隔・最低信頼度、BPMロスト後のモーション継続時間を調整できます。曲が変わっても以前のBPMを引きずる場合は「BPM解析を今すぐリセット」を押してください。
+
+「通常作業中は首だけBPM連動」を有効にすると、通常作業モードでは胸・肩・手を動かさず、頭と首だけが弱く拍へ同調します。「通常作業中の首連動の強さ」で動きを調整できます。
 
 ## 困ったとき
 

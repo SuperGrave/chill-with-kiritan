@@ -517,6 +517,8 @@ function App() {
     enabled: defaultUiSettings.audioSpectrumPanel.rhythmMotionEnabled,
     strength: defaultUiSettings.audioSpectrumPanel.rhythmMotionStrength,
     holdSeconds: defaultUiSettings.audioSpectrumPanel.rhythmMotionHoldSeconds,
+    workHeadSyncEnabled: defaultUiSettings.audioSpectrumPanel.workHeadSyncEnabled,
+    workHeadSyncStrength: defaultUiSettings.audioSpectrumPanel.workHeadSyncStrength,
   });
   const [backgroundQueueIndex, setBackgroundQueueIndex] = useState(0);
 
@@ -544,6 +546,8 @@ function App() {
         enabled: spectrum.rhythmMotionEnabled !== false,
         strength: finiteNumber(spectrum.rhythmMotionStrength, defaultUiSettings.audioSpectrumPanel.rhythmMotionStrength),
         holdSeconds: finiteNumber(spectrum.rhythmMotionHoldSeconds, defaultUiSettings.audioSpectrumPanel.rhythmMotionHoldSeconds),
+        workHeadSyncEnabled: spectrum.workHeadSyncEnabled !== false,
+        workHeadSyncStrength: finiteNumber(spectrum.workHeadSyncStrength, defaultUiSettings.audioSpectrumPanel.workHeadSyncStrength),
       });
       if (isRecord(wp.objectLayout)) {
         setLayout((prev) => applyObjectLayout(prev, wp.objectLayout));

@@ -137,12 +137,54 @@ impl Default for UiState {
 struct BuiltInUiPresetPack {
     default_preset_id: String,
     presets: Vec<UiPreset>,
+    #[serde(default)]
+    variants: Vec<BuiltInUiPresetVariant>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuiltInUiPresetVariant {
+    id: String,
+    name: String,
+    base_preset_id: String,
+    #[serde(default)]
+    layout_patch: Value,
+    #[serde(default)]
+    settings_patch: Value,
+    created_at: String,
+    updated_at: String,
+}
+
+impl BuiltInUiPresetPack {
+    fn materialize_variants(&mut self) {
+        for variant in std::mem::take(&mut self.variants) {
+            if self.presets.iter().any(|preset| preset.id == variant.id) {
+                continue;
+            }
+            let Some(mut preset) = self
+                .presets
+                .iter()
+                .find(|preset| preset.id == variant.base_preset_id)
+                .cloned()
+            else {
+                continue;
+            };
+            preset.id = variant.id;
+            preset.name = variant.name;
+            merge_json(&mut preset.layout, variant.layout_patch);
+            merge_json(&mut preset.settings, variant.settings_patch);
+            preset.created_at = variant.created_at;
+            preset.updated_at = variant.updated_at;
+            self.presets.push(preset);
+        }
+    }
 }
 
 fn default_ui_state() -> UiState {
     let pack =
         serde_json::from_str::<BuiltInUiPresetPack>(include_str!("built_in_ui_presets.json"));
-    if let Ok(pack) = pack {
+    if let Ok(mut pack) = pack {
+        pack.materialize_variants();
         if let Some(default_preset) = pack
             .presets
             .iter()
@@ -323,6 +365,20 @@ pub fn repair_ui_state(ui: &mut UiState) {
     merge_json(&mut settings, ui.settings.clone());
     repair_wallpaper_settings(&mut settings, &defaults.settings);
     ui.settings = settings;
+
+    // Ship newly added built-ins to existing installations as well as clean
+    // ones. A same-name user preset is treated as that built-in's authored
+    // predecessor, so the two spectrum presets created before this release do
+    // not appear twice after upgrade.
+    for preset in defaults.presets {
+        let already_present = ui
+            .presets
+            .iter()
+            .any(|current| current.id == preset.id || current.name == preset.name);
+        if !already_present {
+            ui.presets.push(preset);
+        }
+    }
 
     for preset in &mut ui.presets {
         let mut preset_layout = defaults.layout.clone();
@@ -1123,7 +1179,7 @@ mod tests {
             ui.settings["audioSpectrumPanel"]["workHeadSyncEnabled"],
             json!(true)
         );
-        assert_eq!(ui.presets.len(), 2);
+        assert_eq!(ui.presets.len(), 4);
         assert!(ui.presets.iter().any(|preset| {
             preset.id == "builtin-1920x1200-sample"
                 && preset.settings["baseResolution"] == json!("1920x1200")
@@ -1132,6 +1188,34 @@ mod tests {
             preset.id == "builtin-1920x1080-sample"
                 && preset.settings["baseResolution"] == json!("1920x1080")
         }));
+        let spectrum_1200 = ui
+            .presets
+            .iter()
+            .find(|preset| preset.id == "builtin-1920x1200-spectrum")
+            .expect("1200p spectrum preset");
+        assert_eq!(spectrum_1200.name, "1920x1200用サンプル(スペクトラム含)");
+        assert_eq!(
+            spectrum_1200.settings["motion"]["fixedMode"],
+            json!("music_listen")
+        );
+        assert_eq!(
+            spectrum_1200.settings["audioSpectrumPanel"]["bpmMethod"],
+            json!("pcm-beatroot")
+        );
+        assert_eq!(
+            spectrum_1200.settings["wallpaper"]["vrmModelPath"],
+            json!("")
+        );
+        let spectrum_1080 = ui
+            .presets
+            .iter()
+            .find(|preset| preset.id == "builtin-1920x1080-spectrum")
+            .expect("1080p spectrum preset");
+        assert_eq!(spectrum_1080.layout["audioSpectrumPanel"]["y"], json!(597));
+        assert_eq!(
+            spectrum_1080.layout["audioSpectrumPanel"]["height"],
+            json!(180)
+        );
     }
 
     #[test]
@@ -1159,6 +1243,50 @@ mod tests {
         assert_eq!(
             ui.settings["wallpaper"]["objectLayout"]["laptop"]["rotation"][1].as_f64(),
             Some(1.569)
+        );
+    }
+
+    #[test]
+    fn repair_adds_missing_builtins_without_duplicating_authored_spectrum_presets() {
+        let defaults = default_ui_state();
+        let mut authored_1200 = defaults
+            .presets
+            .iter()
+            .find(|preset| preset.id == "builtin-1920x1200-spectrum")
+            .unwrap()
+            .clone();
+        authored_1200.id = "user-spectrum-1200".into();
+        let mut authored_1080 = defaults
+            .presets
+            .iter()
+            .find(|preset| preset.id == "builtin-1920x1080-spectrum")
+            .unwrap()
+            .clone();
+        authored_1080.id = "user-spectrum-1080".into();
+        let mut ui = UiState {
+            layout: authored_1080.layout.clone(),
+            settings: authored_1080.settings.clone(),
+            presets: vec![authored_1200, authored_1080],
+            active_preset_id: Some("user-spectrum-1080".into()),
+        };
+
+        repair_ui_state(&mut ui);
+
+        assert_eq!(ui.presets.len(), 4);
+        assert!(ui
+            .presets
+            .iter()
+            .any(|preset| preset.id == "builtin-1920x1200-sample"));
+        assert!(ui
+            .presets
+            .iter()
+            .any(|preset| preset.id == "builtin-1920x1080-sample"));
+        assert_eq!(
+            ui.presets
+                .iter()
+                .filter(|preset| preset.name.contains("スペクトラム含"))
+                .count(),
+            2
         );
     }
 }

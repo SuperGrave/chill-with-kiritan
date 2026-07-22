@@ -349,9 +349,8 @@ export default function TabSettings({ showDisplay = true }: { showDisplay?: bool
       const bundle = JSON.parse(await file.text());
       const res = await api.importBackup(bundle);
       if (res.ok) {
-        setBackupStatus(`読み込みました（${(res.applied ?? []).join(" / ") || "0件"}）。Companion と壁紙を再読込すると確実に反映されます`);
-        api.getSettings().then(setSettings).catch(() => {});
-        api.secretsStatus().then(setSecStatus).catch(() => {});
+        setBackupStatus(`読み込みました（${(res.applied ?? []).join(" / ") || "0件"}）。画面を再読込して反映します…`);
+        window.setTimeout(() => window.location.reload(), 700);
       } else {
         setBackupStatus(`読み込みに失敗: ${res.error ?? "ファイル形式を確認してください"}`);
       }
@@ -590,9 +589,10 @@ export default function TabSettings({ showDisplay = true }: { showDisplay?: bool
           <input type="checkbox" checked={includeSecrets} onChange={(e) => setIncludeSecrets(e.target.checked)} />
         </label>
         <p className="hint">
-          設定・プリセット・メモ・リンクを Companion の backups フォルダに書き出します。
+          設定・プリセット・メモ・リンク・タイマー・個人ニュースの再生状態を Companion の backups フォルダに書き出します。
           {lastBackup ? ` 最終バックアップ: ${lastBackup}。` : " まだバックアップしていません。"}
-          読み込むと現在のデータを .bak に退避してから置き換えます。
+          読み込むと全項目を検証し、現在のデータを .bak に退避してからまとめて置き換えます。
+          背景・VRM・個人ニュース原稿・歌詞キャッシュ本体は含みません。
         </p>
         {backupStatus && <p className="hint">{backupStatus}</p>}
       </div>

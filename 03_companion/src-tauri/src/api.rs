@@ -7,7 +7,7 @@ use axum::{
     routing::{get, patch, post, put},
     Router,
 };
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::{json, Value};
 use std::{net::SocketAddr, path::Path as FsPath, time::Instant};
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -1081,62 +1081,95 @@ async fn backup_export(State(s): State<Shared>, Json(body): Json<Value>) -> Json
     }
 }
 
+fn parse_backup_field<T: DeserializeOwned>(data: &Value, key: &str) -> Result<Option<T>, String> {
+    let Some(value) = data.get(key) else {
+        return Ok(None);
+    };
+    serde_json::from_value(value.clone())
+        .map(Some)
+        .map_err(|error| format!("{key} の形式が不正です: {error}"))
+}
+
 /// Restore a settings backup produced by `backup_export`. Accepts the full
 /// bundle (`{ data: {...}, secrets? }`) or a bare data object. The current data
 /// is written to `.bak` by `persist()` before being replaced, so a bad import
 /// can be rolled back. Secrets are only touched when present in the bundle.
 async fn backup_import(State(s): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    if let Some(kind) = body.get("kind").and_then(Value::as_str) {
+        if kind != "companion-backup" {
+            return Json(json!({ "ok": false, "error": "Companion用ではないバックアップです" }));
+        }
+    }
+    if let Some(app) = body.get("app").and_then(Value::as_str) {
+        if app != "tohoku-companion" {
+            return Json(json!({ "ok": false, "error": "対象アプリが異なるバックアップです" }));
+        }
+    }
+
     let data = body.get("data").cloned().unwrap_or_else(|| body.clone());
+    let parsed = (|| -> Result<_, String> {
+        Ok((
+            parse_backup_field::<UiState>(&data, "ui")?,
+            parse_backup_field::<AppSettings>(&data, "settings")?,
+            parse_backup_field::<Vec<MemoItem>>(&data, "memos")?,
+            parse_backup_field::<Vec<BookmarkItem>>(&data, "bookmarks")?,
+            parse_backup_field::<TimerState>(&data, "timer")?,
+            parse_backup_field::<PersonalNewsState>(&data, "personalNews")?,
+            parse_backup_field::<Secrets>(&body, "secrets")?,
+        ))
+    })();
+    let (mut ui, settings, memos, bookmarks, timer, personal_news, secrets) = match parsed {
+        Ok(value) => value,
+        Err(error) => return Json(json!({ "ok": false, "error": error })),
+    };
+    if ui.is_none()
+        && settings.is_none()
+        && memos.is_none()
+        && bookmarks.is_none()
+        && timer.is_none()
+        && personal_news.is_none()
+        && secrets.is_none()
+    {
+        return Json(json!({ "ok": false, "error": "有効なバックアップデータが見つかりません" }));
+    }
+    if let Some(value) = ui.as_mut() {
+        repair_ui_state(value);
+    }
+
+    // Every field is parsed before the lock is taken. A malformed field can
+    // therefore never leave the live state half-restored.
     let mut applied: Vec<&str> = Vec::new();
     let startup_config;
     {
         let mut g = s.lock().unwrap();
-        if let Some(v) = data.get("ui") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.ui = x;
-                applied.push("ui");
-            }
+        if let Some(value) = ui {
+            g.state.ui = value;
+            applied.push("ui");
         }
-        if let Some(v) = data.get("settings") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.settings = x;
-                applied.push("settings");
-            }
+        if let Some(value) = settings {
+            g.state.settings = value;
+            applied.push("settings");
         }
-        if let Some(v) = data.get("memos") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.memos = x;
-                applied.push("memos");
-            }
+        if let Some(value) = memos {
+            g.state.memos = value;
+            applied.push("memos");
         }
-        if let Some(v) = data.get("bookmarks") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.bookmarks = x;
-                applied.push("bookmarks");
-            }
+        if let Some(value) = bookmarks {
+            g.state.bookmarks = value;
+            applied.push("bookmarks");
         }
-        if let Some(v) = data.get("timer") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.timer = x;
-                applied.push("timer");
-            }
+        if let Some(value) = timer {
+            g.state.timer = value;
+            applied.push("timer");
         }
-        if let Some(v) = data.get("personalNews") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.state.personal_news = x;
-                applied.push("personalNews");
-            }
+        if let Some(value) = personal_news {
+            g.state.personal_news = value;
+            applied.push("personalNews");
         }
-        if let Some(v) = body.get("secrets") {
-            if let Ok(x) = serde_json::from_value(v.clone()) {
-                g.secrets = x;
-                applied.push("secrets");
-            }
-        }
-        if applied.is_empty() {
-            return Json(
-                json!({ "ok": false, "error": "有効なバックアップデータが見つかりません" }),
-            );
+        if let Some(value) = secrets {
+            g.secrets = value;
+            g.spotify_token = None;
+            applied.push("secrets");
         }
         touch(&mut g);
         startup_config = g.state.settings.startup.clone();

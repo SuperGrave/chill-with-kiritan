@@ -232,6 +232,191 @@ async fn crud_presets_and_ui_roundtrip() {
 }
 
 #[tokio::test]
+async fn backup_export_import_roundtrip_is_atomic_and_secret_opt_in() {
+    let base = spawn_server().await;
+    let c = reqwest::Client::new();
+    let token = fetch_token(&base, &c).await;
+
+    auth(c.put(format!("{base}/api/ui")), &token)
+        .json(&serde_json::json!({ "settings": { "debugMode": true } }))
+        .send()
+        .await
+        .unwrap();
+    let memo: serde_json::Value = auth(c.post(format!("{base}/api/memos")), &token)
+        .json(&serde_json::json!({ "text": "backup-roundtrip" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let memo_id = memo["id"].as_str().unwrap().to_string();
+    auth(c.post(format!("{base}/api/presets")), &token)
+        .json(&serde_json::json!({ "name": "バックアップ確認用" }))
+        .send()
+        .await
+        .unwrap();
+    auth(c.put(format!("{base}/api/secrets")), &token)
+        .json(&serde_json::json!({ "spotifyClientSecret": "secret-before-backup" }))
+        .send()
+        .await
+        .unwrap();
+
+    let exported: serde_json::Value = auth(c.post(format!("{base}/api/backup/export")), &token)
+        .json(&serde_json::json!({ "includeSecrets": false }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(exported["ok"], true);
+    let backup_path = exported["path"].as_str().unwrap();
+    let backup: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(backup_path).expect("read exported backup"))
+            .unwrap();
+    assert_eq!(backup["kind"], "companion-backup");
+    assert_eq!(backup["includeSecrets"], false);
+    assert!(backup.get("secrets").is_none());
+    assert_eq!(backup["data"]["ui"]["settings"]["debugMode"], true);
+    assert!(backup["data"]["ui"]["presets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|preset| preset["name"] == "バックアップ確認用"));
+    assert!(backup["data"]["memos"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["text"] == "backup-roundtrip"));
+
+    // A malformed known field rejects the whole bundle before any valid field
+    // beside it can be applied.
+    let invalid: serde_json::Value = auth(c.post(format!("{base}/api/backup/import")), &token)
+        .json(&serde_json::json!({
+            "kind": "companion-backup",
+            "data": { "ui": "broken", "memos": [] }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(invalid["ok"], false);
+    let memos_after_invalid: serde_json::Value = c
+        .get(format!("{base}/api/memos"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(memos_after_invalid
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["id"] == memo_id));
+
+    auth(c.put(format!("{base}/api/ui")), &token)
+        .json(&serde_json::json!({ "settings": { "debugMode": false } }))
+        .send()
+        .await
+        .unwrap();
+    auth(c.delete(format!("{base}/api/memos/{memo_id}")), &token)
+        .send()
+        .await
+        .unwrap();
+    let imported: serde_json::Value = auth(c.post(format!("{base}/api/backup/import")), &token)
+        .json(&backup)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(imported["ok"], true);
+    assert!(imported["applied"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|field| field == "ui"));
+    let restored_ui: serde_json::Value = c
+        .get(format!("{base}/api/ui"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(restored_ui["settings"]["debugMode"], true);
+    let restored_memos: serde_json::Value = c
+        .get(format!("{base}/api/memos"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(restored_memos
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["text"] == "backup-roundtrip"));
+
+    // Secrets are present only in an explicit opt-in export and are restored
+    // when that bundle is imported.
+    let secret_export: serde_json::Value =
+        auth(c.post(format!("{base}/api/backup/export")), &token)
+            .json(&serde_json::json!({ "includeSecrets": true }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+    let secret_backup: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(secret_export["path"].as_str().unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        secret_backup["secrets"]["spotifyClientSecret"],
+        "secret-before-backup"
+    );
+    auth(c.put(format!("{base}/api/secrets")), &token)
+        .json(&serde_json::json!({ "spotifyClientSecret": "secret-after-backup" }))
+        .send()
+        .await
+        .unwrap();
+    let secret_import: serde_json::Value =
+        auth(c.post(format!("{base}/api/backup/import")), &token)
+            .json(&secret_backup)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+    assert_eq!(secret_import["ok"], true);
+    let re_export: serde_json::Value = auth(c.post(format!("{base}/api/backup/export")), &token)
+        .json(&serde_json::json!({ "includeSecrets": true }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let re_exported: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(re_export["path"].as_str().unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        re_exported["secrets"]["spotifyClientSecret"],
+        "secret-before-backup"
+    );
+}
+
+#[tokio::test]
 async fn kiritan_state_post_and_get() {
     let base = spawn_server().await;
     let c = reqwest::Client::new();

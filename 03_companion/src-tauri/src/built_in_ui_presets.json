@@ -1053,5 +1053,69 @@
       "createdAt": "2026-07-10T13:18:40Z",
       "updatedAt": "2026-07-10T13:29:19Z"
     }
+  ],
+  "variants": [
+    {
+      "id": "builtin-1920x1200-spectrum",
+      "name": "1920x1200用サンプル(スペクトラム含)",
+      "basePresetId": "builtin-1920x1200-sample",
+      "layoutPatch": {},
+      "settingsPatch": {
+        "audioSpectrumPanel": {
+          "bpmMethod": "pcm-beatroot",
+          "rhythmMotionHoldSeconds": 10
+        },
+        "motion": {
+          "directorMode": "fixed",
+          "fixedMode": "music_listen"
+        },
+        "wallpaper": {
+          "modelLightScale": 1.6,
+          "vrmModelPath": ""
+        }
+      },
+      "createdAt": "2026-07-22T05:43:58.587656500+00:00",
+      "updatedAt": "2026-07-22T05:43:58.587656500+00:00"
+    },
+    {
+      "id": "builtin-1920x1080-spectrum",
+      "name": "1920x1080用サンプル(スペクトラム含)",
+      "basePresetId": "builtin-1920x1080-sample",
+      "layoutPatch": {
+        "audioSpectrumPanel": { "height": 180, "x": 1397, "y": 597 },
+        "detailPanel": { "height": 900, "y": 70 },
+        "lyricsPanel": { "height": 225, "y": 780 },
+        "memoPanel": { "height": 225, "y": 780 },
+        "musicPanel": { "height": 261, "y": 334 },
+        "newsPanel": { "height": 325, "y": 6 },
+        "personalNewsPanel": { "height": 225, "y": 780 },
+        "rightDock": { "y": 100 },
+        "timerPanel": { "height": 225, "y": 780 },
+        "weatherCompact": { "y": 216 }
+      },
+      "settingsPatch": {
+        "audioSpectrumPanel": {
+          "barCount": 24,
+          "bpmLockSeconds": 5,
+          "bpmMethod": "pcm-beatroot",
+          "decaySpeed": 0.12,
+          "segmentCount": 14,
+          "sensitivity": 1
+        },
+        "musicPanel": {
+          "artworkCornerSize": 136,
+          "showHeader": false
+        },
+        "newsPanel": { "maxItems": 2 },
+        "personalNewsPanel": {
+          "autoShowWhenLyricsUnavailable": true,
+          "personalNewsProgressHeight": 10,
+          "personalNewsScrollSpeed": 1
+        },
+        "weatherCompact": { "showPressure": true }
+      },
+      "createdAt": "2026-07-22T05:47:53.179463200+00:00",
+      "updatedAt": "2026-07-22T05:47:53.179463200+00:00"
+    }
   ]
 }

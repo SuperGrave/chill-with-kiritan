@@ -1552,7 +1552,9 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
           <DisplaySection title="BPM判定モニター（リアルタイム）" open>
             <div className="bpm-monitor-head">
               <span className={`pill ${rhythmLive ? (audioRhythm?.status === "locked" ? "ok" : "warn") : "warn"}`}>
-                {rhythmLive ? (audioRhythm?.status === "locked" ? "BPM同期中" : "検知中") : "停止中"}
+                {audioRhythm?.captureStatus === "reconnecting"
+                  ? "音声再接続中"
+                  : rhythmLive ? (audioRhythm?.status === "locked" ? "BPM同期中" : "検知中") : "停止中"}
               </span>
               <span className="bpm-monitor-big mono">
                 {rhythmLive && audioRhythm?.outputBpm != null ? `BPM ${Math.round(audioRhythm.outputBpm)}` : "BPM —"}
@@ -1598,7 +1600,9 @@ export default function TabDisplay({ embedded = false }: { embedded?: boolean })
                       {locked ? `${Math.round(audioRhythm?.outputBpm as number)}` : est?.detectedBpm != null ? `~${Math.round(est.detectedBpm)}` : "—"}
                     </span>
                     <span className="bpm-monitor-status">
-                      {!rhythmLive ? "待機" : audioRhythm?.accepted === false ? "70%未満・不採用" : locked ? "確定" : "検知中"}
+                      {audioRhythm?.captureStatus === "reconnecting"
+                        ? "再接続中"
+                        : !rhythmLive ? "待機" : audioRhythm?.accepted === false ? "70%未満・不採用" : locked ? "確定" : "検知中"}
                     </span>
                     <span className="bpm-monitor-conf" title={`信頼度 ${Math.round(confidence * 100)}%`}>
                       <span className="bpm-monitor-conf-fill" style={{ width: `${Math.round(confidence * 100)}%` }} />

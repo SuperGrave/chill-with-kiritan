@@ -11,7 +11,7 @@ use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub const PCM_SAMPLE_RATE: u32 = 11_025;
@@ -20,6 +20,8 @@ const CAPTURE_CHANNELS: usize = 2;
 const DOWNSAMPLE_FACTOR: usize = (CAPTURE_SAMPLE_RATE / PCM_SAMPLE_RATE) as usize;
 const MAX_BUFFER_SECONDS: usize = 30;
 const MAX_RESPONSE_SECONDS: usize = 2;
+const DEVICE_CHECK_INTERVAL: Duration = Duration::from_millis(500);
+const RECONNECT_DELAY: Duration = Duration::from_millis(750);
 
 #[derive(Debug)]
 pub struct PcmCaptureState {
@@ -88,6 +90,16 @@ impl PcmCaptureState {
         self.reset_at = crate::models::now_iso();
     }
 
+    fn mark_reconnecting(&mut self, error: String) {
+        // Reset BeatRoot history only once per outage. Repeated attempts while
+        // an endpoint is absent must not advance the generation every 750 ms.
+        if self.status != "reconnecting" {
+            self.request_reset("audio-device-reconnect");
+        }
+        self.status = "reconnecting".into();
+        self.error = Some(error);
+    }
+
     pub fn chunk_after(&self, after: u64) -> PcmChunkResponse {
         let from = after.max(self.base_seq).min(self.next_seq);
         let available = self.next_seq.saturating_sub(from) as usize;
@@ -123,16 +135,18 @@ pub fn spawn(shared: SharedPcmCapture) {
         .spawn(move || loop {
             if let Err(error) = capture_once(&shared) {
                 let mut state = shared.lock().unwrap();
-                state.status = "error".into();
-                state.error = Some(error);
+                state.mark_reconnecting(error);
             }
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(RECONNECT_DELAY);
         });
 }
 
 #[cfg(target_os = "windows")]
 fn capture_once(shared: &SharedPcmCapture) -> Result<(), String> {
-    use wasapi::{initialize_mta, DeviceEnumerator, Direction, SampleType, StreamMode, WaveFormat};
+    use wasapi::{
+        initialize_mta, DeviceEnumerator, DeviceState, Direction, SampleType, StreamMode,
+        WasapiError, WaveFormat,
+    };
 
     initialize_mta()
         .ok()
@@ -141,6 +155,9 @@ fn capture_once(shared: &SharedPcmCapture) -> Result<(), String> {
     let device = enumerator
         .get_default_device(&Direction::Render)
         .map_err(|error| format!("default output device unavailable: {error}"))?;
+    let active_device_id = device
+        .get_id()
+        .map_err(|error| format!("default output device ID unavailable: {error}"))?;
     let mut audio_client = device
         .get_iaudioclient()
         .map_err(|error| error.to_string())?;
@@ -171,6 +188,7 @@ fn capture_once(shared: &SharedPcmCapture) -> Result<(), String> {
     let mut bytes = VecDeque::<u8>::new();
     let mut downsample_sum = 0.0f32;
     let mut downsample_count = 0usize;
+    let mut next_device_check = Instant::now() + DEVICE_CHECK_INTERVAL;
     audio_client
         .start_stream()
         .map_err(|error| error.to_string())?;
@@ -181,6 +199,29 @@ fn capture_once(shared: &SharedPcmCapture) -> Result<(), String> {
     }
 
     loop {
+        // A jack/Bluetooth switch may leave the old endpoint alive and
+        // delivering valid silence forever. WASAPI then raises no read error,
+        // so explicitly compare the active endpoint with Windows' current
+        // default render endpoint at a short interval.
+        if Instant::now() >= next_device_check {
+            let device_state = device
+                .get_state()
+                .map_err(|error| format!("output device state unavailable: {error}"))?;
+            if device_state != DeviceState::Active {
+                return Err(format!("output device became {device_state}; reconnecting"));
+            }
+            let current_default = enumerator
+                .get_default_device(&Direction::Render)
+                .map_err(|error| format!("default output device unavailable: {error}"))?;
+            let current_device_id = current_default
+                .get_id()
+                .map_err(|error| format!("default output device ID unavailable: {error}"))?;
+            if current_device_id != active_device_id {
+                return Err("default output device changed; reconnecting".into());
+            }
+            next_device_check = Instant::now() + DEVICE_CHECK_INTERVAL;
+        }
+
         capture
             .read_from_device_to_deque(&mut bytes)
             .map_err(|error| format!("loopback read failed: {error}"))?;
@@ -209,9 +250,10 @@ fn capture_once(shared: &SharedPcmCapture) -> Result<(), String> {
         if !output.is_empty() {
             shared.lock().unwrap().append(&output);
         }
-        event
-            .wait_for_event(3_000)
-            .map_err(|error| format!("loopback event timeout: {error}"))?;
+        match event.wait_for_event(DEVICE_CHECK_INTERVAL.as_millis() as u32) {
+            Ok(()) | Err(WasapiError::EventTimeout) => {}
+            Err(error) => return Err(format!("loopback event failed: {error}")),
+        }
     }
 }
 
@@ -235,6 +277,25 @@ mod tests {
         assert_eq!(chunk.to, 3);
         assert_eq!(chunk.reset_generation, 1);
         assert_eq!(chunk.reset_reason, "manual");
+    }
+
+    #[test]
+    fn reconnect_resets_history_once_per_outage() {
+        let mut state = PcmCaptureState::default();
+        state.append(&[1, 2, 3]);
+        state.mark_reconnecting("device changed".into());
+        let first_generation = state.reset_generation;
+        assert_eq!(state.status, "reconnecting");
+        assert_eq!(state.reset_reason, "audio-device-reconnect");
+        assert_eq!(state.chunk_after(0).to, 3);
+
+        state.mark_reconnecting("device still absent".into());
+        assert_eq!(state.reset_generation, first_generation);
+
+        state.append(&[4, 5]);
+        state.mark_reconnecting("another device change".into());
+        assert_eq!(state.reset_generation, first_generation + 1);
+        assert_eq!(state.chunk_after(0).from, 5);
     }
 
     /// Hardware smoke test, run explicitly on Windows with:

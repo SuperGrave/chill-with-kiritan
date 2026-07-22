@@ -178,6 +178,7 @@ class PcmBeatrootService {
   }
 
   private acceptChunk(chunk: CompanionPcmChunk): void {
+    const previousCaptureStatus = this.snapshot.captureStatus;
     this.snapshot = {
       ...this.snapshot,
       captureStatus: chunk.status,
@@ -194,9 +195,19 @@ class PcmBeatrootService {
     this.nextSeq = chunk.to;
     if (samples.length > 0) {
       this.lastPcmAt = performance.now();
+      if (previousCaptureStatus === 'reconnecting' && chunk.status === 'running') {
+        this.snapshot = { ...this.snapshot, detail: 'PCM入力を再開しました（BPM再解析中）' };
+        this.emit();
+      }
       this.worker?.postMessage({ type: 'chunk', samples }, [samples.buffer]);
-    } else if (chunk.status === 'error') {
-      this.snapshot = { ...this.snapshot, status: 'standby', detail: chunk.error ?? 'PCM取得エラー' };
+    } else if (chunk.status === 'error' || chunk.status === 'reconnecting') {
+      this.snapshot = {
+        ...this.snapshot,
+        status: 'standby',
+        detail: chunk.status === 'reconnecting'
+          ? `音声デバイスへ再接続中…${chunk.error ? ` (${chunk.error})` : ''}`
+          : chunk.error ?? 'PCM取得エラー',
+      };
       this.emit();
     }
   }

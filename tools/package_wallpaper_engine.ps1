@@ -42,6 +42,7 @@ Assert-UnderPath $OutputRoot $ReleaseRoot "OutputRoot"
 $WallpaperRoot = Join-Path $RepoRoot "01_wallpaper"
 $DistRoot = Join-Path $WallpaperRoot "dist"
 $StartGuideSource = Join-Path $RepoRoot "docs\START_GUIDE_JP.md"
+$DistributionReadmeSource = Join-Path $RepoRoot "README_DISTRIBUTION_JP.md"
 $DefaultZipName = if ($IncludeLocalVrmForPersonalUse) {
   "Chill-with-Kiritan-WallpaperEngine-local-personal.zip"
 } else {
@@ -83,6 +84,9 @@ Copy-Item -Path (Join-Path $DistRoot "*") -Destination $OutputRoot -Recurse -For
 if (Test-Path $StartGuideSource) {
   Copy-Item -LiteralPath $StartGuideSource -Destination (Join-Path $OutputRoot "START_GUIDE_JP.md") -Force
 }
+if (Test-Path $DistributionReadmeSource) {
+  Copy-Item -LiteralPath $DistributionReadmeSource -Destination (Join-Path $OutputRoot "README_DISTRIBUTION_JP.md") -Force
+}
 
 $project = [ordered]@{
   title = "Chill with Kiritan"
@@ -121,20 +125,35 @@ $project | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $Output
 
 This folder is generated from `01_wallpaper/dist` for Wallpaper Engine.
 
-## Import
+## Start Here
+
+For the current installation, update, backup, Spotify, personal-news, and BPM instructions, read:
+
+- `README_DISTRIBUTION_JP.md`: quick Japanese installation guide
+- `START_GUIDE_JP.md`: full Japanese manual
+
+## Import into Wallpaper Engine
 
 1. Open Wallpaper Engine.
 2. Use "Open from File" or "Create Wallpaper" for a web wallpaper.
-3. Select this folder's `project.json` or `index.html`.
-4. Run `Tohoku Companion` separately if you want live weather, news, Spotify, memos, settings, or personal news.
+3. Select this folder's `project.json`. It enables audio processing for the spectrum panel.
+4. Use `index.html` only if your Wallpaper Engine environment cannot select `project.json`, then allow audio input manually.
+5. Run `Tohoku Companion` separately if you want live weather, news, Spotify, memos, settings, or personal news.
 
-Japanese start guide: `START_GUIDE_JP.md`
+Companion includes four UI presets: standard and spectrum layouts for both 1920x1080 and 1920x1200.
 
-## Model File
+## VRM Model
 
 Shareable packages intentionally omit `models/kiritan.vrm`.
-The model is redistribution-prohibited. For personal local use, copy your own
-`kiritan.vrm` to:
+The preferred local setup is:
+
+1. Start Tohoku Companion.
+2. Open `STUDIO > 3D Model`.
+3. Choose your own `.vrm` file.
+
+The wallpaper tries to load the selected model. Bone, expression, motion, and prop compatibility vary by model.
+
+The legacy default-model route is also available. Copy your own `kiritan.vrm` to the actual folder loaded by Wallpaper Engine:
 
 ```text
 models/kiritan.vrm
@@ -155,6 +174,8 @@ personal local package and must stay on your own machine.
 
 This package does not include Companion app data, Spotify credentials, memos, API keys, or user presets.
 Companion stores local data under `%APPDATA%\tohoku-companion`.
+
+Use `SYSTEM > Data / Backup` to export settings, presets, memos, links, timer state, and personal-news playback state. Background files, VRM files, personal-news scripts, and the downloaded lyrics cache are not embedded in that JSON backup.
 '@ | Set-Content -LiteralPath (Join-Path $OutputRoot "README_WALLPAPER_ENGINE.md") -Encoding UTF8
 
 $localVrm = Join-Path $WallpaperRoot "public\models\kiritan.vrm"
